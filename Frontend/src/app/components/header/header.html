@@ -1,0 +1,28 @@
+<nz-header class="app-header">
+  <div class="header-content">
+    <div class="logo-section" routerLink="/">
+      <div class="logo-box">
+        <span nz-icon nzType="deployment-unit" nzTheme="outline"></span>
+      </div>
+      <span class="logo-text">BPMN<span class="logo-accent">Flow</span></span>
+    </div>
+
+    <div class="nav-section">
+      <nz-space nzSize="middle">
+        <button nz-button nzType="text" routerLink="/designer/projects">Proyectos</button>
+        <button nz-button nzType="text">Plantillas</button>
+        <button nz-button nzType="text">Configuración</button>
+      </nz-space>
+    </div>
+
+    <div class="user-section">
+      <nz-space nzSize="large">
+        <span nz-icon nzType="bell" nzTheme="outline" class="action-icon"></span>
+        <div class="user-profile">
+          <nz-avatar nzIcon="user" style="background-color: #7c3aed;"></nz-avatar>
+          <span class="user-name">Admin</span>
+        </div>
+      </nz-space>
+    </div>
+  </div>
+</nz-header>

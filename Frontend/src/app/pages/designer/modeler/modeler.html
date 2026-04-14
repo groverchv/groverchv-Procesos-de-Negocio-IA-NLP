@@ -1,0 +1,441 @@
+<nz-layout class="modeler-layout">
+  <!-- ======================== HEADER ======================== -->
+  <nz-header class="modeler-header">
+    <div class="header-left">
+      <button nz-button nzType="text" routerLink="/designer/projects" class="back-btn">
+        <span nz-icon nzType="arrow-left"></span>
+      </button>
+      <div class="title-info">
+        <h4 nz-typography>Diseño #{{designId?.slice(-6)}}</h4>
+        <span class="status-tag">
+          <span class="autosave-dot"></span> Autoguardado en tiempo real
+        </span>
+      </div>
+    </div>
+
+    <!-- Connected users badge (Canva-style pill) -->
+    <div class="connected-badge" *ngIf="connectedUsers > 0">
+      <div class="users-pill">
+        <div class="avatars-stack">
+          <div class="user-avatar" *ngFor="let i of [].constructor(connectedUsers > 4 ? 4 : connectedUsers); let idx = index"
+               [style.background]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][idx % 5]"
+               [style.zIndex]="10 - idx"
+               [style.marginLeft.px]="idx === 0 ? 0 : -10">
+            {{ ['A','B','C','D','E'][idx % 5] }}
+          </div>
+          <div class="more-avatars" *ngIf="connectedUsers > 4">+{{connectedUsers - 4}}</div>
+        </div>
+        <span class="pill-text">{{ connectedUsers }} en línea</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <nz-space>
+        <button nz-button nzType="text" (click)="undo()" nz-tooltip nzTooltipTitle="Deshacer (Ctrl+Z)">
+          <span nz-icon nzType="undo"></span>
+        </button>
+        <button nz-button nzType="text" (click)="redo()" nz-tooltip nzTooltipTitle="Rehacer (Ctrl+Y)">
+          <span nz-icon nzType="redo"></span>
+        </button>
+        <nz-divider nzType="vertical"></nz-divider>
+        <!-- AI Button -->
+        <button nz-button [class.ai-active]="showAiPanel" class="ai-btn" (click)="toggleAiPanel()" nz-tooltip nzTooltipTitle="Asistente IA (Groq)">
+          🤖 IA
+        </button>
+        <button nz-button class="voice-btn" [class.listening]="isListening" (click)="toggleVoice()" nz-tooltip nzTooltipTitle="Comando de voz">
+          {{ isListening ? '⏹' : '🎤' }}
+        </button>
+      </nz-space>
+    </div>
+  </nz-header>
+
+  <nz-layout>
+    <!-- ======================== PALETTE ======================== -->
+    <nz-sider nzWidth="240px" nzTheme="light" class="palette-sider">
+      <div class="palette-content">
+        <h5 nz-typography class="palette-title">
+          <span nz-icon nzType="appstore" style="color: #7c3aed;"></span> Componentes
+        </h5>
+
+        <p class="group-label">ESTRUCTURA</p>
+        <div class="palette-item" (click)="addNode('swimlane')">
+          <span nz-icon nzType="border"></span> Carril / Lane
+        </div>
+
+        <p class="group-label">EVENTOS</p>
+        <div class="palette-item" (click)="addNode('start')">
+          <div class="icon-circle start"></div> Evento de Inicio
+        </div>
+        <div class="palette-item" (click)="addNode('end')">
+          <div class="icon-circle end"></div> Evento de Fin
+        </div>
+
+        <p class="group-label">TAREAS</p>
+        <div class="palette-item" (click)="addNode('activity')">
+          <div class="icon-rect"></div> Actividad / Tarea
+        </div>
+        <div class="palette-item" (click)="addNode('subprocess')">
+          <div class="icon-rect sub"></div> Subproceso
+        </div>
+
+        <p class="group-label">COMPUERTAS</p>
+        <div class="palette-item" (click)="addNode('decision')">
+          <div class="icon-diamond"></div> Exclusiva (XOR)
+        </div>
+        <div class="palette-item" (click)="addNode('parallel')">
+          <div class="icon-diamond par"></div> Paralela (AND)
+        </div>
+
+        <p class="group-label">DATOS</p>
+        <div class="palette-item" (click)="addNode('datastore')">
+          <span nz-icon nzType="database"></span> Almacén de Datos
+        </div>
+
+        <p class="group-label">CONEXIONES</p>
+        <div class="palette-item flow" [class.active]="isConnectingMode" (click)="toggleConnectionMode()">
+          <span nz-icon nzType="arrow-right" style="font-size: 16px;"></span>
+          {{ isConnectingMode ? '✓ ACTIVO' : 'Flujo de Secuencia' }}
+        </div>
+
+        <div class="palette-tip" *ngIf="isConnectingMode">
+          <p>Clic en origen → Clic en destino</p>
+        </div>
+      </div>
+    </nz-sider>
+
+    <!-- ======================== CANVAS ======================== -->
+    <nz-content class="canvas-container" (mousedown)="deselectAll()">
+      <svg class="canvas-svg" #svgElement>
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e8eaf6" stroke-width="0.5"/>
+          </pattern>
+          <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#455a64" />
+          </marker>
+          <marker id="arrowhead-selected" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed" />
+          </marker>
+        </defs>
+        <rect width="5000" height="5000" fill="url(#grid)" />
+
+        <!-- LAYER 1: SWIMLANES -->
+        <g *ngFor="let node of nodes">
+          <foreignObject *ngIf="node.type === 'swimlane'"
+                         [attr.x]="node.x" [attr.y]="node.y"
+                         [attr.width]="node.width" [attr.height]="node.height"
+                         class="node-fo" (mousedown)="onMouseDown(node, $event)">
+            <div class="node swimlane" [class.selected]="selectedNode?.id === node.id">
+              <div class="lane-header">{{node.label}}</div>
+            </div>
+          </foreignObject>
+        </g>
+
+        <!-- LAYER 2: EDGES -->
+        <g *ngFor="let edge of edges">
+          <!-- Fat invisible click area for easier dragging -->
+          <path [attr.d]="getConnectorPath(edge)"
+                stroke="transparent" stroke-width="24" fill="none"
+                style="cursor: grab;"
+                (mousedown)="startLineDrag($event, edge)"
+                (dblclick)="addWaypoint($event, edge)" />
+          <!-- Visible connector -->
+          <path [attr.d]="getConnectorPath(edge)"
+                class="connector" [class.selected]="selectedEdge?.id === edge.id"
+                [attr.stroke]="edge.color || '#455a64'"
+                [attr.stroke-width]="edge.strokeWidth || 2"
+                [attr.stroke-dasharray]="edge.style === 'dashed' ? '8,4' : 'none'"
+                [attr.opacity]="(edge.opacity ?? 100) / 100"
+                fill="none"
+                style="transition: stroke 0.2s;"
+                [attr.marker-end]="selectedEdge?.id === edge.id ? 'url(#arrowhead-selected)' : 'url(#arrowhead)'"
+                style="pointer-events: none;" />
+          <!-- Edge label -->
+          <foreignObject *ngIf="edge.label"
+                         [attr.x]="getLabelX(edge)" [attr.y]="getLabelY(edge)"
+                         width="120" height="34" style="pointer-events: none; overflow: visible;">
+            <div class="edge-label">{{edge.label}}</div>
+          </foreignObject>
+          <!-- Waypoint handles (when selected) -->
+          <ng-container *ngIf="selectedEdge?.id === edge.id && edge.waypoints">
+            <g *ngFor="let wp of edge.waypoints; let i = index">
+              <circle [attr.cx]="wp.x" [attr.cy]="wp.y" r="12"
+                      fill="transparent" style="cursor: move;"
+                      (mousedown)="startWaypointDrag($event, edge.id, i)"
+                      (dblclick)="removeWaypoint($event, edge, i)" />
+              <circle [attr.cx]="wp.x" [attr.cy]="wp.y" r="5"
+                      class="waypoint-handle" style="pointer-events: none;" />
+            </g>
+          </ng-container>
+        </g>
+
+        <g *ngFor="let node of nodes" 
+           [id]="'node-' + node.id"
+           [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
+           (mousedown)="onMouseDown(node, $event)"
+           [class.selected]="selectedNode?.id === node.id"
+           style="cursor: move; vector-effect: non-scaling-stroke; will-change: transform;">
+          <!-- DECISION / PARALLEL DIAMOND -->
+          <ng-container *ngIf="['decision','parallel'].includes(node.type)">
+            <polygon
+              [attr.points]="
+                ((node.width||120)/2) + ',0 ' + 
+                (node.width||120) + ',' + ((node.height||100)/2) + ' ' + 
+                ((node.width||120)/2) + ',' + (node.height||100) + ' 0,' + ((node.height||100)/2)"
+              [class]="'diamond ' + node.type"
+              [class.selected]="selectedNode?.id === node.id" />
+            <foreignObject
+              [attr.x]="(node.width||120)*0.15"
+              [attr.y]="(node.height||100)*0.2"
+              [attr.width]="(node.width||120)*0.7"
+              [attr.height]="(node.height||100)*0.6"
+              style="pointer-events: none; overflow: visible;">
+              <div class="diamond-label" [style.fontSize.px]="node.fontSize || 11">
+                {{ node.type === 'parallel' ? '+' : (node.label || '?') }}
+              </div>
+            </foreignObject>
+            <!-- Anchor ports -->
+            <circle [attr.cx]="(node.width||120)/2" cy="0" r="4" class="port"/>
+            <circle [attr.cx]="node.width||120" [attr.cy]="(node.height||100)/2" r="4" class="port"/>
+            <circle [attr.cx]="(node.width||120)/2" [attr.cy]="node.height||100" r="4" class="port"/>
+            <circle cx="0" [attr.cy]="(node.height||100)/2" r="4" class="port"/>
+          </ng-container>
+
+          <!-- ALL OTHER NODES -->
+          <ng-container *ngIf="!['swimlane','decision','parallel'].includes(node.type)">
+            <foreignObject
+              x="0" y="0"
+              [attr.width]="node.width || 160" [attr.height]="node.height || 80"
+              class="node-fo">
+              <div class="node" [class.selected]="selectedNode?.id === node.id"
+                   [class.connecting]="connectingSource?.id === node.id"
+                   [class]="node.type">
+                <div *ngIf="['activity','subprocess'].includes(node.type)" class="activity-body">
+                  <div class="node-label" [style.fontSize.px]="node.fontSize || 12">{{node.label}}</div>
+                  <div *ngIf="node.type === 'subprocess'" class="sub-marker">+</div>
+                  <div *ngIf="node.responsible" class="responsible-tag">
+                    <span nz-icon nzType="user" nzTheme="outline"></span> {{node.responsible}}
+                  </div>
+                </div>
+                <div *ngIf="node.type === 'datastore'" class="node-label">{{node.label}}</div>
+                <div *ngIf="node.type === 'start'" class="event-dot start-dot"></div>
+                <div *ngIf="node.type === 'end'" class="event-dot end-dot"></div>
+              </div>
+            </foreignObject>
+            <!-- Anchor ports -->
+            <circle [attr.cx]="(node.width||160)/2" cy="0" r="4" class="port"/>
+            <circle [attr.cx]="(node.width||160)" [attr.cy]="(node.height||80)/2" r="4" class="port"/>
+            <circle [attr.cx]="(node.width||160)/2" [attr.cy]="node.height||80" r="4" class="port"/>
+            <circle cx="0" [attr.cy]="(node.height||80)/2" r="4" class="port"/>
+          </ng-container>
+        </g>
+
+        <!-- LAYER 4: COLLABORATIVE CURSORS -->
+        <g *ngFor="let cursor of otherCursors | keyvalue" class="collaborative-cursor">
+          <path d="M 0 0 L 16 16 L 8 16 L 0 24 Z" 
+                [attr.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][0 % 5]" 
+                [attr.transform]="'translate(' + cursor.value.x + ',' + cursor.value.y + ')'" />
+          <text [attr.x]="cursor.value.x + 12" [attr.y]="cursor.value.y + 24" 
+                class="cursor-label" [style.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][0 % 5]">
+            Participante
+          </text>
+        </g>
+      </svg>
+
+      <!-- AI FLOATING PANEL -->
+      <div class="ai-panel" *ngIf="showAiPanel">
+        <div class="ai-panel-header">
+          <span>🧠 Experto UML 2.5 · <small>Groq Llama 3</small></span>
+          <button (click)="showAiPanel = false" class="ai-close">✕</button>
+        </div>
+        <div class="ai-panel-body">
+          <div class="ai-message" *ngIf="aiLastMessage" [class.loading]="aiLoading">
+            {{ aiLastMessage }}
+          </div>
+          <div class="ai-hint" *ngIf="!aiLastMessage">
+            <p><b>Manipulación Total del Diagrama:</b></p>
+            <ul>
+              <li>"Agrega una actividad Revisión en la calle Cliente"</li>
+              <li>"Conecta Inicio con Revisión"</li>
+              <li>"Agrega decisión ¿Aprobado? con flujos Sí y No"</li>
+              <li>"Mueve Validación de Cliente a Sistema"</li>
+              <li>"Renombra la calle Nuevo SWIMLANE a Gerencia"</li>
+              <li>"Aumenta el tamaño de letra de todas las decisiones"</li>
+              <li>"Reconecta el flujo de error al nodo de inicio"</li>
+              <li>"Reorganiza el diagrama automáticamente"</li>
+              <li>"Limpia el diagrama"</li>
+            </ul>
+          </div>
+          <div class="ai-input-row">
+            <input id="ai-input" [(ngModel)]="aiInput"
+                   placeholder="Escribe un comando o usa el micrófono..."
+                   (keydown.enter)="sendAiCommand()"
+                   [disabled]="aiLoading" />
+            <button class="ai-send-btn" (click)="sendAiCommand()" [disabled]="aiLoading || !aiInput.trim()">
+              {{ aiLoading ? '⏳' : '→' }}
+            </button>
+            <button class="ai-voice-btn" [class.active]="isListening" (click)="toggleVoice()">🎤</button>
+          </div>
+        </div>
+      </div>
+    </nz-content>
+
+    <!-- ======================== PROPERTIES PANEL ======================== -->
+    <nz-sider nzWidth="300px" nzTheme="light" class="props-sider">
+      <div class="props-body">
+        <h5 nz-typography class="props-title">
+          <span nz-icon nzType="setting"></span> Propiedades
+        </h5>
+
+        <!-- EMPTY STATE -->
+        <div *ngIf="!selectedNode && !selectedEdge" class="empty-props">
+          <span nz-icon nzType="info-circle" style="font-size: 36px; opacity: 0.3;"></span>
+          <p>Selecciona un elemento para editar.</p>
+          <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
+            Doble clic en una línea para agregar punto de inflexión.
+          </p>
+        </div>
+
+        <!-- NODE PROPERTIES -->
+        <div *ngIf="selectedNode && selectedNode.type !== 'swimlane'">
+          <nz-tag [nzColor]="'purple'" style="margin-bottom: 16px;">{{selectedNode.type | uppercase}}</nz-tag>
+
+          <div class="prop-field">
+            <label>Nombre</label>
+            <input nz-input [(ngModel)]="selectedNode.label" (ngModelChange)="broadcastUpdate()" />
+          </div>
+
+          <div *ngIf="selectedNode.type === 'activity' || selectedNode.type === 'subprocess'" class="prop-field">
+            <label>Responsable</label>
+            <input nz-input [(ngModel)]="selectedNode.responsible" (ngModelChange)="broadcastUpdate()" placeholder="Ej: Analista" />
+          </div>
+
+          <div class="prop-row">
+            <div class="prop-field"><label>Ancho</label>
+              <nz-input-number [(ngModel)]="selectedNode.width" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+            </div>
+            <div class="prop-field"><label>Alto</label>
+              <nz-input-number [(ngModel)]="selectedNode.height" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+            </div>
+          </div>
+
+          <div class="prop-field">
+            <label>Tamaño de fuente (px)</label>
+            <nz-input-number [(ngModel)]="selectedNode.fontSize" [nzMin]="8" [nzMax]="48" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+          </div>
+
+          <div class="prop-field">
+            <label>Política / Regla de Negocio</label>
+            <textarea nz-input [(ngModel)]="selectedNode.policy" (ngModelChange)="broadcastUpdate()"
+                      placeholder="Define las reglas aquí..." rows="3"></textarea>
+            <span class="hint">* Guía el workflow automático con IA.</span>
+          </div>
+
+          <!-- DYNAMIC FORM SECTION (Integrated) -->
+          <nz-divider nzText="Formularios" nzOrientation="left"></nz-divider>
+          <div class="forms-section" *ngIf="selectedNode.type === 'activity' || selectedNode.type === 'subprocess'">
+            <div class="form-fields-list">
+              <div *ngFor="let field of getFormsForSelectedNode(); let i = index" class="form-field-card">
+                <div class="field-header">
+                  <span class="field-index">#{{ i + 1 }}</span>
+                  <button nz-button nzType="text" nzDanger (click)="removeFormField(i)">
+                    <span nz-icon nzType="close"></span>
+                  </button>
+                </div>
+                <div class="field-inputs">
+                  <input nz-input [(ngModel)]="field.label" (ngModelChange)="broadcastUpdate()" placeholder="Nombre del campo" />
+                  <nz-select [(ngModel)]="field.type" (ngModelChange)="broadcastUpdate()" style="width: 100%;">
+                    <nz-option nzValue="text" nzLabel="Texto"></nz-option>
+                    <nz-option nzValue="number" nzLabel="Número"></nz-option>
+                    <nz-option nzValue="date" nzLabel="Fecha"></nz-option>
+                  </nz-select>
+                  <label nz-checkbox [(ngModel)]="field.required" (ngModelChange)="broadcastUpdate()">Requerido</label>
+                </div>
+              </div>
+            </div>
+            <button nz-button nzBlock nzType="dashed" (click)="addFormField()" style="margin-top: 12px;">
+              <span nz-icon nzType="plus"></span> Agregar Campo
+            </button>
+          </div>
+
+          <nz-divider></nz-divider>
+          <button nz-button nzDanger nzBlock (click)="deleteNode()">
+            <span nz-icon nzType="delete"></span> Eliminar Elemento
+          </button>
+        </div>
+
+        <!-- SWIMLANE PROPERTIES -->
+        <div *ngIf="selectedNode && selectedNode.type === 'swimlane'">
+          <nz-tag nzColor="cyan" style="margin-bottom: 16px;">CARRIL / LANE</nz-tag>
+          <div class="prop-field">
+            <label>Nombre del Carril</label>
+            <input nz-input [(ngModel)]="selectedNode.label" (ngModelChange)="broadcastUpdate()" />
+          </div>
+          <div class="prop-row">
+            <div class="prop-field"><label>Ancho</label>
+              <nz-input-number [(ngModel)]="selectedNode.width" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+            </div>
+            <div class="prop-field"><label>Alto</label>
+              <nz-input-number [(ngModel)]="selectedNode.height" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+            </div>
+          </div>
+          <nz-divider></nz-divider>
+          <button nz-button nzDanger nzBlock (click)="deleteNode()">
+            <span nz-icon nzType="delete"></span> Eliminar Carril
+          </button>
+        </div>
+
+        <!-- EDGE PROPERTIES -->
+        <div *ngIf="selectedEdge">
+          <nz-tag nzColor="blue" style="margin-bottom: 16px;">LÍNEA DE RELACIÓN</nz-tag>
+
+          <div class="prop-field">
+            <label>Texto / Etiqueta</label>
+            <input nz-input [(ngModel)]="selectedEdge.label" (ngModelChange)="broadcastUpdate()" placeholder="Ej: Sí / No / Aprobado" />
+          </div>
+
+          <div class="prop-field">
+            <label>Estilo de Línea</label>
+            <nz-select [(ngModel)]="selectedEdge.style" (ngModelChange)="broadcastUpdate()" style="width: 100%;">
+              <nz-option nzValue="solid" nzLabel="── Continua"></nz-option>
+              <nz-option nzValue="dashed" nzLabel="- - Punteada"></nz-option>
+            </nz-select>
+          </div>
+
+          <div class="prop-field">
+            <label>Color</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="color" [(ngModel)]="edgeColor" (ngModelChange)="updateEdgeColor($event)"
+                     style="width: 48px; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer;" />
+              <span style="font-size: 12px; color: #94a3b8;">{{edgeColor}}</span>
+            </div>
+          </div>
+
+          <div class="prop-row">
+            <div class="prop-field"><label>Grosor (px)</label>
+              <nz-input-number [(ngModel)]="selectedEdge.strokeWidth" [nzMin]="1" [nzMax]="12" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+            </div>
+            <div class="prop-field"><label>Opacidad (%)</label>
+              <nz-input-number [(ngModel)]="selectedEdge.opacity" [nzMin]="10" [nzMax]="100" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+            </div>
+          </div>
+
+          <div class="prop-field" *ngIf="selectedEdge.waypoints && selectedEdge.waypoints.length > 0">
+            <label>Puntos de inflexión</label>
+            <div class="waypoints-info">
+              <span>{{ selectedEdge.waypoints.length }} punto(s) activos</span>
+              <button nz-button nzSize="small" nzDanger (click)="selectedEdge.waypoints = []; broadcastUpdate()">Limpiar</button>
+            </div>
+          </div>
+
+          <nz-divider></nz-divider>
+          <button nz-button nzDanger nzBlock (click)="deleteEdge()">
+            <span nz-icon nzType="delete"></span> Eliminar Relación
+          </button>
+        </div>
+      </div>
+    </nz-sider>
+  </nz-layout>
+</nz-layout>

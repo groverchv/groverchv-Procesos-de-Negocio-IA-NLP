@@ -1,0 +1,25 @@
+<div class="role-grid">
+  <h1 nz-typography style="margin-bottom: 60px; font-size: 40px; font-weight: 800;">Bienvenido, <span style="color: #7c3aed;">selecciona tu perfil</span></h1>
+  
+  <div nz-row [nzGutter]="[40, 40]" nzJustify="center">
+    <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="9">
+      <nz-card class="role-card" (click)="selectRole('designer')" [nzBodyStyle]="{ padding: '30px' }">
+        <div class="icon-container designer-bg">
+          <span nz-icon nzType="edit" nzTheme="outline" class="role-icon"></span>
+        </div>
+        <h3 class="role-title">Diseñador</h3>
+        <p nz-typography nzType="secondary">Crea, edita y gestiona diagramas BPMN y flujos de negocio complejos.</p>
+      </nz-card>
+    </div>
+
+    <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="9">
+      <nz-card class="role-card" (click)="selectRole('staff')" [nzBodyStyle]="{ padding: '30px' }">
+        <div class="icon-container staff-bg">
+          <span nz-icon nzType="user" nzTheme="outline" class="role-icon"></span>
+        </div>
+        <h3 class="role-title">Funcionario</h3>
+        <p nz-typography nzType="secondary">Visualiza procesos asignados, reporta estados y consulta políticas.</p>
+      </nz-card>
+    </div>
+  </div>
+</div>

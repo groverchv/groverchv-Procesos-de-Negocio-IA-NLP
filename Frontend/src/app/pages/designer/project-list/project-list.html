@@ -1,0 +1,59 @@
+<div class="container">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+    <h1 nz-typography style="margin: 0; font-weight: 800; letter-spacing: -1px;">Tus Proyectos</h1>
+    <nz-space [nzSize]="'middle'">
+      <nz-input-group [nzPrefix]="searchPrefix" style="width: 300px;">
+        <input type="text" nz-input placeholder="Buscar procesos..." style="border-radius: 10px;" />
+      </nz-input-group>
+      <ng-template #searchPrefix><span nz-icon nzType="search"></span></ng-template>
+      <button nz-button nzType="primary" (click)="showModal()" style="height: 48px; border-radius: 12px; font-weight: bold; padding: 0 25px;">
+        <span nz-icon nzType="plus"></span> Nuevo Proyecto
+      </button>
+    </nz-space>
+  </div>
+
+  <div nz-row [nzGutter]="[24, 32]">
+    <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="8" [nzLg]="6" *ngFor="let p of projects">
+      <nz-card class="project-card" [nzCover]="coverTemplate" (click)="viewProject(p.id!)">
+        <button nz-button nzDanger nzShape="circle" class="delete-btn" (click)="deleteProject($event, p.id!)">
+          <span nz-icon nzType="delete"></span>
+        </button>
+        <nz-card-meta 
+          [nzTitle]="p.nombre" 
+          [nzDescription]="descriptionTemplate">
+        </nz-card-meta>
+        <ng-template #descriptionTemplate>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+             <span style="font-size: 12px; color: #64748b;">{{p.designIds?.length || 0}} diseños</span>
+             <span style="font-size: 11px; color: #94a3b8;">{{p.ultimaActualizacion | date:'short'}}</span>
+          </div>
+        </ng-template>
+        <ng-template #coverTemplate>
+          <div class="card-cover">
+            <span nz-icon nzType="folder-open" nzTheme="fill" class="folder-icon"></span>
+          </div>
+        </ng-template>
+      </nz-card>
+    </div>
+  </div>
+</div>
+
+<nz-modal
+  [(nzVisible)]="isVisible"
+  nzTitle="Nuevo Proyecto"
+  (nzOnCancel)="handleCancel()"
+  (nzOnOk)="handleOk()"
+  [nzOkLoading]="isConfirmLoading"
+>
+  <div *nzModalContent>
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 600;">Nombre del Proyecto</label>
+      <input nz-input [(ngModel)]="newProject.nombre" placeholder="Ej. Ventas 2026" />
+    </div>
+    <div>
+      <label style="display: block; margin-bottom: 8px; font-weight: 600;">Descripción</label>
+      <textarea nz-input [(ngModel)]="newProject.descripcion" [nzAutosize]="{ minRows: 3 }" placeholder="Opcional..."></textarea>
+    </div>
+  </div>
+</nz-modal>
+

@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Run ProcesosApplication",
+            "request": "launch",
+            "mainClass": "com.example.Procesos.ProcesosApplication",
+            "projectName": "Procesos",
+            "cwd": "${workspaceFolder}/Backend"
+        }
+    ]
+}
