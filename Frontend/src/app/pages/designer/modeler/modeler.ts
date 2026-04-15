@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, HostListener, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
@@ -14,14 +14,18 @@ import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { NzInputNumberModule } from 'ng-zorro-antd/input-number';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
+import { NzDatePickerModule } from 'ng-zorro-antd/date-picker';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
 import { DesignService } from '../../../Services/design.service';
 import { ModelingSocketService } from '../../../WebSockets/modeling-socket.service';
-import { NodeData, EdgeData, Modeling, Form } from '../../../Services/types';
+import { NodeData, EdgeData, Modeling, Form, ValidationResult } from '../../../Services/types';
 import { IaService, DiagramCommand } from '../../../Services/IA/ia.service';
+import { ProcessInstanceService } from '../../../Services/process-instance.service';
+import { GeminiLiveService } from '../../../Services/IA/gemini-live.service';
+import { SettingsModalComponent } from '../../../components/settings-modal/settings-modal';
 
 @Component({
   selector: 'app-modeler',
@@ -29,7 +33,8 @@ import { IaService, DiagramCommand } from '../../../Services/IA/ia.service';
   imports: [
     CommonModule, NzLayoutModule, NzButtonModule, NzIconModule, NzTypographyModule,
     NzSpaceModule, NzCardModule, NzInputModule, NzTagModule, NzDividerModule,
-    NzTooltipModule, FormsModule, RouterLink, NzInputNumberModule, NzSelectModule, NzCheckboxModule
+    NzTooltipModule, FormsModule, NzInputNumberModule, NzSelectModule, NzCheckboxModule,
+    NzDatePickerModule, SettingsModalComponent
   ],
   templateUrl: './modeler.html',
   styleUrls: ['./modeler.css']
@@ -39,6 +44,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   // ---- Core State ----
   designId: string | null = null;
+  projectId: string | null = null;
   modelingId: string | null = null;
   nodes: NodeData[] = [];
   edges: EdgeData[] = [];
@@ -78,15 +84,45 @@ export class ModelerComponent implements OnInit, OnDestroy {
   isListening = false;
   private recognition: any = null;
 
+  // ---- Validation ----
+  showValidation = false;
+  validationResult: ValidationResult | null = null;
+
+  // ---- Voice Assistant (Gemini Live) ----
+  showAssistantPanel = false;
+  assistantInput = '';
+  assistantThinking = false;
+  assistantListening = false;
+  assistantSpeaking = false;
+  assistantConnected = false;
+  assistantHistory: { role: string; content: string }[] = [];
+  assistantTranscript = '';
+
+  // Settings
+  showSettings = false;
+  errorNodeIds: string[] = [];
+  continuousListening = false;
+  get isReadOnly(): boolean {
+    return this.router.url.includes('staff');
+  }
+  isExecuting = false;
+  currentExecutionNodeId: string | null = null;
+  executionHistory: string[] = [];
+  processInstance: any = null;
+  formChecks: Record<string, boolean> = {};
+
   private socketSubscription: Subscription | null = null;
   private presenceSubscription: Subscription | null = null;
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private designService: DesignService,
     private socketService: ModelingSocketService,
     private iaService: IaService,
-    private message: NzMessageService
+    private message: NzMessageService,
+    private processInstanceService: ProcessInstanceService,
+    private geminiLive: GeminiLiveService
   ) {
     this.designId = this.route.snapshot.paramMap.get('designId');
   }
@@ -94,10 +130,15 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== LIFECYCLE =====
 
   ngOnInit(): void {
+    // isReadOnly is now a getter
     if (this.designId) {
+      this.loadDesignDetails();
       this.loadInitialData();
       this.connectToSocket();
       this.setupVoiceRecognition();
+      if (this.isReadOnly) {
+        this.loadActiveInstance();
+      }
     }
   }
 
@@ -108,6 +149,23 @@ export class ModelerComponent implements OnInit, OnDestroy {
   }
 
   // ===== DATA LOADING =====
+  loadDesignDetails() {
+    this.designService.getDesignById(this.designId!).subscribe({
+      next: (design) => {
+        this.projectId = design.projectId;
+      },
+      error: (err) => console.error('Error loading design details', err)
+    });
+  }
+  
+  goBackToDesigns() {
+    const parent = this.isReadOnly ? 'staff' : 'designer';
+    if (this.projectId) {
+      this.router.navigate([`/${parent}/projects`, this.projectId, 'designs']);
+    } else {
+      this.router.navigate([`/${parent}/projects`]);
+    }
+  }
 
   loadInitialData() {
     this.designService.getModelingByDesignId(this.designId!).subscribe({
@@ -227,6 +285,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
+    if (this.isReadOnly) return;
     if (event.ctrlKey && event.key === 'z') {
       event.preventDefault();
       this.undo();
@@ -309,6 +368,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== SELECTION =====
 
   selectNode(node: NodeData, event: MouseEvent) {
+    if (this.isReadOnly) return;
     event.stopPropagation();
     this.selectedEdge = null;
 
@@ -327,6 +387,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   }
 
   selectEdge(edge: EdgeData, event: MouseEvent) {
+    if (this.isReadOnly) return;
     event.stopPropagation();
     this.selectedNode = null;
     this.selectedEdge = edge;
@@ -383,6 +444,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== WAYPOINTS =====
 
   addWaypoint(event: MouseEvent, edge: EdgeData) {
+    if (this.isReadOnly) return;
     event.stopPropagation();
     if (!edge.waypoints) edge.waypoints = [];
     const svg: SVGSVGElement = this.svgElement.nativeElement;
@@ -395,13 +457,14 @@ export class ModelerComponent implements OnInit, OnDestroy {
   }
 
   startWaypointDrag(event: MouseEvent, edgeId: string, index: number) {
+    if (this.isReadOnly) return;
     event.stopPropagation();
     this.dragWaypoint = { edgeId, index };
   }
 
   // Allow creating a waypoint by dragging the line
   startLineDrag(event: MouseEvent, edge: EdgeData) {
-    if (this.isConnectingMode) return;
+    if (this.isReadOnly || this.isConnectingMode) return;
     this.selectEdge(edge, event);
     
     // Create a new waypoint at the current mouse position
@@ -419,6 +482,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   }
 
   removeWaypoint(event: MouseEvent, edge: EdgeData, index: number) {
+    if (this.isReadOnly) return;
     event.stopPropagation();
     if (edge.waypoints) {
       edge.waypoints.splice(index, 1);
@@ -429,6 +493,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== DRAG & DROP =====
 
   onMouseDown(node: NodeData, event: MouseEvent) {
+    if (this.isReadOnly) return;
     if (this.isConnectingMode) {
       this.selectNode(node, event);
       return;
@@ -460,7 +525,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   @HostListener('document:mousemove', ['$event'])
   onMouseMove(event: MouseEvent) {
-    if (!this.svgElement) return;
+    if (!this.svgElement || this.isReadOnly) return;
     const svg: SVGSVGElement = this.svgElement.nativeElement;
     const pt = svg.createSVGPoint();
     pt.x = event.clientX;
@@ -520,20 +585,46 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   syncLanesLayout(isDragging = false) {
     const lanes = this.nodes.filter(n => n.type === 'swimlane').sort((a, b) => a.y - b.y);
-    let currentY = 0;
-    lanes.forEach(lane => {
-      const oldY = lane.y;
-      lane.x = 0;
-      if (!isDragging || (this.draggedNode && lane.id !== this.draggedNode.id)) {
+    if (lanes.length < 2 && !isDragging) return;
+
+    if (isDragging && this.draggedNode && this.draggedNode.type === 'swimlane') {
+      // Collision & Push physics
+      const dragged = this.draggedNode;
+      const draggedH = dragged.height || 200;
+      for (const lane of lanes) {
+        if (lane.id === dragged.id) continue;
+        const laneH = lane.height || 200;
+        const overlapTop = Math.max(dragged.y, lane.y);
+        const overlapBot = Math.min(dragged.y + draggedH, lane.y + laneH);
+        if (overlapBot > overlapTop) {
+          const oldY = lane.y;
+          if (dragged.y < lane.y) {
+            lane.y = dragged.y + draggedH;
+          } else {
+            lane.y = Math.max(0, dragged.y - laneH);
+          }
+          const deltaY = lane.y - oldY;
+          if (deltaY !== 0) {
+            this.nodes.filter(n => n.type !== 'swimlane' && n.y >= oldY && n.y <= oldY + laneH)
+              .forEach(child => { child.y += deltaY; });
+          }
+        }
+      }
+    } else {
+      // Snap layout: stack lanes vertically
+      let currentY = 0;
+      lanes.forEach(lane => {
+        const oldY = lane.y;
+        lane.x = 0;
         lane.y = currentY;
-      }
-      const deltaY = lane.y - oldY;
-      if (!isDragging && deltaY !== 0) {
-        this.nodes.filter(n => n.type !== 'swimlane' && n.y >= oldY && n.y <= (oldY + (lane.height || 200)))
-          .forEach(child => child.y += deltaY);
-      }
-      currentY += (lane.height || 200);
-    });
+        const deltaY = lane.y - oldY;
+        if (deltaY !== 0) {
+          this.nodes.filter(n => n.type !== 'swimlane' && n.y >= oldY && n.y <= (oldY + (lane.height || 200)))
+            .forEach(child => child.y += deltaY);
+        }
+        currentY += (lane.height || 200);
+      });
+    }
   }
 
   checkAndExpandLanes() {
@@ -569,7 +660,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     const newNode: NodeData = {
       id: `${type}_${Date.now()}`,
       type, x, y,
-      label: type === 'decision' ? '¿Condición?' : `Nuevo ${type.toUpperCase()}`,
+      label: type === 'decision' ? 'Condicion?' : `Nuevo ${type.toUpperCase()}`,
       width: defaultW, height: defaultH, fontSize: 12
     };
 
@@ -614,6 +705,35 @@ export class ModelerComponent implements OnInit, OnDestroy {
   removeFormField(index: number) {
     if (this.selectedNode && this.selectedNode.forms) {
       this.selectedNode.forms.splice(index, 1);
+      this.broadcastUpdate();
+    }
+  }
+
+  getFormsForSelectedEdge(): Form[] {
+    if (this.selectedEdge) {
+      if (!this.selectedEdge.forms) this.selectedEdge.forms = [];
+      return this.selectedEdge.forms;
+    }
+    return [];
+  }
+
+  addEdgeFormField() {
+    if (this.isReadOnly) return;
+    if (this.selectedEdge) {
+      if (!this.selectedEdge.forms) this.selectedEdge.forms = [];
+      this.selectedEdge.forms.push({
+        modelingId: this.modelingId || '',
+        label: 'Nuevo Campo de Datos',
+        type: 'text',
+        required: false
+      });
+      this.broadcastUpdate();
+    }
+  }
+
+  removeEdgeFormField(index: number) {
+    if (this.selectedEdge && this.selectedEdge.forms) {
+      this.selectedEdge.forms.splice(index, 1);
       this.broadcastUpdate();
     }
   }
@@ -717,7 +837,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     }
     points.push(inp);
 
-    // Build path with rounded corners (Bézier)
+    // Build path with rounded corners (Bzier)
     let path = `M ${points[0].x} ${points[0].y}`;
     const radius = 10;
     
@@ -786,20 +906,20 @@ export class ModelerComponent implements OnInit, OnDestroy {
     const cmd = this.aiInput.trim();
     this.aiInput = '';
     this.aiLoading = true;
-    this.aiLastMessage = `⏳ Procesando: "${cmd}"...`;
+    this.aiLastMessage = ` Procesando: "${cmd}"...`;
 
     this.iaService.processCommand(cmd, this.nodes, this.edges).subscribe({
       next: (response) => {
         this.aiLoading = false;
-        this.aiLastMessage = '✅ ' + (response.explanation || 'Comando ejecutado exitosamente');
+        this.aiLastMessage = ' ' + (response.explanation || 'Comando ejecutado exitosamente');
         if (response.umlValidation) {
-          this.message.warning(`⚠️ UML: ${response.umlValidation}`);
+          this.message.warning(` UML: ${response.umlValidation}`);
         }
         this.executeAiCommands(response.commands);
       },
       error: (err) => {
         this.aiLoading = false;
-        this.aiLastMessage = '❌ Error al procesar el comando. Intenta de nuevo.';
+        this.aiLastMessage = ' Error al procesar el comando. Intenta de nuevo.';
         console.error('[AI] Error:', err);
       }
     });
@@ -809,7 +929,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     for (const cmd of commands) {
       switch (cmd.action) {
 
-        // ═══ NODE MANAGEMENT ═══
+        // === NODE MANAGEMENT ===
         case 'add_node': {
           const dims: Record<string, [number, number]> = {
             swimlane: [1200, 200], decision: [120, 100], parallel: [120, 100],
@@ -819,7 +939,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
           // UML: prevent duplicate start nodes
           if (type === 'start' && this.nodes.some(n => n.type === 'start')) {
-            this.message.warning('⚠️ UML: Ya existe un nodo de inicio. Solo se permite uno.');
+            this.message.warning(' UML: Ya existe un nodo de inicio. Solo se permite uno.');
             break;
           }
 
@@ -880,7 +1000,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           break;
         }
 
-        // ═══ EDGE MANAGEMENT ═══
+        // === EDGE MANAGEMENT ===
         case 'add_edge': {
           const srcNode = this.nodes.find(n => n.id === cmd.sourceId || n.label === cmd.sourceId);
           const tgtNode = this.nodes.find(n => n.id === cmd.targetId || n.label === cmd.targetId);
@@ -928,7 +1048,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           break;
         }
 
-        // ═══ SWIMLANE OPERATIONS ═══
+        // === SWIMLANE OPERATIONS ===
         case 'move_node_to_lane': {
           const node = cmd.nodeId
             ? this.nodes.find(n => n.id === cmd.nodeId)
@@ -942,7 +1062,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
             // Keep X or adjust if outside lane bounds
             if (node.x < targetLane.x + 40) node.x = targetLane.x + 160;
           } else if (!targetLane && cmd.targetLaneName) {
-            this.message.warning(`⚠️ Carril "${cmd.targetLaneName}" no encontrado.`);
+            this.message.warning(` Carril "${cmd.targetLaneName}" no encontrado.`);
           }
           break;
         }
@@ -969,7 +1089,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           break;
         }
 
-        // ═══ RECONNECT & REROUTE ═══
+        // === RECONNECT & REROUTE ===
         case 'reconnect_edge': {
           let edge: EdgeData | undefined;
           if (cmd.edgeId) {
@@ -993,7 +1113,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           break;
         }
 
-        // ═══ BATCH STYLE ═══
+        // === BATCH STYLE ===
         case 'batch_update_style': {
           if (cmd.targetType) {
             this.nodes.filter(n => n.type === cmd.targetType).forEach(n => {
@@ -1005,7 +1125,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           break;
         }
 
-        // ═══ AUTO LAYOUT ═══
+        // === AUTO LAYOUT ===
         case 'auto_layout': {
           // Simple left-to-right layout within each lane
           const lanes = this.nodes.filter(n => n.type === 'swimlane').sort((a, b) => a.y - b.y);
@@ -1035,7 +1155,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           break;
         }
 
-        // ═══ CLEAR ALL ═══
+        // === CLEAR ALL ===
         case 'clear_all':
           this.nodes = [];
           this.edges = [];
@@ -1078,8 +1198,277 @@ export class ModelerComponent implements OnInit, OnDestroy {
     } else {
       this.showAiPanel = true;
       this.isListening = true;
-      this.aiLastMessage = '🎤 Escuchando... Habla ahora';
+      this.aiLastMessage = 'Escuchando... Habla ahora';
       this.recognition.start();
     }
   }
+
+  // ===== VALIDATION (RF-9) =====
+  validateDiagram() {
+    if (!this.designId) return;
+    this.processInstanceService.validateDiagram(this.designId).subscribe({
+      next: (result) => {
+        this.validationResult = result;
+        this.showValidation = true;
+        if (result.valid) {
+          this.message.success(' Diagrama vlido: ' + result.nodeCount + ' nodos, ' + result.edgeCount + ' aristas');
+        } else {
+          this.message.warning(' Se encontraron ' + result.errors.length + ' errores y ' + result.warnings.length + ' advertencias');
+        }
+      },
+      error: () => this.message.error('Error al validar diagrama')
+    });
+  }
+
+  // ===== TTS (RF-17) =====
+  speakLastAi() {
+    if (this.aiLastMessage) {
+      this.geminiLive.speakElevenLabs(this.aiLastMessage);
+    } else {
+      this.message.info('No hay respuesta IA para leer');
+    }
+  }
+
+  // =========== VOICE ASSISTANT (Gemini Live + Groq + ElevenLabs) ===========
+
+  async toggleAssistant() {
+    this.showAssistantPanel = !this.showAssistantPanel;
+    if (this.showAssistantPanel) {
+      this.geminiLive.setDiagramContext(this.nodes, this.edges);
+      this.geminiLive.messages$.subscribe(msg => {
+        this.assistantHistory.push(msg);
+        this.assistantThinking = false;
+        this.scrollAssistantToBottom();
+      });
+      this.geminiLive.isListening$.subscribe(v => this.assistantListening = v);
+      this.geminiLive.isSpeaking$.subscribe(v => this.assistantSpeaking = v);
+      this.geminiLive.isConnected$.subscribe(v => this.assistantConnected = v);
+      this.geminiLive.transcript$.subscribe(t => this.assistantTranscript = t);
+
+      try {
+        await this.geminiLive.connect();
+        this.message.success('Tonny-AI conectado (Gemini Live)');
+      } catch {
+        this.message.info('Tonny-AI en modo Groq + ElevenLabs');
+      }
+    }
+  }
+
+  toggleContinuousMode() {
+    this.continuousListening = this.geminiLive.toggleContinuousListening();
+  }
+
+  toggleAssistantVoice() {
+    this.geminiLive.setDiagramContext(this.nodes, this.edges);
+    this.geminiLive.startVoiceInput().catch(() => {
+      this.message.warning('Tu navegador no soporta reconocimiento de voz');
+    });
+  }
+
+  sendAssistantQuery() {
+    const query = this.assistantInput.trim();
+    if (!query || this.assistantThinking) return;
+    this.assistantInput = '';
+    this.assistantHistory.push({ role: 'user', content: query });
+    this.assistantThinking = true;
+    this.scrollAssistantToBottom();
+    this.geminiLive.setDiagramContext(this.nodes, this.edges);
+    this.geminiLive.sendText(query);
+  }
+
+  stopSpeaking() {
+    this.geminiLive.stopAudio();
+  }
+
+  async runAudit() {
+    this.errorNodeIds = [];
+    const result = await this.geminiLive.auditDiagram(this.nodes, this.edges);
+    this.assistantHistory.push({ role: 'assistant', content: 'AUDITORIA DEL DIAGRAMA\n\n' + result });
+    this.showAssistantPanel = true;
+    this.scrollAssistantToBottom();
+    this.errorNodeIds = this.nodes
+      .filter(n => { const label = (n.label || '').toLowerCase(); return label.length > 2 && result.toLowerCase().includes(label); })
+      .map(n => n.id);
+    if (this.errorNodeIds.length > 0) {
+      this.message.warning(this.errorNodeIds.length + ' nodo(s) con errores resaltados');
+      setTimeout(() => { this.errorNodeIds = []; }, 15000);
+    } else {
+      this.message.success('Auditoria completada');
+    }
+    const summary = result.split('\n').find((l: string) => l.includes('RESUMEN')) || 'Auditoria completada';
+    this.geminiLive.speakElevenLabs(summary);
+  }
+
+  formatAssistantMsg(content: string): string {
+    return content
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>')
+      .replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.1);padding:1px 4px;border-radius:3px;">$1</code>');
+  }
+
+  private scrollAssistantToBottom() {
+    setTimeout(() => {
+      const el = document.querySelector('.assistant-messages');
+      if (el) el.scrollTop = el.scrollHeight;
+    }, 100);
+  }
+
+  // ===== EXECUTION ENGINE (Staff) =====
+
+  loadActiveInstance() {
+    if (!this.designId) return;
+    this.processInstanceService.getByDesign(this.designId).subscribe({
+      next: (instances) => {
+        const active = instances.find((i: any) => i.status === 'ACTIVE');
+        if (active) {
+          this.processInstance = active;
+          this.isExecuting = true;
+          this.syncExecutionState();
+        }
+      }
+    });
+  }
+
+  syncExecutionState() {
+    if (!this.processInstance) return;
+    // Find the current IN_PROCESS or IN_REVIEW node
+    const current = this.processInstance.activities.find(
+      (a: any) => a.status === 'IN_PROCESS' || a.status === 'IN_REVIEW'
+    );
+    if (current) {
+      this.currentExecutionNodeId = current.nodeId;
+      this.selectedNode = this.nodes.find(n => n.id === current.nodeId) || null;
+      this.initFormChecks();
+    }
+  }
+
+  initFormChecks() {
+    this.formChecks = {};
+    if (this.selectedNode?.forms) {
+      this.selectedNode.forms.forEach(f => {
+        this.formChecks[f.label] = false;
+      });
+    }
+  }
+
+  getNodeStatus(nodeId: string): string {
+    if (!this.processInstance) return '';
+    const act = this.processInstance.activities.find((a: any) => a.nodeId === nodeId);
+    return act ? act.status : '';
+  }
+
+  startActivity() {
+    if (!this.designId) return;
+    this.processInstanceService.startProcess(this.designId, 'staff-user').subscribe({
+      next: (instance) => {
+        this.processInstance = instance;
+        this.isExecuting = true;
+        this.syncExecutionState();
+        this.message.success('Ejecución iniciada desde el nodo inicial.');
+      },
+      error: (err) => {
+        this.message.error('Error al iniciar: ' + (err.error?.message || err.message));
+      }
+    });
+  }
+
+  get allFormsChecked(): boolean {
+    if (!this.selectedNode?.forms || this.selectedNode.forms.length === 0) return true;
+    return Object.values(this.formChecks).every(v => v === true);
+  }
+
+  get currentActivity(): any {
+    if (!this.processInstance || !this.currentExecutionNodeId) return null;
+    return this.processInstance.activities.find(
+      (a: any) => a.nodeId === this.currentExecutionNodeId
+    );
+  }
+
+  get isDecisionNode(): boolean {
+    return this.selectedNode?.type === 'decision';
+  }
+
+  get outgoingEdges(): EdgeData[] {
+    if (!this.currentExecutionNodeId) return [];
+    return this.edges.filter(e => e.source === this.currentExecutionNodeId);
+  }
+
+  nextStep() {
+    if (!this.processInstance || !this.currentExecutionNodeId) return;
+
+    if (this.isDecisionNode) {
+      this.message.warning('Selecciona un camino para la decisión.');
+      return;
+    }
+
+    if (!this.allFormsChecked) {
+      this.message.warning('Debe completar todos los formularios antes de avanzar.');
+      return;
+    }
+
+    // Build form data from checks
+    const formData: Record<string, any> = {};
+    Object.entries(this.formChecks).forEach(([key, val]) => {
+      formData[key] = val;
+    });
+
+    this.processInstanceService.advanceActivity(
+      this.processInstance.id,
+      this.currentExecutionNodeId,
+      'FINISHED',
+      formData,
+      'staff-user'
+    ).subscribe({
+      next: (updated) => {
+        this.processInstance = updated;
+        this.syncExecutionState();
+        if (updated.status === 'COMPLETED') {
+          this.message.success('¡Proceso completado exitosamente!');
+          this.isExecuting = false;
+        } else {
+          this.message.success('Actividad completada.');
+        }
+      },
+      error: (err) => {
+        this.message.error('Error: ' + (err.error?.message || err.message));
+      }
+    });
+  }
+
+  resolveDecisionPath(edge: EdgeData) {
+    if (!this.processInstance || !this.currentExecutionNodeId) return;
+
+    const formsOk = this.allFormsChecked;
+
+    // If forms not checked and this is the "No" path, allow
+    // If forms checked and this is the "Yes" path, allow
+    this.processInstanceService.resolveDecision(
+      this.processInstance.id,
+      this.currentExecutionNodeId,
+      edge.id,
+      'staff-user'
+    ).subscribe({
+      next: (updated) => {
+        this.processInstance = updated;
+        this.syncExecutionState();
+        this.message.info(`Decisión tomada: ${edge.label || 'camino seleccionado'}`);
+      },
+      error: (err) => {
+        this.message.error('Error: ' + (err.error?.message || err.message));
+      }
+    });
+  }
+
+  stopExecution() {
+    if (!this.processInstance) return;
+    this.processInstanceService.cancelProcess(this.processInstance.id, 'staff-user').subscribe({
+      next: () => {
+        this.isExecuting = false;
+        this.processInstance = null;
+        this.currentExecutionNodeId = null;
+        this.message.info('Ejecución cancelada.');
+      }
+    });
+  }
 }
+

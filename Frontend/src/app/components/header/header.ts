@@ -7,6 +7,8 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzAvatarModule } from 'ng-zorro-antd/avatar';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 
+import { Router } from '@angular/router';
+
 @Component({
   selector: 'app-header',
   standalone: true,
@@ -14,4 +16,10 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
   templateUrl: './header.html',
   styleUrls: ['./header.css']
 })
-export class HeaderComponent {}
+export class HeaderComponent {
+  constructor(private router: Router) {}
+
+  get isStaff(): boolean {
+    return this.router.url.includes('/staff');
+  }
+}

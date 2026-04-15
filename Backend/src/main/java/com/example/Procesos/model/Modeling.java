@@ -39,7 +39,6 @@ public class Modeling {
         private double x;
         private double y;
         private String label;
-        private String responsible;
         private String policy;
         private Double width;
         private Double height;

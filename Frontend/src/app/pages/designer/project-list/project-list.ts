@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzGridModule } from 'ng-zorro-antd/grid';
@@ -19,7 +19,7 @@ import { Project } from '../../../Services/types';
   selector: 'app-project-list',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, NzCardModule, NzGridModule, NzTypographyModule, 
+    CommonModule, FormsModule, RouterLink, NzCardModule, NzGridModule, NzTypographyModule, 
     NzIconModule, NzButtonModule, NzInputModule, NzSpaceModule, NzTagModule, NzModalModule
   ],
   templateUrl: './project-list.html',
@@ -43,6 +43,7 @@ export class ProjectListComponent implements OnInit {
     nombre: '',
     descripcion: ''
   };
+  isReadOnly = false;
 
   constructor(
     private router: Router,
@@ -51,6 +52,7 @@ export class ProjectListComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.isReadOnly = this.router.url.includes('/staff');
     this.loadProjects();
   }
 
@@ -111,7 +113,8 @@ export class ProjectListComponent implements OnInit {
   }
 
   viewProject(id: string) {
-    this.router.navigate(['/designer/projects', id, 'designs']);
+    const parent = this.isReadOnly ? 'staff' : 'designer';
+    this.router.navigate([`/${parent}/projects`, id, 'designs']);
   }
 }
 

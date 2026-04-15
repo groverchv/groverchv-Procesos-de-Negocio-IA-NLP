@@ -29,7 +29,9 @@ import {
   DeleteOutline,
   ProjectOutline,
   DatabaseOutline,
-  ArrowRightOutline
+  ArrowRightOutline,
+  CloseOutline,
+  FormOutline
 } from '@ant-design/icons-angular/icons';
 
 import { routes } from './app.routes';
@@ -41,7 +43,8 @@ const icons = [
   SearchOutline, PlusOutline, FolderOpenFill, DotChartOutline,
   ArrowLeftOutline, UndoOutline, RedoOutline, PlayCircleOutline,
   AppstoreOutline, BorderOutline, BulbOutline, SettingOutline,
-  InfoCircleOutline, DeleteOutline, ProjectOutline, DatabaseOutline, ArrowRightOutline
+  InfoCircleOutline, DeleteOutline, ProjectOutline, DatabaseOutline,
+  ArrowRightOutline, CloseOutline, FormOutline
 ];
 
 export const appConfig: ApplicationConfig = {

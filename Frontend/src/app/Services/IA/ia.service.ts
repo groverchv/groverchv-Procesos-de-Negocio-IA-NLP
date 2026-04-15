@@ -24,8 +24,9 @@ export interface DiagramCommand {
   width?: number;
   height?: number;
   fontSize?: number;
-  responsible?: string;
+
   policy?: string;
+  responsible?: string;
   // Edge fields
   sourceId?: string;
   targetId?: string;
@@ -55,7 +56,7 @@ export interface IaResponse {
 })
 export class IaService {
   private readonly GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-  private readonly API_KEY = ''; // Reemplazar con su propia API Key de Groq
+  private readonly API_KEY = 'YOUR_GROQ_API_KEY';
 
   constructor(private http: HttpClient) {}
 
@@ -63,7 +64,7 @@ export class IaService {
 
     const nodesContext = JSON.stringify(currentNodes.map(n => ({
       id: n.id, type: n.type, label: n.label, x: Math.round(n.x), y: Math.round(n.y),
-      width: n.width, height: n.height, fontSize: n.fontSize, responsible: n.responsible
+      width: n.width, height: n.height, fontSize: n.fontSize
     })));
 
     const edgesContext = JSON.stringify(currentEdges.map(e => ({
@@ -84,23 +85,30 @@ Carriles (Swimlanes): [${lanesContext}]
 ═══ TIPOS DE NODOS DISPONIBLES ═══
 - activity: Tarea / Actividad (rectángulo redondeado)
 - subprocess: Subproceso (rectángulo con ícono +)
-- decision: Compuerta Exclusiva XOR (rombo - requiere guardas en flujos salientes)
-- parallel: Compuerta Paralela AND (rombo - bifurcación/unión)
-- start: Evento de Inicio (círculo verde - máximo 1 por diagrama)
-- end: Evento de Fin (círculo rojo - puede haber múltiples)
+- decision: Compuerta Exclusiva XOR (rombo)
+- parallel: Compuerta Paralela AND (rombo con +)
+- start: Nodo Inicial (círculo sólido)
+- end: Nodo Final (círculo con borde)
+- activity_final: Actividad Nodo Final (círculo tipo "bullseye")
+- flow_final: Nodo Final del Flujo (círculo con X)
+- fork: Tenedor (barra vertical fina para ramificar flujos paralelos)
+- join: Unión / Merge (barra vertical fina para unir flujos paralelos)
+- signal_send: Envío de Señales (pentágono/flecha hacia la derecha)
+- signal_receive: Recepción de señal (pentágono con muesca a la izquierda)
+- note: Nota o Comentario (rectángulo con esquina doblada)
 - swimlane: Carril / Calle (contenedor horizontal)
 - datastore: Almacén de Datos (cilindro)
 
 ═══ ACCIONES DISPONIBLES ═══
 
 1. add_node — Agregar nodo
-   Campos: nodeType, label, x, y, width, height, fontSize, responsible
+   Campos: nodeType, label, x, y, width, height, fontSize
 
 2. delete_node — Eliminar nodo (también elimina sus conexiones automáticamente)
    Campos: nodeId o label (para buscar por nombre)
 
 3. update_node — Modificar propiedades de un nodo existente
-   Campos: nodeId o label (para buscar), newLabel, x, y, width, height, fontSize, responsible, policy
+   Campos: nodeId o label (para buscar), newLabel, x, y, width, height, fontSize, policy
 
 4. add_edge — Agregar flujo/conexión
    Campos: sourceId (id o label del origen), targetId (id o label del destino), edgeLabel (guarda o texto), edgeStyle (solid|dashed), edgeColor

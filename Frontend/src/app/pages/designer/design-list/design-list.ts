@@ -11,6 +11,7 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzModalModule } from 'ng-zorro-antd/modal';
+import { NzRadioModule } from 'ng-zorro-antd/radio';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { DesignService } from '../../../Services/design.service';
 import { Design } from '../../../Services/types';
@@ -20,7 +21,7 @@ import { Design } from '../../../Services/types';
   standalone: true,
   imports: [
     CommonModule, FormsModule, RouterLink, NzCardModule, NzGridModule, NzTypographyModule, 
-    NzIconModule, NzButtonModule, NzSpaceModule, NzBreadCrumbModule, NzTagModule, NzModalModule
+    NzIconModule, NzButtonModule, NzSpaceModule, NzBreadCrumbModule, NzTagModule, NzModalModule, NzRadioModule
   ],
   templateUrl: './design-list.html',
   styles: [`
@@ -63,8 +64,10 @@ export class DesignListComponent implements OnInit {
   newDesign: Design = {
     nombre: '',
     projectId: '',
-    estado: 'Borrador'
+    estado: 'Borrador',
+    layoutType: 'horizontal'
   };
+  isReadOnly = false;
 
   constructor(
     private router: Router, 
@@ -76,6 +79,7 @@ export class DesignListComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.isReadOnly = this.router.url.includes('/staff');
     if (this.projectId) {
       this.loadDesigns();
       this.newDesign.projectId = this.projectId;
@@ -145,7 +149,8 @@ export class DesignListComponent implements OnInit {
 
 
   openModeler(id: string) {
-    this.router.navigate(['/designer/designs', id]);
+    const parent = this.isReadOnly ? 'staff' : 'designer';
+    this.router.navigate([`/${parent}/designs`, id]);
   }
 }
 

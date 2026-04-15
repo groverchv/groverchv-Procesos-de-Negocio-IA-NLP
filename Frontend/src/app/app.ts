@@ -15,11 +15,13 @@ export class App {
   showTitle = signal(true);
 
   constructor(private router: Router) {
+    this.checkVisibility();
     this.router.events.pipe(
       filter(event => event instanceof NavigationEnd)
-    ).subscribe((event: any) => {
-      // Hide global header on modeler page
-      this.showTitle.set(!event.urlAfterRedirects.includes('/designer/designs/'));
-    });
+    ).subscribe(() => this.checkVisibility());
+  }
+
+  private checkVisibility() {
+    this.showTitle.set(!window.location.href.includes('designs'));
   }
 }

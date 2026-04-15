@@ -29,7 +29,7 @@ export class RoleSelectionComponent {
     if (role === 'designer') {
       this.router.navigate(['/designer/projects']);
     } else if (role === 'staff') {
-      this.router.navigate(['/staff']);
+      this.router.navigate(['/staff/projects']);
     }
   }
 }

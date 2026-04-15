@@ -1,12 +1,21 @@
+
 <div class="container">
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
-    <h1 nz-typography style="margin: 0; font-weight: 800; letter-spacing: -1px;">Tus Proyectos</h1>
+    <h1 nz-typography style="margin: 0; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center;">
+      <a routerLink="/" style="margin-right: 16px; display: flex; align-items: center; justify-content: center; text-decoration: none; color: inherit;">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </a>
+      {{ isReadOnly ? 'Seleccionar Proyecto' : 'Tus Proyectos' }}
+    </h1>
     <nz-space [nzSize]="'middle'">
       <nz-input-group [nzPrefix]="searchPrefix" style="width: 300px;">
         <input type="text" nz-input placeholder="Buscar procesos..." style="border-radius: 10px;" />
       </nz-input-group>
       <ng-template #searchPrefix><span nz-icon nzType="search"></span></ng-template>
-      <button nz-button nzType="primary" (click)="showModal()" style="height: 48px; border-radius: 12px; font-weight: bold; padding: 0 25px;">
+      <button *ngIf="!isReadOnly" nz-button nzType="primary" (click)="showModal()" style="height: 48px; border-radius: 12px; font-weight: bold; padding: 0 25px;">
         <span nz-icon nzType="plus"></span> Nuevo Proyecto
       </button>
     </nz-space>
@@ -15,7 +24,7 @@
   <div nz-row [nzGutter]="[24, 32]">
     <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="8" [nzLg]="6" *ngFor="let p of projects">
       <nz-card class="project-card" [nzCover]="coverTemplate" (click)="viewProject(p.id!)">
-        <button nz-button nzDanger nzShape="circle" class="delete-btn" (click)="deleteProject($event, p.id!)">
+        <button *ngIf="!isReadOnly" nz-button nzDanger nzShape="circle" class="delete-btn" (click)="deleteProject($event, p.id!)">
           <span nz-icon nzType="delete"></span>
         </button>
         <nz-card-meta 

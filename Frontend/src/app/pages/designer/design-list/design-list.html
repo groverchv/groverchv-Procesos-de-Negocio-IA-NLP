@@ -1,17 +1,26 @@
+
 <div class="container">
   <nz-breadcrumb style="margin-bottom: 24px;">
-    <nz-breadcrumb-item><a routerLink="/designer/projects">Proyectos</a></nz-breadcrumb-item>
-    <nz-breadcrumb-item>Proyecto {{projectId}}</nz-breadcrumb-item>
+    <nz-breadcrumb-item><a [routerLink]="isReadOnly ? '/staff/projects' : '/designer/projects'">Proyectos</a></nz-breadcrumb-item>
+    <nz-breadcrumb-item>Proyecto #{{projectId?.slice(-6)}}</nz-breadcrumb-item>
     <nz-breadcrumb-item>Diseños</nz-breadcrumb-item>
   </nz-breadcrumb>
 
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
     <div>
-      <h1 nz-typography style="margin: 0; font-weight: 800; letter-spacing: -1px;">Diseños en Proyecto</h1>
-      <p nz-typography nzType="secondary">Gestiona los diagramas y subprocesos internos de este proyecto.</p>
+      <h1 nz-typography style="margin: 0; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center;">
+        <a [routerLink]="isReadOnly ? '/staff/projects' : '/designer/projects'" style="margin-right: 16px; display: flex; align-items: center; justify-content: center; text-decoration: none; color: inherit;">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </a>
+        Diseños del Proyecto
+      </h1>
+      <p nz-typography nzType="secondary" style="margin-left: 50px;">Gestiona los diagramas y subprocesos internos de este proyecto.</p>
     </div>
     <nz-space>
-      <button nz-button nzType="primary" (click)="showModal()" style="height: 48px; border-radius: 12px; font-weight: bold;">
+      <button *ngIf="!isReadOnly" nz-button nzType="primary" (click)="showModal()" style="height: 48px; border-radius: 12px; font-weight: bold;">
         <span nz-icon nzType="plus"></span> Nuevo Diseño
       </button>
     </nz-space>
@@ -20,7 +29,7 @@
   <div nz-row [nzGutter]="[24, 32]">
     <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="8" [nzLg]="6" *ngFor="let d of designs">
       <nz-card class="design-card" [nzCover]="coverTemplate" (click)="openModeler(d.id!)">
-        <button nz-button nzDanger nzShape="circle" class="delete-btn" (click)="deleteDesign($event, d.id!)">
+        <button *ngIf="!isReadOnly" nz-button nzDanger nzShape="circle" class="delete-btn" (click)="deleteDesign($event, d.id!)">
           <span nz-icon nzType="delete"></span>
         </button>
         <div class="card-info">
@@ -62,6 +71,13 @@
     <div style="margin-bottom: 16px;">
       <label style="display: block; margin-bottom: 8px; font-weight: 600;">Nombre del Diseño</label>
       <input nz-input [(ngModel)]="newDesign.nombre" placeholder="Ej. Diagrama de Flujo de Ventas" />
+    </div>
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 600;">Tipo de Layout</label>
+      <nz-radio-group [(ngModel)]="newDesign.layoutType" nzButtonStyle="solid">
+        <label nz-radio-button nzValue="horizontal">↔ Swimlanes Horizontales</label>
+        <label nz-radio-button nzValue="vertical">↕ Swimlanes Verticales</label>
+      </nz-radio-group>
     </div>
     <div style="margin-bottom: 16px;">
       <label style="display: block; margin-bottom: 8px; font-weight: 600;">Estado Inicial</label>
