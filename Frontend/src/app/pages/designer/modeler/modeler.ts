@@ -46,6 +46,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   designId: string | null = null;
   projectId: string | null = null;
   modelingId: string | null = null;
+  layoutType: string = 'vertical';
   nodes: NodeData[] = [];
   edges: EdgeData[] = [];
 
@@ -113,6 +114,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   private socketSubscription: Subscription | null = null;
   private presenceSubscription: Subscription | null = null;
+  private assistantSubscriptions: Subscription[] = [];
+  private assistantStreamsBound = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -145,6 +148,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.socketSubscription?.unsubscribe();
     this.presenceSubscription?.unsubscribe();
+    this.assistantSubscriptions.forEach(s => s.unsubscribe());
+    this.assistantSubscriptions = [];
     this.socketService.disconnect();
   }
 
@@ -153,6 +158,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.designService.getDesignById(this.designId!).subscribe({
       next: (design) => {
         this.projectId = design.projectId;
+        this.layoutType = design.layoutType || 'vertical';
       },
       error: (err) => console.error('Error loading design details', err)
     });
@@ -173,6 +179,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
         this.modelingId = modeling.id || null;
         this.nodes = modeling.nodes || [];
         this.edges = modeling.edges || [];
+        this.nodes
+          .filter(n => n.type === 'swimlane')
+          .forEach(lane => {
+            lane.width = Math.max(lane.width || 0, 300);
+            lane.height = Math.max(lane.height || 0, 520);
+          });
         this.saveHistory();
       },
       error: (err) => console.error('Error loading initial modeling data', err)
@@ -512,11 +524,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.offset = { x: svgPt.x - node.x, y: svgPt.y - node.y };
 
     if (node.type === 'swimlane') {
-      this.draggedChildren = this.nodes.filter(n =>
-        n.type !== 'swimlane' &&
-        n.y >= node.y &&
-        n.y <= (node.y + (node.height || 200))
-      );
+      // In column-based lanes we snap/move children on layout sync, not during drag.
+      this.draggedChildren = [];
     } else {
       this.draggedChildren = [];
     }
@@ -551,10 +560,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
       const newY = svgPt.y - this.offset.y;
 
       if (this.draggedNode.type === 'swimlane') {
-        const deltaY = newY - this.draggedNode.y;
-        this.draggedNode.x = 0;
-        this.draggedNode.y = newY;
-        this.draggedChildren.forEach(child => { child.y += deltaY; });
+        this.draggedNode.x = Math.max(0, newX);
+        this.draggedNode.y = 0;
         this.syncLanesLayout(true);
       } else {
         this.draggedNode.x = Math.max(0, newX);
@@ -584,45 +591,32 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== LANE LAYOUT =====
 
   syncLanesLayout(isDragging = false) {
-    const lanes = this.nodes.filter(n => n.type === 'swimlane').sort((a, b) => a.y - b.y);
+    const lanes = this.nodes.filter(n => n.type === 'swimlane').sort((a, b) => a.x - b.x);
     if (lanes.length < 2 && !isDragging) return;
 
     if (isDragging && this.draggedNode && this.draggedNode.type === 'swimlane') {
-      // Collision & Push physics
+      // Keep lane in column space while dragging.
       const dragged = this.draggedNode;
-      const draggedH = dragged.height || 200;
-      for (const lane of lanes) {
-        if (lane.id === dragged.id) continue;
-        const laneH = lane.height || 200;
-        const overlapTop = Math.max(dragged.y, lane.y);
-        const overlapBot = Math.min(dragged.y + draggedH, lane.y + laneH);
-        if (overlapBot > overlapTop) {
-          const oldY = lane.y;
-          if (dragged.y < lane.y) {
-            lane.y = dragged.y + draggedH;
-          } else {
-            lane.y = Math.max(0, dragged.y - laneH);
-          }
-          const deltaY = lane.y - oldY;
-          if (deltaY !== 0) {
-            this.nodes.filter(n => n.type !== 'swimlane' && n.y >= oldY && n.y <= oldY + laneH)
-              .forEach(child => { child.y += deltaY; });
-          }
-        }
-      }
+      dragged.y = 0;
     } else {
-      // Snap layout: stack lanes vertically
-      let currentY = 0;
+      // Snap layout: lanes side by side as columns
+      let currentX = 0;
       lanes.forEach(lane => {
-        const oldY = lane.y;
-        lane.x = 0;
-        lane.y = currentY;
-        const deltaY = lane.y - oldY;
-        if (deltaY !== 0) {
-          this.nodes.filter(n => n.type !== 'swimlane' && n.y >= oldY && n.y <= (oldY + (lane.height || 200)))
-            .forEach(child => child.y += deltaY);
+        const oldX = lane.x;
+        const laneW = lane.width || 300;
+        lane.x = currentX;
+        lane.y = 0;
+        const deltaX = lane.x - oldX;
+        if (deltaX !== 0) {
+          this.nodes
+            .filter(n =>
+              n.type !== 'swimlane' &&
+              n.x >= oldX && n.x < (oldX + laneW) &&
+              n.y >= lane.y && n.y <= (lane.y + (lane.height || 520))
+            )
+            .forEach(child => { child.x += deltaX; });
         }
-        currentY += (lane.height || 200);
+        currentX += laneW;
       });
     }
   }
@@ -630,12 +624,14 @@ export class ModelerComponent implements OnInit, OnDestroy {
   checkAndExpandLanes() {
     const lanes = this.nodes.filter(n => n.type === 'swimlane');
     const otherNodes = this.nodes.filter(n => n.type !== 'swimlane');
-    let maxRight = 1200;
+    
+    // Carriles verticales lado a lado: expandir altura para acomodar flujo vertical
+    let maxBottom = 520;
     otherNodes.forEach(node => {
-      const right = node.x + (node.width || 160) + 100;
-      if (right > maxRight) maxRight = right;
+      const bottom = node.y + (node.height || 80) + 100;
+      if (bottom > maxBottom) maxBottom = bottom;
     });
-    lanes.forEach(lane => { lane.width = maxRight; });
+    lanes.forEach(lane => { lane.height = maxBottom; });
   }
 
   // ===== NODE CRUD =====
@@ -643,24 +639,38 @@ export class ModelerComponent implements OnInit, OnDestroy {
   addNode(type: string) {
     let x = 100, y = 200;
     if (type === 'swimlane') {
+      // Carriles lado a lado como columnas amplias
       const lanes = this.nodes.filter(n => n.type === 'swimlane');
-      y = lanes.length > 0 ? Math.max(...lanes.map(l => l.y + (l.height || 200))) : 0;
-      x = 0;
+      x = lanes.length > 0 ? Math.max(...lanes.map(l => l.x + (l.width || 300))) : 0;
+      y = 0;
     } else {
       const firstLane = this.nodes.find(n => n.type === 'swimlane');
-      if (firstLane) { y = firstLane.y + 50; x = firstLane.x + 100; }
+      if (firstLane) { 
+        y = firstLane.y + 50;
+        x = firstLane.x + 50;
+      }
     }
 
     const dims: Record<string, [number, number]> = {
-      swimlane: [1200, 200], decision: [120, 100], parallel: [120, 100],
+      swimlane: [300, 520],  // Carril vertical con encabezado arriba y cuerpo hacia abajo
+      decision: [120, 100], parallel: [120, 100],
       start: [40, 40], end: [40, 40]
     };
     const [defaultW, defaultH] = dims[type] || [160, 80];
 
+    // Generar nombre automático para swimlane
+    let label: string;
+    if (type === 'swimlane') {
+      label = this.getNextLaneName();
+    } else {
+      const baseLabel = type === 'decision' ? 'Condición?' : undefined;
+      label = this.getNextDefaultNodeName(type, baseLabel);
+    }
+
     const newNode: NodeData = {
       id: `${type}_${Date.now()}`,
       type, x, y,
-      label: type === 'decision' ? 'Condicion?' : `Nuevo ${type.toUpperCase()}`,
+      label,
       width: defaultW, height: defaultH, fontSize: 12
     };
 
@@ -668,6 +678,58 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.selectedNode = newNode;
     this.checkAndExpandLanes();
     this.broadcastUpdate();
+  }
+
+  // Helper: generar nombre secuencial para calles
+  private getNextLaneName(): string {
+    const lanes = this.nodes.filter(n => n.type === 'swimlane');
+    const used = new Set<number>();
+    for (const lane of lanes) {
+      const m = (lane.label || '').match(/^Calle\s+(\d+)$/i);
+      if (m) used.add(Number(m[1]));
+    }
+    let i = 1;
+    while (used.has(i)) i += 1;
+    return `Calle ${i}`;
+  }
+
+  // Helper: Autonumerar nombres de nodos si están duplicados (Evita "Nueva Actividad", "Nueva Actividad")
+  private getNextDefaultNodeName(type: string, baseLabel?: string): string {
+    const basenames: Record<string, string> = {
+      decision: 'Decisión',
+      subprocess: 'Subproceso',
+      start: 'Inicio',
+      end: 'Fin',
+      activity: 'Actividad',
+      datastore: 'Datos'
+    };
+
+    let prefix = baseLabel?.trim();
+    if (prefix) {
+       // Filter out "Nueva " prefix if LLM forcefully inferred it from previous NLP context
+       prefix = prefix.replace(/^(Nueva|Nuevo)\s+/i, '');
+    }
+
+    if (!prefix) {
+      prefix = basenames[type] || `${type.charAt(0).toUpperCase() + type.slice(1)}`;
+    }
+
+    const exactExists = this.nodes.some(n => n.label === prefix);
+    if (!exactExists) return prefix;
+
+    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escaped}\\s+(\\d+)$`, 'i');
+    let maxN = 1;
+
+    for (const node of this.nodes) {
+      const match = (node.label || '').trim().match(regex);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxN) maxN = num;
+      }
+    }
+
+    return `${prefix} ${maxN + 1}`;
   }
 
   deleteNode() {
@@ -853,8 +915,11 @@ export class ModelerComponent implements OnInit, OnDestroy {
       const len2 = Math.sqrt(d2.x*d2.x + d2.y*d2.y);
       const r = Math.min(radius, len1/2, len2/2);
 
-      const start = { x: p2.x + (d1.x/len1)*r, y: p2.y + (d1.y/len1)*r };
-      const end = { x: p2.x + (d2.x/len2)*r, y: p2.y + (d2.y/len2)*r };
+      const r1 = len1 > 0 ? r / len1 : 0;
+      const r2 = len2 > 0 ? r / len2 : 0;
+
+      const start = { x: p2.x + d1.x * r1, y: p2.y + d1.y * r1 };
+      const end = { x: p2.x + d2.x * r2, y: p2.y + d2.y * r2 };
 
       path += ` L ${start.x} ${start.y} Q ${p2.x} ${p2.y} ${end.x} ${end.y}`;
     }
@@ -911,7 +976,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.iaService.processCommand(cmd, this.nodes, this.edges).subscribe({
       next: (response) => {
         this.aiLoading = false;
-        this.aiLastMessage = ' ' + (response.explanation || 'Comando ejecutado exitosamente');
+        this.aiLastMessage = ' ' + (response.user_feedback || response.explanation || 'Comando ejecutado exitosamente');
         if (response.umlValidation) {
           this.message.warning(` UML: ${response.umlValidation}`);
         }
@@ -932,7 +997,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
         // === NODE MANAGEMENT ===
         case 'add_node': {
           const dims: Record<string, [number, number]> = {
-            swimlane: [1200, 200], decision: [120, 100], parallel: [120, 100],
+            swimlane: [300, 520],
+            decision: [120, 100], parallel: [120, 100],
             start: [40, 40], end: [40, 40], datastore: [80, 60]
           };
           const type = cmd.nodeType || 'activity';
@@ -949,22 +1015,45 @@ export class ModelerComponent implements OnInit, OnDestroy {
           let posY = cmd.y ?? 200;
           let posX = cmd.x ?? 200;
           if (type === 'swimlane') {
+            // Carriles lado a lado como columnas amplias
             const lanes = this.nodes.filter(n => n.type === 'swimlane');
-            posY = lanes.length > 0 ? Math.max(...lanes.map(l => l.y + (l.height || 200))) : 0;
-            posX = 0;
-          } else if (!cmd.y) {
-            // Auto-position inside the first lane
-            const firstLane = this.nodes.find(n => n.type === 'swimlane');
-            if (firstLane) {
-              posY = firstLane.y + 50;
-              if (!cmd.x) posX = firstLane.x + 160;
+            posX = lanes.length > 0 ? Math.max(...lanes.map(l => l.x + (l.width || 300))) : 0;
+            posY = 0;
+          } else if (cmd.targetLaneName || !cmd.y) {
+            // Auto-position inside the requested target lane (or first lane if none specified)
+            const laneNameQuery = cmd.targetLaneName ? cmd.targetLaneName.toLowerCase() : null;
+            const targetLane = laneNameQuery 
+              ? this.nodes.find(n => n.type === 'swimlane' && (n.label || '').toLowerCase().includes(laneNameQuery))
+              : this.nodes.find(n => n.type === 'swimlane');
+
+            if (targetLane) {
+              const existingInLane = this.nodes.filter(n => 
+                n.type !== 'swimlane' && 
+                n.x >= targetLane.x && n.x < targetLane.x + (targetLane.width || 300)
+              );
+              const maxY = existingInLane.length > 0 
+                ? Math.max(...existingInLane.map(n => n.y + (n.height || 80))) 
+                : targetLane.y + 70;
+              
+              posY = maxY + 40;
+              posX = targetLane.x + 50;
             }
+          }
+
+          // Generar label por defecto y aplicar autoincremento para evitar duplicados
+          let defaultLabel: string;
+          if (type === 'swimlane') {
+            defaultLabel = cmd.label && cmd.label !== 'Nueva Calle' ? cmd.label : this.getNextLaneName();
+          } else {
+            let base = cmd.label && cmd.label.trim().length > 0 ? cmd.label : undefined;
+            if (base) base = base.replace(/^(Nueva|Nuevo)\s+/i, '');
+            defaultLabel = this.getNextDefaultNodeName(type, base);
           }
 
           this.nodes.push({
             id: `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
             type, x: posX, y: posY,
-            label: cmd.label || `Nuevo ${type}`,
+            label: defaultLabel,
             width: cmd.width || w, height: cmd.height || h,
             fontSize: cmd.fontSize || 12,
             responsible: cmd.responsible
@@ -1011,7 +1100,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
               label: cmd.edgeLabel || cmd.label,
               style: (cmd.edgeStyle as any) || 'solid',
               color: cmd.edgeColor || '#455a64',
-              strokeWidth: 2, opacity: 100, waypoints: []
+              strokeWidth: cmd.edgeThickness || 2, opacity: 100, waypoints: []
             });
           }
           break;
@@ -1025,6 +1114,11 @@ export class ModelerComponent implements OnInit, OnDestroy {
             const tgt = this.nodes.find(n => n.id === cmd.targetId || n.label === cmd.targetId);
             if (src && tgt) {
               this.edges = this.edges.filter(e => !(e.source === src.id && e.target === tgt.id));
+            }
+          } else if (cmd.sourceId) {
+            const node = this.nodes.find(n => n.id === cmd.sourceId || n.label === cmd.sourceId);
+            if (node) {
+              this.edges = this.edges.filter(e => e.source !== node.id && e.target !== node.id);
             }
           }
           break;
@@ -1044,6 +1138,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
             if (cmd.label !== undefined) e.label = cmd.label;
             if (cmd.edgeStyle !== undefined) e.style = cmd.edgeStyle as any;
             if (cmd.edgeColor !== undefined) e.color = cmd.edgeColor;
+            if (cmd.edgeThickness !== undefined) e.strokeWidth = cmd.edgeThickness;
           }
           break;
         }
@@ -1057,10 +1152,10 @@ export class ModelerComponent implements OnInit, OnDestroy {
             n.type === 'swimlane' && n.label === cmd.targetLaneName
           );
           if (node && targetLane) {
-            // Position node within the target lane's vertical bounds
-            node.y = targetLane.y + ((targetLane.height || 200) / 2) - ((node.height || 80) / 2);
-            // Keep X or adjust if outside lane bounds
-            if (node.x < targetLane.x + 40) node.x = targetLane.x + 160;
+            // Carriles verticales: nodos dentro se colocan de arriba a abajo, centrados
+            node.x = targetLane.x + ((targetLane.width || 300) / 2) - ((node.width || 160) / 2);
+            // Keep Y or adjust if outside lane bounds
+            if (node.y < targetLane.y + 40) node.y = targetLane.y + 50;
           } else if (!targetLane && cmd.targetLaneName) {
             this.message.warning(` Carril "${cmd.targetLaneName}" no encontrado.`);
           }
@@ -1069,20 +1164,24 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
         case 'reorder_lanes': {
           if (cmd.laneOrder && cmd.laneOrder.length > 0) {
-            let currentY = 0;
+            let currentX = 0;
             for (const laneName of cmd.laneOrder) {
               const lane = this.nodes.find(n => n.type === 'swimlane' && n.label === laneName);
               if (lane) {
-                const oldY = lane.y;
-                const laneH = lane.height || 200;
-                const deltaY = currentY - oldY;
-                lane.y = currentY;
-                lane.x = 0;
+                const oldX = lane.x;
+                const laneW = lane.width || 300;
+                const deltaX = currentX - oldX;
+                lane.x = currentX;
+                lane.y = 0;
                 // Move all nodes inside this lane
-                this.nodes.filter(n =>
-                  n.type !== 'swimlane' && n.y >= oldY && n.y < oldY + laneH
-                ).forEach(n => n.y += deltaY);
-                currentY += laneH;
+                this.nodes
+                  .filter(n =>
+                    n.type !== 'swimlane' &&
+                    n.x >= oldX && n.x < oldX + laneW &&
+                    n.y >= lane.y && n.y <= lane.y + (lane.height || 520)
+                  )
+                  .forEach(n => n.x += deltaX);
+                currentX += laneW;
               }
             }
           }
@@ -1115,7 +1214,13 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
         // === BATCH STYLE ===
         case 'batch_update_style': {
-          if (cmd.targetType) {
+          if (cmd.targetType === 'edge') {
+            this.edges.forEach(e => {
+              if (cmd.edgeThickness !== undefined) e.strokeWidth = cmd.edgeThickness;
+              if (cmd.edgeColor !== undefined) e.color = cmd.edgeColor;
+              if (cmd.edgeStyle !== undefined) e.style = cmd.edgeStyle as any;
+            });
+          } else if (cmd.targetType) {
             this.nodes.filter(n => n.type === cmd.targetType).forEach(n => {
               if (cmd.fontSize !== undefined) n.fontSize = cmd.fontSize;
               if (cmd.width !== undefined) n.width = cmd.width;
@@ -1127,28 +1232,29 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
         // === AUTO LAYOUT ===
         case 'auto_layout': {
-          // Simple left-to-right layout within each lane
-          const lanes = this.nodes.filter(n => n.type === 'swimlane').sort((a, b) => a.y - b.y);
+          // Carriles verticales lado a lado, flujo de arriba a abajo dentro de cada carril
+          const lanes = this.nodes.filter(n => n.type === 'swimlane').sort((a, b) => a.x - b.x);
           const nonLanes = this.nodes.filter(n => n.type !== 'swimlane');
+          
           if (lanes.length === 0) {
-            // No lanes: simple horizontal layout
-            let x = 100;
+            // No lanes: simple vertical layout
+            let y = 100;
             nonLanes.forEach(n => {
-              n.x = x;
-              n.y = 200;
-              x += (n.width || 160) + 80;
+              n.x = 100;
+              n.y = y;
+              y += (n.height || 80) + 60;
             });
           } else {
-            // Group nodes by lane, then layout within each
+            // Group nodes by lane, then layout within each vertically
             lanes.forEach(lane => {
               const laneNodes = nonLanes.filter(n =>
-                n.y >= lane.y && n.y < lane.y + (lane.height || 200)
+                n.x >= lane.x && n.x < lane.x + (lane.width || 300)
               );
-              let x = 160;
+              let y = lane.y + 50;
               laneNodes.forEach(n => {
-                n.x = x;
-                n.y = lane.y + ((lane.height || 200) / 2) - ((n.height || 80) / 2);
-                x += (n.width || 160) + 80;
+                n.x = lane.x + ((lane.width || 300) / 2) - ((n.width || 160) / 2);
+                n.y = y;
+                y += (n.height || 80) + 60;
               });
             });
           }
@@ -1180,7 +1286,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
         const transcript = event.results[0][0].transcript;
         this.aiInput = transcript;
         this.isListening = false;
-        this.sendAiCommand();
+        // Se borró this.sendAiCommand() para permitir al usuario revisar/modificar el texto
       };
       this.recognition.onend = () => { this.isListening = false; };
       this.recognition.onerror = () => { this.isListening = false; };
@@ -1235,21 +1341,42 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.showAssistantPanel = !this.showAssistantPanel;
     if (this.showAssistantPanel) {
       this.geminiLive.setDiagramContext(this.nodes, this.edges);
-      this.geminiLive.messages$.subscribe(msg => {
-        this.assistantHistory.push(msg);
-        this.assistantThinking = false;
-        this.scrollAssistantToBottom();
-      });
-      this.geminiLive.isListening$.subscribe(v => this.assistantListening = v);
-      this.geminiLive.isSpeaking$.subscribe(v => this.assistantSpeaking = v);
-      this.geminiLive.isConnected$.subscribe(v => this.assistantConnected = v);
-      this.geminiLive.transcript$.subscribe(t => this.assistantTranscript = t);
+
+      if (!this.assistantStreamsBound) {
+        this.assistantStreamsBound = true;
+        this.assistantSubscriptions.push(
+          this.geminiLive.messages$.subscribe(msg => {
+            this.assistantHistory.push(msg);
+            this.assistantThinking = false;
+            this.scrollAssistantToBottom();
+          })
+        );
+        this.assistantSubscriptions.push(
+          this.geminiLive.isListening$.subscribe(v => this.assistantListening = v)
+        );
+        this.assistantSubscriptions.push(
+          this.geminiLive.isSpeaking$.subscribe(v => this.assistantSpeaking = v)
+        );
+        this.assistantSubscriptions.push(
+          this.geminiLive.isConnected$.subscribe(v => this.assistantConnected = v)
+        );
+        this.assistantSubscriptions.push(
+          this.geminiLive.transcript$.subscribe(t => this.assistantTranscript = t)
+        );
+      }
+
+      if (this.assistantHistory.length === 0) {
+        this.assistantHistory.push({
+          role: 'assistant',
+          content: 'Hola. Soy tu asistente de BPMNFlow. Puedo conversar contigo, revisar tu flujo y ayudarte a aplicar cambios.'
+        });
+      }
 
       try {
         await this.geminiLive.connect();
-        this.message.success('Tonny-AI conectado (Gemini Live)');
+        this.message.success('Asistente conectado (Gemini Live)');
       } catch {
-        this.message.info('Tonny-AI en modo Groq + ElevenLabs');
+        this.message.info('Asistente en modo local/fallback. Configura tus API keys para respuestas cloud.');
       }
     }
   }

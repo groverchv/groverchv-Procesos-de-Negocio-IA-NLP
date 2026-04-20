@@ -42,25 +42,19 @@
           <span nz-icon nzType="redo"></span>
         </button>
         <nz-divider nzType="vertical"></nz-divider>
-        <button nz-button nzType="text" (click)="validateDiagram()" nz-tooltip nzTooltipTitle="Validar Diagrama (RF-9)">
-          ✅ Validar
-        </button>
         <button nz-button nzType="text" (click)="runAudit()" nz-tooltip nzTooltipTitle="Auditoría Inteligente (Groq)">
-          🔍 Auditar
+          <span nz-icon nzType="search" nzTheme="outline" style="margin-right: 4px;"></span> Auditar
         </button>
         <nz-divider nzType="vertical"></nz-divider>
         <button nz-button [class.ai-active]="showAiPanel" class="ai-btn" (click)="toggleAiPanel()" nz-tooltip nzTooltipTitle="Asistente IA (Groq)">
-          🤖 IA
-        </button>
-        <button nz-button class="voice-btn" [class.listening]="isListening" (click)="toggleVoice()" nz-tooltip nzTooltipTitle="Comando de voz">
-          {{ isListening ? '⏹' : '🎤' }}
+          <span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 4px;"></span> IA
         </button>
         <button nz-button nzType="text" (click)="speakLastAi()" nz-tooltip nzTooltipTitle="Leer respuesta IA (ElevenLabs)">
-          🔊
+          <span nz-icon nzType="sound" nzTheme="fill" style="color: #64748b;"></span>
         </button>
         <nz-divider nzType="vertical"></nz-divider>
         <button nz-button nzType="text" (click)="showSettings = true" nz-tooltip nzTooltipTitle="Configuración" class="settings-btn">
-          ⚙️
+          <span nz-icon nzType="setting" nzTheme="outline"></span>
         </button>
       </nz-space>
 
@@ -552,17 +546,17 @@
           <!-- Current node info -->
           <div class="current-node-card" *ngIf="selectedNode">
             <div class="card-meta">
-              <span class="node-type-label">{{ (selectedNode?.type || 'Elemento') | uppercase }}</span>
+              <span class="node-type-label">{{ (selectedNode!.type || 'Elemento') | uppercase }}</span>
               <nz-tag *ngIf="currentActivity" 
                       [nzColor]="currentActivity.status === 'FINISHED' ? 'green' : currentActivity.status === 'IN_PROCESS' ? 'orange' : currentActivity.status === 'IN_REVIEW' ? 'blue' : 'default'">
                 {{ currentActivity.status }}
               </nz-tag>
             </div>
-            <h3 class="current-node-title">{{ selectedNode?.label || 'Sin nombre' }}</h3>
+            <h3 class="current-node-title">{{ selectedNode!.label || 'Sin nombre' }}</h3>
             
-            <p class="current-node-policy" *ngIf="selectedNode?.policy">
+            <p class="current-node-policy" *ngIf="selectedNode!.policy">
               <strong>Regla de negocio:</strong><br>
-              {{ selectedNode?.policy }}
+              {{ selectedNode!.policy }}
             </p>
           </div>
 
@@ -603,7 +597,7 @@
                       [nzType]="'default'"
                       class="decision-path-btn"
                       (click)="resolveDecisionPath(edge)">
-                <span nz-icon nzType="branch"></span>
+                <span nz-icon nzType="branches"></span>
                 {{ edge.label || 'Camino sin etiqueta' }}
               </button>
             </div>
@@ -656,14 +650,19 @@
   <!-- AI FLOATING PANEL -->
   <div class="ai-panel" *ngIf="showAiPanel">
     <div class="ai-panel-header">
-      <span>🧠 Experto BPMN · <small>IA</small></span>
+      <span><span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 6px;"></span>Experto BPMN · <small>IA</small></span>
       <button (click)="showAiPanel = false" class="ai-close">✕</button>
     </div>
     <div class="ai-panel-body">
       <div class="ai-message" *ngIf="aiLastMessage" [class.loading]="aiLoading">{{ aiLastMessage }}</div>
       <div class="ai-input-row">
         <input id="ai-input" [(ngModel)]="aiInput" placeholder="Comando..." (keydown.enter)="sendAiCommand()" [disabled]="aiLoading" />
-        <button (click)="sendAiCommand()">→</button>
+        <button class="ai-voice-btn" [class.active]="isListening" (click)="toggleVoice()" nz-tooltip nzTooltipTitle="Dictar por voz">
+          <span nz-icon [nzType]="isListening ? 'pause-circle' : 'audio'" nzTheme="outline"></span>
+        </button>
+        <button class="ai-send-btn" (click)="sendAiCommand()" [disabled]="aiLoading">
+          <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -678,16 +677,38 @@
   <div class="assistant-panel" *ngIf="showAssistantPanel">
     <div class="assistant-header">
       <div class="assistant-status">
-        <div class="pulse-dot" [class.active]="assistantListening"></div>
-        <span>{{ assistantListening ? 'Escuchando...' : 'Asistente Vocale' }}</span>
+        <div class="pulse-dot" [class.active]="assistantListening || assistantSpeaking"></div>
+        <div>
+          <div class="assistant-title-main">Asistente BPMN</div>
+          <div class="assistant-subline">
+            {{ assistantListening ? 'Escuchando...' : (assistantConnected ? 'Conectado' : 'Modo local') }}
+          </div>
+        </div>
       </div>
       <button class="close-btn" (click)="showAssistantPanel = false">✕</button>
+    </div>
+
+    <div class="assistant-toolbar">
+      <span class="status-chip" [class.online]="assistantConnected">{{ assistantConnected ? 'Cloud' : 'Local' }}</span>
+      <span class="status-chip" [class.active]="assistantListening">{{ assistantListening ? 'Mic ON' : 'Mic OFF' }}</span>
+      <span class="status-chip" [class.active]="assistantSpeaking">{{ assistantSpeaking ? 'Hablando' : 'Silencio' }}</span>
     </div>
     
     <div class="assistant-chat" #assistantChatScroll>
       <div *ngFor="let msg of assistantHistory" class="chat-bubble" [class.user]="msg.role === 'user'">
         {{ msg.content }}
       </div>
+      <div *ngIf="assistantThinking" class="chat-bubble assistant-thinking">Pensando...</div>
+    </div>
+
+    <div class="assistant-transcript" *ngIf="assistantTranscript && assistantListening">
+      <span>Transcripción:</span> {{ assistantTranscript }}
+    </div>
+
+    <div class="assistant-quick-actions">
+      <button class="quick-btn" (click)="assistantInput='Hola, ¿me ayudas a mejorar este flujo?'">Saludar</button>
+      <button class="quick-btn" (click)="assistantInput='¿Ves errores lógicos en el diagrama actual?'">Auditar lógica</button>
+      <button class="quick-btn" (click)="assistantInput='Sugiere mejoras de paralelismo y cuellos de botella'">Sugerir mejoras</button>
     </div>
 
     <div class="assistant-footer">
@@ -695,7 +716,7 @@
         <button nz-button nzType="text" size="small" 
                 [class.active]="continuousListening"
                 (click)="toggleContinuousMode()">
-          Auto-recuch {{ continuousListening ? 'ON' : 'OFF' }}
+          Auto-escucha {{ continuousListening ? 'ON' : 'OFF' }}
         </button>
       </div>
       <div class="input-container">

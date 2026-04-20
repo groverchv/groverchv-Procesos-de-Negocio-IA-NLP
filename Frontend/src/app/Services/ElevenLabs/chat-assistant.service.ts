@@ -8,14 +8,29 @@ import { catchError, map } from 'rxjs/operators';
 })
 export class ChatAssistantService {
   private readonly GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-  private readonly API_KEY = 'YOUR_GROQ_API_KEY';
   private readonly ELEVENLABS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
-  private readonly ELEVENLABS_KEY = 'YOUR_ELEVENLABS_API_KEY';
   private readonly VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel voice
 
   private conversationHistory: { role: string; content: string }[] = [];
 
   constructor(private http: HttpClient) {}
+
+  private get config(): any {
+    try {
+      return JSON.parse(localStorage.getItem('bpmnflow_config') || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  private get API_KEY(): string { return this.config.groqKey || ''; }
+  private get ELEVENLABS_KEY(): string { return this.config.elevenLabsKey || ''; }
+
+  private hasValidKey(key: string): boolean {
+    if (!key) return false;
+    const trimmed = key.trim();
+    return trimmed.length > 8 && !/^YOUR_/i.test(trimmed);
+  }
 
   /**
    * Level 1 Support Chat — General platform help
@@ -28,15 +43,15 @@ export class ChatAssistantService {
       this.conversationHistory = this.conversationHistory.slice(-16);
     }
 
-    const systemPrompt = `Eres un asistente virtual experto de la plataforma BPMNFlow — un sistema empresarial de modelado y ejecución de procesos de negocio.
+    const systemPrompt = `Eres el Arquitecto UML y Motor de Estado en modo Copiloto para BPMNFlow.
 
-Tu rol es brindar soporte de Nivel 1: ayudar a los usuarios a entender y usar la plataforma.
+  Tu rol principal en este chat es soporte técnico de ingeniería, directo y minimalista.
 
 ═══ FUNCIONALIDADES DE LA PLATAFORMA ═══
 1. **Roles**: Diseñador (crea diagramas) y Funcionario (ejecuta procesos)
 2. **Jerarquía**: Proyectos → Diseños → Modelados (diagramas)
 3. **Editor Visual**: Canvas SVG con drag & drop, nodos (actividades, decisiones, inicio, fin, forks, señales, notas), conexiones ortogonales
-4. **Swimlanes**: Carriles horizontales/verticales para organizar actividades por responsable
+4. **Swimlanes**: Carriles como columnas verticales con título superior y flujo de arriba hacia abajo
 5. **Formularios**: Cada actividad puede tener formularios dinámicos (texto, número, fecha, select, archivo)
 6. **Colaboración**: Edición en tiempo real multi-usuario vía WebSocket
 7. **IA**: Comandos de voz/texto para manipular diagramas (Groq Llama 3.3)
@@ -46,17 +61,23 @@ Tu rol es brindar soporte de Nivel 1: ayudar a los usuarios a entender y usar la
 
 ═══ CÓMO USAR CADA SECCIÓN ═══
 - **Proyectos**: Crear nuevo → nombrar → entrar para ver diseños
-- **Diseños**: Crear nuevo → elegir layout (horizontal/vertical) → abrir modelador
+- **Diseños**: Crear nuevo → abrir modelador (layout actual: carriles en columnas verticales)
 - **Modelador**: Arrastrar nodos del panel izquierdo → conectar con "Flujo de Secuencia" → configurar propiedades en panel derecho
 - **IA en Modelador**: Clic en "🤖 IA" o "🎤" y dictar comando, ej: "agrega una actividad Revisión"
 - **Funcionario**: Seleccionar proceso → iniciar instancia → llenar formularios → avanzar actividades
 
 ═══ REGLAS ═══
 - Responde SIEMPRE en español
-- Sé conciso pero amable
-- Si el usuario pregunta algo técnico avanzado, sugiere contactar soporte Level 3
-- Si no sabes algo, sé honesto y sugiere explorar la documentación
-- Puedes usar emojis para ser más amigable`;
+- Sé técnico, preciso y accionable
+- Si detectas cuellos de botella, redundancias o errores lógicos, indícalos de forma proactiva
+- Si sugieres una mejora estructural compleja, cierra con esta pregunta exacta: "¿Quieres que aplique estos cambios por ti?"
+- No inventes funciones que no existan en la plataforma`;
+
+    if (!this.hasValidKey(this.API_KEY)) {
+      const local = this.localAssistantReply(userMessage);
+      this.conversationHistory.push({ role: 'assistant', content: local });
+      return of(local);
+    }
 
     const headers = new HttpHeaders({
       'Content-Type': 'application/json',
@@ -81,7 +102,7 @@ Tu rol es brindar soporte de Nivel 1: ayudar a los usuarios a entender y usar la
       }),
       catchError(err => {
         console.error('[ChatAssistant] Error:', err);
-        return of('❌ Error al conectar con el asistente. Intenta de nuevo.');
+        return of(this.localAssistantReply(userMessage));
       })
     );
   }
@@ -133,6 +154,11 @@ Responde en español, de forma profesional y estructurada con formato markdown.`
       return;
     }
 
+    if (!this.hasValidKey(this.ELEVENLABS_KEY)) {
+      this.browserSpeak(text);
+      return;
+    }
+
     const headers = new HttpHeaders({
       'Content-Type': 'application/json',
       'xi-api-key': this.ELEVENLABS_KEY
@@ -179,5 +205,19 @@ Responde en español, de forma profesional y estructurada con formato markdown.`
    */
   clearHistory(): void {
     this.conversationHistory = [];
+  }
+
+  private localAssistantReply(userMessage: string): string {
+    const q = (userMessage || '').toLowerCase();
+    if (/hola|buenas|hey|hi/.test(q)) {
+      return 'Hola. Estoy aquí para ayudarte con BPMNFlow. Puedes pedirme guía, revisar lógica del flujo o proponer cambios.';
+    }
+    if (/suger|idea|mejora/.test(q)) {
+      return 'Excelente, comparte tu sugerencia y la evaluamos juntas con impacto técnico y pasos concretos.';
+    }
+    if (/cómo|como|para qué|que es|qué es|ayuda/.test(q)) {
+      return 'Te ayudo rápido: dime qué parte del modelador estás usando y te doy pasos concretos y buenas prácticas.';
+    }
+    return 'Entendido. Puedo responder dudas, detectar problemas de flujo y ayudarte a transformar ideas en cambios concretos del diagrama.';
   }
 }

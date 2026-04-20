@@ -30,13 +30,16 @@ export interface ApiKeysConfig {
     NzDividerModule, NzTagModule
   ],
   template: `
-    <nz-modal [(nzVisible)]="visible" nzTitle="⚙️ Configuración de la Plataforma"
+    <nz-modal [(nzVisible)]="visible" [nzTitle]="titleTpl"
               [nzWidth]="580" (nzOnCancel)="close()" [nzFooter]="footerTpl" nzCentered
               nzClassName="settings-modal">
+      <ng-template #titleTpl>
+        <span nz-icon nzType="setting" nzTheme="outline" style="margin-right: 8px;"></span>Configuración de la Plataforma
+      </ng-template>
       <div *nzModalContent>
         <div class="settings-section">
 
-          <h4 style="margin:0 0 16px; font-weight:700; color:#1e293b;">🔑 Claves API</h4>
+          <h4 style="margin:0 0 16px; font-weight:700; color:#1e293b;"><span nz-icon nzType="key" nzTheme="outline" style="margin-right: 8px; color: #d4b106;"></span>Claves API</h4>
             <div class="settings-section">
               <div class="key-group">
                 <label>
@@ -50,7 +53,7 @@ export interface ApiKeysConfig {
                 </nz-input-group>
                 <ng-template #groqSuffix>
                   <span class="toggle-eye" (click)="showGroq = !showGroq">
-                    {{ showGroq ? '🙈' : '👁️' }}
+                    <span nz-icon [nzType]="showGroq ? 'eye-invisible' : 'eye'" nzTheme="outline"></span>
                   </span>
                 </ng-template>
                 <span class="key-hint">Motor rápido para comandos de diagrama y auditoría</span>
@@ -68,7 +71,7 @@ export interface ApiKeysConfig {
                 </nz-input-group>
                 <ng-template #geminiSuffix>
                   <span class="toggle-eye" (click)="showGemini = !showGemini">
-                    {{ showGemini ? '🙈' : '👁️' }}
+                    <span nz-icon [nzType]="showGemini ? 'eye-invisible' : 'eye'" nzTheme="outline"></span>
                   </span>
                 </ng-template>
                 <span class="key-hint">Asistente conversacional Tonny-AI (voz bidireccional)</span>
@@ -86,7 +89,7 @@ export interface ApiKeysConfig {
                 </nz-input-group>
                 <ng-template #elevenSuffix>
                   <span class="toggle-eye" (click)="showEleven = !showEleven">
-                    {{ showEleven ? '🙈' : '👁️' }}
+                    <span nz-icon [nzType]="showEleven ? 'eye-invisible' : 'eye'" nzTheme="outline"></span>
                   </span>
                 </ng-template>
                 <span class="key-hint">Síntesis de voz natural y humanizada para Tonny</span>
@@ -101,11 +104,11 @@ export interface ApiKeysConfig {
             </div>
 
           <nz-divider></nz-divider>
-          <h4 style="margin:0 0 16px; font-weight:700; color:#1e293b;">🎛️ Preferencias</h4>
+          <h4 style="margin:0 0 16px; font-weight:700; color:#1e293b;"><span nz-icon nzType="appstore" nzTheme="outline" style="margin-right: 8px;"></span>Preferencias</h4>
             <div class="settings-section">
               <div class="pref-row">
                 <div class="pref-info">
-                  <span class="pref-label">🔊 Síntesis de Voz (TTS)</span>
+                  <span class="pref-label"><span nz-icon nzType="sound" nzTheme="outline" style="margin-right: 6px;"></span>Síntesis de Voz (TTS)</span>
                   <span class="pref-desc">Tonny responde con audio</span>
                 </div>
                 <nz-switch [(ngModel)]="config.enableTTS"></nz-switch>
@@ -115,7 +118,7 @@ export interface ApiKeysConfig {
 
               <div class="pref-row">
                 <div class="pref-info">
-                  <span class="pref-label">🎤 Entrada de Voz</span>
+                  <span class="pref-label"><span nz-icon nzType="audio" nzTheme="outline" style="margin-right: 6px;"></span>Entrada de Voz</span>
                   <span class="pref-desc">Reconocimiento de voz para comandos</span>
                 </div>
                 <nz-switch [(ngModel)]="config.enableVoiceInput"></nz-switch>
@@ -125,7 +128,7 @@ export interface ApiKeysConfig {
 
               <div class="pref-row">
                 <div class="pref-info">
-                  <span class="pref-label">🌐 Idioma</span>
+                  <span class="pref-label"><span nz-icon nzType="global" nzTheme="outline" style="margin-right: 6px;"></span>Idioma</span>
                   <span class="pref-desc">Idioma del reconocimiento de voz</span>
                 </div>
                 <select nz-input [(ngModel)]="config.language" style="width: 140px;">
@@ -135,31 +138,13 @@ export interface ApiKeysConfig {
                 </select>
               </div>
             </div>
-
-          <nz-divider></nz-divider>
-          <h4 style="margin:0 0 16px; font-weight:700; color:#1e293b;">ℹ️ Acerca de</h4>
-            <div class="settings-section about-section">
-              <div class="about-logo">🧠</div>
-              <h3>BPMNFlow v2.0</h3>
-              <p>Plataforma de Modelado y Ejecución de Procesos de Negocio</p>
-              <nz-divider></nz-divider>
-              <div class="about-stack">
-                <nz-tag nzColor="red">Angular 19</nz-tag>
-                <nz-tag nzColor="blue">NG-ZORRO</nz-tag>
-                <nz-tag nzColor="green">Spring Boot</nz-tag>
-                <nz-tag nzColor="orange">MongoDB</nz-tag>
-                <nz-tag nzColor="purple">Gemini Live</nz-tag>
-                <nz-tag nzColor="cyan">Groq</nz-tag>
-                <nz-tag nzColor="volcano">ElevenLabs</nz-tag>
-              </div>
-            </div>
         </div>
       </div>
 
       <ng-template #footerTpl>
         <button nz-button nzType="default" (click)="close()">Cancelar</button>
         <button nz-button nzType="primary" (click)="save()">
-          💾 Guardar Configuración
+          <span nz-icon nzType="save" nzTheme="outline" style="margin-right: 6px;"></span>Guardar Configuración
         </button>
       </ng-template>
     </nz-modal>

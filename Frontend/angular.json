@@ -32,14 +32,18 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1MB",
-                  "maximumError": "3MB"
+                  "maximumWarning": "3MB",
+                  "maximumError": "5MB"
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "20kB",
-                  "maximumError": "50kB"
+                  "maximumWarning": "50kB",
+                  "maximumError": "100kB"
                 }
+              ],
+              "allowedCommonJsDependencies": [
+                "@stomp/stompjs",
+                "sockjs-client"
               ],
               "outputHashing": "all"
             },

@@ -65,7 +65,7 @@ export class DesignListComponent implements OnInit {
     nombre: '',
     projectId: '',
     estado: 'Borrador',
-    layoutType: 'horizontal'
+    layoutType: 'vertical'
   };
   isReadOnly = false;
 
@@ -124,7 +124,8 @@ export class DesignListComponent implements OnInit {
         this.newDesign = { 
           nombre: '', 
           projectId: this.projectId || '', 
-          estado: 'Borrador' 
+          estado: 'Borrador',
+          layoutType: 'vertical'
         };
 
         this.loadDesigns();

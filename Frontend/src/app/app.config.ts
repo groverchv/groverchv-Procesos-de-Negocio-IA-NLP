@@ -31,7 +31,23 @@ import {
   DatabaseOutline,
   ArrowRightOutline,
   CloseOutline,
-  FormOutline
+  FormOutline,
+  // Missing icons registered below
+  SoundOutline,
+  SoundFill,
+  AudioOutline,
+  PauseCircleOutline,
+  KeyOutline,
+  GlobalOutline,
+  EyeOutline,
+  EyeInvisibleOutline,
+  SaveOutline,
+  DashboardOutline,
+  RocketOutline,
+  BranchesOutline,
+  WarningOutline,
+  CheckCircleOutline,
+  CheckCircleFill
 } from '@ant-design/icons-angular/icons';
 
 import { routes } from './app.routes';
@@ -44,7 +60,12 @@ const icons = [
   ArrowLeftOutline, UndoOutline, RedoOutline, PlayCircleOutline,
   AppstoreOutline, BorderOutline, BulbOutline, SettingOutline,
   InfoCircleOutline, DeleteOutline, ProjectOutline, DatabaseOutline,
-  ArrowRightOutline, CloseOutline, FormOutline
+  ArrowRightOutline, CloseOutline, FormOutline,
+  // Additional icons used in modeler, settings, and execution panels
+  SoundOutline, SoundFill, AudioOutline, PauseCircleOutline,
+  KeyOutline, GlobalOutline, EyeOutline, EyeInvisibleOutline,
+  SaveOutline, DashboardOutline, RocketOutline, BranchesOutline,
+  WarningOutline, CheckCircleOutline, CheckCircleFill
 ];
 
 export const appConfig: ApplicationConfig = {

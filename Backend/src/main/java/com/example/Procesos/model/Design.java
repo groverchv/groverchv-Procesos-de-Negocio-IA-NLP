@@ -2,6 +2,7 @@ package com.example.Procesos.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
@@ -30,7 +31,8 @@ public class Design {
     private LocalDateTime ultimaActualizacion;
     
     private String estado; // e.g. "Draft", "Active", "Retired"
-    private String layoutType; // "horizontal" or "vertical" swimlanes
+    @Default
+    private String layoutType = "vertical"; // "horizontal" or "vertical" swimlanes
     private boolean locked; // true when an Official is executing an instance
     private String lockedBy; // userId that locked the design
 }

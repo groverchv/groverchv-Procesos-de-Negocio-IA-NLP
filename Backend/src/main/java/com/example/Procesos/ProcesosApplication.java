@@ -16,11 +16,11 @@ public class ProcesosApplication {
 		try {
 			SpringApplication.run(ProcesosApplication.class, args);
 			System.out.println("====================================================");
-			System.out.println("✅ EL BACKEND ESTA CORRIENDO CORRECTAMENTE");
+			System.out.println("EL BACKEND ESTA CORRIENDO CORRECTAMENTE");
 			System.out.println("URL: http://localhost:8080");
 			System.out.println("====================================================");
 		} catch (Exception e) {
-			System.err.println("❌ ERROR AL INICIAR EL RECURSO");
+			System.err.println("ERROR AL INICIAR EL RECURSO");
 			System.err.println("Carpeta del proyecto: " + System.getProperty("user.dir"));
 			System.err.println("Motivo del fallo: " + e.getMessage());
 			e.printStackTrace();
@@ -36,7 +36,7 @@ public class ProcesosApplication {
 						.descripcion("Este proyecto fue creado automáticamente para inicializar la base de datos.")
 						.build();
 				repository.save(defaultProject);
-				System.out.println("🌱 Base de datos inicializada con un proyecto de ejemplo.");
+				System.out.println("Base de datos inicializada con un proyecto de ejemplo.");
 			}
 		};
 	}
