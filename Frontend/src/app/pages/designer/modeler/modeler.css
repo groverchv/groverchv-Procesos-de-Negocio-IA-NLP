@@ -182,7 +182,7 @@
 
 /* ---- CANVAS ---- */
 .canvas-container { position: relative; overflow: auto; background: #f8fafc; cursor: default; }
-.canvas-svg { width: 5000px; height: 5000px; }
+.canvas-svg { width: 100%; height: 100%; display: block; }
 
 /* ---- NODES (foreignObject wrapper) ---- */
 .node-fo { cursor: grab; overflow: visible; }
@@ -1075,4 +1075,118 @@ g:hover > .port, .port:hover { opacity: 1; }
 .execution-complete p {
   font-size: 13px;
   color: #64748b;
+}
+
+/* ═══ BOTTLENECK NODE HIGHLIGHT (Amber Pulse) ═══ */
+.bottleneck-node > rect,
+.bottleneck-node > circle,
+.bottleneck-node > polygon {
+  stroke: #f59e0b !important;
+  stroke-width: 3px !important;
+  animation: bottleneck-pulse 1.2s ease-in-out infinite;
+}
+@keyframes bottleneck-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0px rgba(245,158,11,0)); }
+  50% { filter: drop-shadow(0 0 14px rgba(245,158,11,0.7)); }
+}
+
+/* ═══ SEARCH PANEL ═══ */
+.search-panel {
+  position: absolute; top: 64px; left: 264px;
+  width: 340px; z-index: 1000;
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.15); border: 1px solid #e2e8f0;
+  overflow: hidden; animation: fadeIn 0.2s ease-out;
+}
+.search-panel-header {
+  padding: 12px 16px; background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 700; font-size: 14px; color: #1e293b;
+}
+.search-panel-body { padding: 12px 16px; }
+.search-results { max-height: 300px; overflow-y: auto; margin-top: 10px; }
+.search-result-item {
+  padding: 8px 10px; border-bottom: 1px solid #f1f5f9;
+  cursor: pointer; font-size: 13px; color: #334155;
+  transition: background 0.15s; display: flex; align-items: center; gap: 8px;
+}
+.search-result-item:hover { background: #f5f3ff; color: #7c3aed; }
+.search-result-item:last-child { border-bottom: none; }
+.search-empty { text-align: center; padding: 20px; color: #94a3b8; font-size: 12px; }
+
+/* ═══ EXPORT / CODE GENERATION PANEL ═══ */
+.export-panel {
+  position: absolute; top: 64px; right: 380px;
+  width: 520px; max-height: 70vh; z-index: 1000;
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.15); border: 1px solid #e2e8f0;
+  overflow: hidden; animation: fadeIn 0.2s ease-out;
+  display: flex; flex-direction: column;
+}
+.export-panel-header {
+  padding: 12px 16px; background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 700; font-size: 14px; color: #1e293b;
+}
+.export-panel-body { padding: 12px 16px; overflow-y: auto; flex: 1; }
+.code-file-card {
+  background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 8px; margin-bottom: 12px; overflow: hidden;
+}
+.code-file-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
+  font-size: 13px; font-weight: 700; color: #334155;
+}
+.code-preview {
+  padding: 12px 14px; font-size: 11px; line-height: 1.5;
+  color: #475569; background: #fafbfc; overflow-x: auto;
+  margin: 0; max-height: 200px; font-family: 'Fira Code', 'Consolas', monospace;
+  white-space: pre-wrap; border: none;
+}
+
+/* ═══ PALETTE TIP ═══ */
+.palette-tip {
+  margin-top: 12px; padding: 10px; background: #f5f3ff;
+  border-radius: 8px; border: 1px solid #ddd6fe;
+}
+.palette-tip p { font-size: 11px; color: #5b21b6; margin: 0; }
+
+/* ═══ PALETTE ITEM flow ═══ */
+.palette-item.flow { font-weight: 700; border-color: #ddd6fe; }
+.palette-item.flow.active { background: #f3e8ff; border-color: #7c3aed; color: #7c3aed; }
+
+/* ═══ BACKGROUND ALERT (BOTTLENECK) ═══ */
+.canvas-bottleneck-alert {
+  background-color: rgba(239, 68, 68, 0.05); /* Soft red tint */
+  animation: bg-pulse-alert 1.5s infinite alternate; transition: background-color 0.3s ease;
+}
+
+@keyframes bg-pulse-alert {
+  0% { background-color: rgba(239, 68, 68, 0.02); }
+  100% { background-color: rgba(239, 68, 68, 0.12); }
+}
+
+/* --- COMPONENT ALERT (BOTTLENECK) --- */
+.bottleneck-node rect,
+.bottleneck-node circle,
+.bottleneck-node polygon,
+.bottleneck-node path {
+  animation: bottleneck-node-pulse 1s infinite alternate !important;
+}
+
+@keyframes bottleneck-node-pulse {
+  0% {
+    fill: #fff5f5;
+    stroke: #ef4444;
+    filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.5));
+  }
+  100% {
+    fill: #fee2e2;
+    stroke: #dc2626;
+    stroke-width: 3px;
+    filter: drop-shadow(0 0 20px rgba(239, 68, 68, 1));
+  }
 }

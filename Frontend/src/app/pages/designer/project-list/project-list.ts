@@ -12,8 +12,8 @@ import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzModalModule } from 'ng-zorro-antd/modal';
 import { NzMessageService } from 'ng-zorro-antd/message';
-import { ProjectService } from '../../../Services/project.service';
-import { Project } from '../../../Services/types';
+import { ProjectService } from '../../../services/project.service';
+import { Project } from '../../../services/types';
 
 @Component({
   selector: 'app-project-list',

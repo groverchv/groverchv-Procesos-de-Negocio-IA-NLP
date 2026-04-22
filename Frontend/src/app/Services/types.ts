@@ -68,6 +68,8 @@ export interface Modeling {
     senderId?: string;
     timestamp?: number;
     isDragPulse?: boolean;
+    type?: string;
+    error?: string;
 }
 
 // ═══ WORKFLOW ENGINE TYPES ═══

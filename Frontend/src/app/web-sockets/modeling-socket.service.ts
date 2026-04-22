@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { Subject, Observable, BehaviorSubject } from 'rxjs';
-import { Modeling } from '../Services/types';
+import { Modeling } from '../services/types';
 
 @Injectable({
   providedIn: 'root'

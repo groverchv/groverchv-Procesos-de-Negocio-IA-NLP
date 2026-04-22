@@ -47,7 +47,13 @@ import {
   BranchesOutline,
   WarningOutline,
   CheckCircleOutline,
-  CheckCircleFill
+  CheckCircleFill,
+  BorderOuterOutline,
+  FileSearchOutline,
+  FileDoneOutline,
+  CreditCardOutline,
+  ZoomInOutline,
+  ZoomOutOutline
 } from '@ant-design/icons-angular/icons';
 
 import { routes } from './app.routes';
@@ -61,11 +67,12 @@ const icons = [
   AppstoreOutline, BorderOutline, BulbOutline, SettingOutline,
   InfoCircleOutline, DeleteOutline, ProjectOutline, DatabaseOutline,
   ArrowRightOutline, CloseOutline, FormOutline,
-  // Additional icons used in modeler, settings, and execution panels
   SoundOutline, SoundFill, AudioOutline, PauseCircleOutline,
   KeyOutline, GlobalOutline, EyeOutline, EyeInvisibleOutline,
   SaveOutline, DashboardOutline, RocketOutline, BranchesOutline,
-  WarningOutline, CheckCircleOutline, CheckCircleFill
+  WarningOutline, CheckCircleOutline, CheckCircleFill,
+  BorderOuterOutline, FileSearchOutline, FileDoneOutline,
+  CreditCardOutline, ZoomInOutline, ZoomOutOutline
 ];
 
 export const appConfig: ApplicationConfig = {

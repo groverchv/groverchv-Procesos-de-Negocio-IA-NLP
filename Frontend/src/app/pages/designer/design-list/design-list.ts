@@ -13,8 +13,8 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzModalModule } from 'ng-zorro-antd/modal';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
 import { NzMessageService } from 'ng-zorro-antd/message';
-import { DesignService } from '../../../Services/design.service';
-import { Design } from '../../../Services/types';
+import { DesignService } from '../../../services/design.service';
+import { Design } from '../../../services/types';
 
 @Component({
   selector: 'app-design-list',

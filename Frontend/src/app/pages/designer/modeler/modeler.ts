@@ -14,17 +14,16 @@ import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { NzInputNumberModule } from 'ng-zorro-antd/input-number';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
-import { NzDatePickerModule } from 'ng-zorro-antd/date-picker';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
-import { DesignService } from '../../../Services/design.service';
-import { ModelingSocketService } from '../../../WebSockets/modeling-socket.service';
-import { NodeData, EdgeData, Modeling, Form, ValidationResult } from '../../../Services/types';
-import { IaService, DiagramCommand } from '../../../Services/IA/ia.service';
-import { ProcessInstanceService } from '../../../Services/process-instance.service';
-import { GeminiLiveService } from '../../../Services/IA/gemini-live.service';
+import { DesignService } from '../../../services/design.service';
+import { ModelingSocketService } from '../../../web-sockets/modeling-socket.service';
+import { NodeData, EdgeData, Modeling, Form, ValidationResult } from '../../../services/types';
+import { IaService, DiagramCommand } from '../../../services/ia/ia.service';
+import { ProcessInstanceService } from '../../../services/process-instance.service';
+import { GeminiLiveService } from '../../../services/ia/gemini-live.service';
 import { SettingsModalComponent } from '../../../components/settings-modal/settings-modal';
 
 @Component({
@@ -34,7 +33,7 @@ import { SettingsModalComponent } from '../../../components/settings-modal/setti
     CommonModule, NzLayoutModule, NzButtonModule, NzIconModule, NzTypographyModule,
     NzSpaceModule, NzCardModule, NzInputModule, NzTagModule, NzDividerModule,
     NzTooltipModule, FormsModule, NzInputNumberModule, NzSelectModule, NzCheckboxModule,
-    NzDatePickerModule, SettingsModalComponent
+    SettingsModalComponent
   ],
   templateUrl: './modeler.html',
   styleUrls: ['./modeler.css']
@@ -111,6 +110,30 @@ export class ModelerComponent implements OnInit, OnDestroy {
   executionHistory: string[] = [];
   processInstance: any = null;
   formChecks: Record<string, boolean> = {};
+
+  // ---- Multi-Selection (Plan §3: Macro-Operaciones) ----
+  selectedNodes: NodeData[] = [];
+  isSelectionBoxActive = false;
+  selectionBox = { x: 0, y: 0, w: 0, h: 0 };
+  private selectionStart = { x: 0, y: 0 };
+
+  // ---- Clipboard (Plan §3: Copiar/Cortar/Pegar) ----
+  private clipboard: { nodes: NodeData[], edges: EdgeData[] } | null = null;
+
+  // ---- Find & Zoom (Plan §3: Navegación Visual) ----
+  showSearchPanel = false;
+  searchQuery = '';
+  searchResults: NodeData[] = [];
+
+  // ---- Zoom & Pan (Plan §3) ----
+  viewBoxX = 0;
+  viewBoxY = 0;
+  viewBoxW = 3000;
+  viewBoxH = 2000;
+  zoomLevel = 1;
+
+  // ---- Bottleneck Detection (Plan §4) ----
+  bottleneckNodeIds: string[] = [];
 
   private socketSubscription: Subscription | null = null;
   private presenceSubscription: Subscription | null = null;
@@ -195,6 +218,14 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.lastReceivedTimestamp = 0;
     this.socketSubscription = this.socketService.connect(this.designId!).subscribe({
       next: (m: Modeling) => {
+        if (m.type === 'force_sync') {
+           this.message.warning(m.error || 'Colisión detectada. Sincronizando lienzo...');
+           this.nodes = m.nodes || [];
+           this.edges = m.edges || [];
+           this.lastReceivedTimestamp = Date.now();
+           return;
+        }
+
         if (m.senderId === this.socketService.currentUserId) return;
         if (m.timestamp && m.timestamp < this.lastReceivedTimestamp) return;
         this.lastReceivedTimestamp = m.timestamp || 0;
@@ -304,14 +335,44 @@ export class ModelerComponent implements OnInit, OnDestroy {
     } else if (event.ctrlKey && event.key === 'y') {
       event.preventDefault();
       this.redo();
+    } else if (event.ctrlKey && event.key === 'c') {
+      if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
+        event.preventDefault();
+        this.copySelection();
+      }
+    } else if (event.ctrlKey && event.key === 'x') {
+      if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
+        event.preventDefault();
+        this.cutSelection();
+      }
+    } else if (event.ctrlKey && event.key === 'v') {
+      if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
+        event.preventDefault();
+        this.pasteClipboard();
+      }
+    } else if (event.ctrlKey && event.key === 'f') {
+      event.preventDefault();
+      this.toggleSearch();
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
-        if (this.selectedNode) this.deleteNode();
-        else if (this.selectedEdge) this.deleteEdge();
+        if (this.selectedNodes.length > 0) {
+          // Multi-delete
+          const ids = new Set(this.selectedNodes.map(n => n.id));
+          this.nodes = this.nodes.filter(n => !ids.has(n.id));
+          this.edges = this.edges.filter(e => !ids.has(e.source) && !ids.has(e.target));
+          this.selectedNodes = [];
+          this.broadcastUpdate();
+        } else if (this.selectedNode) {
+          this.deleteNode();
+        } else if (this.selectedEdge) {
+          this.deleteEdge();
+        }
       }
     } else if (event.key === 'Escape') {
       this.isConnectingMode = false;
       this.showAiPanel = false;
+      this.showSearchPanel = false;
+      this.selectedNodes = [];
     }
   }
 
@@ -1050,13 +1111,19 @@ export class ModelerComponent implements OnInit, OnDestroy {
             defaultLabel = this.getNextDefaultNodeName(type, base);
           }
 
+          const newForms = (cmd.forms || []).map(f => ({
+            ...f,
+            modelingId: this.modelingId || ''
+          }));
+
           this.nodes.push({
             id: `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
             type, x: posX, y: posY,
             label: defaultLabel,
             width: cmd.width || w, height: cmd.height || h,
             fontSize: cmd.fontSize || 12,
-            responsible: cmd.responsible
+            responsible: cmd.responsible,
+            forms: newForms
           });
           break;
         }
@@ -1337,11 +1404,11 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   // =========== VOICE ASSISTANT (Gemini Live + Groq + ElevenLabs) ===========
 
+  private visionInterval: any;
+
   async toggleAssistant() {
     this.showAssistantPanel = !this.showAssistantPanel;
     if (this.showAssistantPanel) {
-      this.geminiLive.setDiagramContext(this.nodes, this.edges);
-
       if (!this.assistantStreamsBound) {
         this.assistantStreamsBound = true;
         this.assistantSubscriptions.push(
@@ -1360,24 +1427,24 @@ export class ModelerComponent implements OnInit, OnDestroy {
         this.assistantSubscriptions.push(
           this.geminiLive.isConnected$.subscribe(v => this.assistantConnected = v)
         );
-        this.assistantSubscriptions.push(
-          this.geminiLive.transcript$.subscribe(t => this.assistantTranscript = t)
-        );
-      }
-
-      if (this.assistantHistory.length === 0) {
-        this.assistantHistory.push({
-          role: 'assistant',
-          content: 'Hola. Soy tu asistente de BPMNFlow. Puedo conversar contigo, revisar tu flujo y ayudarte a aplicar cambios.'
-        });
       }
 
       try {
         await this.geminiLive.connect();
-        this.message.success('Asistente conectado (Gemini Live)');
-      } catch {
-        this.message.info('Asistente en modo local/fallback. Configura tus API keys para respuestas cloud.');
+        this.message.success('Tonny conectado');
+        
+        this.visionInterval = setInterval(() => {
+          if (this.assistantConnected) {
+            this.geminiLive.captureCanvas(this.svgElement.nativeElement);
+          }
+        }, 5000);
+
+      } catch (e) {
+        this.message.error('Error al conectar con Tonny');
       }
+    } else {
+      this.geminiLive.disconnect();
+      if (this.visionInterval) clearInterval(this.visionInterval);
     }
   }
 
@@ -1399,7 +1466,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.assistantHistory.push({ role: 'user', content: query });
     this.assistantThinking = true;
     this.scrollAssistantToBottom();
-    this.geminiLive.setDiagramContext(this.nodes, this.edges);
+    
     this.geminiLive.sendText(query);
   }
 
@@ -1596,6 +1663,332 @@ export class ModelerComponent implements OnInit, OnDestroy {
         this.message.info('Ejecución cancelada.');
       }
     });
+  }
+
+  // ===== MULTI-SELECTION (Plan §3: Macro-Operaciones) =====
+
+  startSelectionBox(event: MouseEvent) {
+    if (this.isReadOnly || this.isDragging || this.isConnectingMode) return;
+    const svg: SVGSVGElement = this.svgElement.nativeElement;
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX;
+    pt.y = event.clientY;
+    const svgPt = pt.matrixTransform(svg.getScreenCTM()!.inverse());
+    this.selectionStart = { x: svgPt.x, y: svgPt.y };
+    this.selectionBox = { x: svgPt.x, y: svgPt.y, w: 0, h: 0 };
+    this.isSelectionBoxActive = true;
+  }
+
+  updateSelectionBox(event: MouseEvent) {
+    if (!this.isSelectionBoxActive) return;
+    const svg: SVGSVGElement = this.svgElement.nativeElement;
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX;
+    pt.y = event.clientY;
+    const svgPt = pt.matrixTransform(svg.getScreenCTM()!.inverse());
+    this.selectionBox = {
+      x: Math.min(this.selectionStart.x, svgPt.x),
+      y: Math.min(this.selectionStart.y, svgPt.y),
+      w: Math.abs(svgPt.x - this.selectionStart.x),
+      h: Math.abs(svgPt.y - this.selectionStart.y)
+    };
+  }
+
+  endSelectionBox() {
+    if (!this.isSelectionBoxActive) return;
+    this.isSelectionBoxActive = false;
+    const box = this.selectionBox;
+    this.selectedNodes = this.nodes.filter(n => {
+      const nw = n.width || 160;
+      const nh = n.height || 80;
+      return n.x >= box.x && n.y >= box.y &&
+             (n.x + nw) <= (box.x + box.w) &&
+             (n.y + nh) <= (box.y + box.h);
+    });
+    if (this.selectedNodes.length > 0) {
+      this.message.info(`${this.selectedNodes.length} elemento(s) seleccionado(s)`);
+    }
+  }
+
+  // ===== CLIPBOARD (Plan §3: Copiar/Cortar/Pegar) =====
+
+  copySelection() {
+    const nodesToCopy = this.selectedNodes.length > 0 ? this.selectedNodes : (this.selectedNode ? [this.selectedNode] : []);
+    if (nodesToCopy.length === 0) return;
+    const nodeIds = new Set(nodesToCopy.map(n => n.id));
+    const edgesToCopy = this.edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+    this.clipboard = {
+      nodes: JSON.parse(JSON.stringify(nodesToCopy)),
+      edges: JSON.parse(JSON.stringify(edgesToCopy))
+    };
+    this.message.success(`${nodesToCopy.length} elemento(s) copiado(s)`);
+  }
+
+  cutSelection() {
+    this.copySelection();
+    if (this.clipboard) {
+      const ids = new Set(this.clipboard.nodes.map(n => n.id));
+      this.nodes = this.nodes.filter(n => !ids.has(n.id));
+      this.edges = this.edges.filter(e => !ids.has(e.source) && !ids.has(e.target));
+      this.selectedNodes = [];
+      this.selectedNode = null;
+      this.broadcastUpdate();
+    }
+  }
+
+  pasteClipboard() {
+    if (!this.clipboard) return;
+    const idMap = new Map<string, string>();
+    const offset = 30;
+    const newNodes: NodeData[] = this.clipboard.nodes.map(n => {
+      const newId = `${n.type}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      idMap.set(n.id, newId);
+      return { ...n, id: newId, x: n.x + offset, y: n.y + offset };
+    });
+    const newEdges: EdgeData[] = this.clipboard.edges.map(e => ({
+      ...e,
+      id: `edge_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      source: idMap.get(e.source) || e.source,
+      target: idMap.get(e.target) || e.target
+    }));
+    this.nodes.push(...newNodes);
+    this.edges.push(...newEdges);
+    this.selectedNodes = newNodes;
+    this.broadcastUpdate();
+    this.message.success(`${newNodes.length} elemento(s) pegado(s)`);
+  }
+
+  // ===== FIND & ZOOM (Plan §3: Navegación Visual) =====
+
+  toggleSearch() {
+    this.showSearchPanel = !this.showSearchPanel;
+    this.searchResults = [];
+    this.searchQuery = '';
+  }
+
+  searchNodes() {
+    if (!this.searchQuery.trim()) {
+      this.searchResults = [];
+      return;
+    }
+    const q = this.searchQuery.toLowerCase();
+    this.searchResults = this.nodes.filter(n =>
+      (n.label || '').toLowerCase().includes(q) ||
+      (n.type || '').toLowerCase().includes(q)
+    );
+  }
+
+  focusOnNode(node: NodeData) {
+    this.selectedNode = node;
+    // Center viewport on the node
+    const svg: SVGSVGElement = this.svgElement.nativeElement;
+    const nw = node.width || 160;
+    const nh = node.height || 80;
+    const cx = node.x + nw / 2;
+    const cy = node.y + nh / 2;
+    // Animate viewBox to center on node
+    this.viewBoxX = cx - this.viewBoxW / 2;
+    this.viewBoxY = cy - this.viewBoxH / 2;
+    svg.setAttribute('viewBox', `${this.viewBoxX} ${this.viewBoxY} ${this.viewBoxW} ${this.viewBoxH}`);
+    this.message.info(`Centrado en: ${node.label}`);
+  }
+
+  // ===== ZOOM & PAN (Plan §3) =====
+
+  @HostListener('wheel', ['$event'])
+  onWheel(event: WheelEvent) {
+    if (!this.svgElement) return;
+    event.preventDefault();
+    const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
+    this.viewBoxW *= zoomFactor;
+    this.viewBoxH *= zoomFactor;
+    this.zoomLevel = 3000 / this.viewBoxW;
+    const svg: SVGSVGElement = this.svgElement.nativeElement;
+    svg.setAttribute('viewBox', `${this.viewBoxX} ${this.viewBoxY} ${this.viewBoxW} ${this.viewBoxH}`);
+  }
+
+  zoomIn() {
+    this.viewBoxW *= 0.8;
+    this.viewBoxH *= 0.8;
+    this.zoomLevel = 3000 / this.viewBoxW;
+    this.applyViewBox();
+  }
+
+  zoomOut() {
+    this.viewBoxW *= 1.25;
+    this.viewBoxH *= 1.25;
+    this.zoomLevel = 3000 / this.viewBoxW;
+    this.applyViewBox();
+  }
+
+  zoomReset() {
+    this.viewBoxX = 0;
+    this.viewBoxY = 0;
+    this.viewBoxW = 3000;
+    this.viewBoxH = 2000;
+    this.zoomLevel = 1;
+    this.applyViewBox();
+  }
+
+  private applyViewBox() {
+    if (!this.svgElement) return;
+    const svg: SVGSVGElement = this.svgElement.nativeElement;
+    svg.setAttribute('viewBox', `${this.viewBoxX} ${this.viewBoxY} ${this.viewBoxW} ${this.viewBoxH}`);
+  }
+
+
+
+  // ===== BOTTLENECK DETECTION (Plan §4: Auditoría Analítica) =====
+
+  detectBottlenecks() {
+    this.bottleneckNodeIds = [];
+    const deadEnds: string[] = [];
+    const orphans: string[] = [];
+
+    for (const node of this.nodes) {
+      if (node.type === 'swimlane') continue;
+
+      const hasOutgoing = this.edges.some(e => e.source === node.id);
+      const hasIncoming = this.edges.some(e => e.target === node.id);
+
+      // Dead-end: non-terminal node with no outgoing edges
+      if (!hasOutgoing && !['end', 'activity_final', 'flow_final'].includes(node.type)) {
+        deadEnds.push(node.id);
+      }
+
+      // Orphan: no incoming AND no outgoing (except start nodes)
+      if (!hasIncoming && !hasOutgoing && node.type !== 'start') {
+        orphans.push(node.id);
+      }
+
+      // Bottleneck: activity that receives from multiple sources (fan-in > 2)
+      if (node.type === 'activity') {
+        const incomingCount = this.edges.filter(e => e.target === node.id).length;
+        if (incomingCount > 2) {
+          this.bottleneckNodeIds.push(node.id);
+        }
+      }
+
+      // Decision without labels on outgoing edges
+      if (node.type === 'decision') {
+        const outEdges = this.edges.filter(e => e.source === node.id);
+        const unlabeled = outEdges.filter(e => !e.label || e.label.trim() === '');
+        if (unlabeled.length > 0) {
+          this.bottleneckNodeIds.push(node.id);
+        }
+      }
+    }
+
+    this.bottleneckNodeIds.push(...deadEnds, ...orphans);
+    const total = this.bottleneckNodeIds.length;
+    if (total > 0) {
+      this.message.warning(`Se detectaron ${total} posible(s) problema(s): ${deadEnds.length} caminos sin salida, ${orphans.length} nodos huérfanos`);
+      
+      const firstErrorNode = this.nodes.find(n => n.id === this.bottleneckNodeIds[0]);
+      if (firstErrorNode) {
+        // Mover la cámara (viewBox) hacia el componente con error
+        const centerX = (firstErrorNode.x || 0) + (firstErrorNode.width || 120) / 2;
+        const centerY = (firstErrorNode.y || 0) + (firstErrorNode.height || 80) / 2;
+        this.viewBoxX = centerX - (this.viewBoxW / 2);
+        this.viewBoxY = centerY - (this.viewBoxH / 2);
+        this.applyViewBox();
+      }
+
+      // Auto-clear highlight after 2 minutes (120000 ms)
+      setTimeout(() => { this.bottleneckNodeIds = []; }, 120000);
+    } else {
+      this.message.success('No se detectaron cuellos de botella ni errores lógicos.');
+    }
+  }
+
+  // ===== TEMPLATES (Plan §3: Plantillas) =====
+
+  insertTemplate(templateName: string) {
+    const templates: Record<string, { nodes: Partial<NodeData>[], edges: Partial<EdgeData>[] }> = {
+      'aprobacion': {
+        nodes: [
+          { type: 'start', label: 'Inicio', x: 80, y: 80, width: 40, height: 40 },
+          { type: 'activity', label: 'Enviar Solicitud', x: 50, y: 180, width: 160, height: 80 },
+          { type: 'decision', label: '¿Aprobado?', x: 50, y: 320, width: 120, height: 100 },
+          { type: 'activity', label: 'Procesar Aprobación', x: 50, y: 490, width: 160, height: 80 },
+          { type: 'activity', label: 'Notificar Rechazo', x: 250, y: 320, width: 160, height: 80 },
+          { type: 'end', label: 'Fin', x: 110, y: 630, width: 40, height: 40 }
+        ],
+        edges: [
+          { source: 'Inicio', target: 'Enviar Solicitud' },
+          { source: 'Enviar Solicitud', target: '¿Aprobado?' },
+          { source: '¿Aprobado?', target: 'Procesar Aprobación', label: '[Sí]' },
+          { source: '¿Aprobado?', target: 'Notificar Rechazo', label: '[No]' },
+          { source: 'Procesar Aprobación', target: 'Fin' },
+          { source: 'Notificar Rechazo', target: 'Fin' }
+        ]
+      },
+      'pasarela_pago': {
+        nodes: [
+          { type: 'start', label: 'Inicio Pago', x: 80, y: 50, width: 40, height: 40 },
+          { type: 'activity', label: 'Seleccionar Método', x: 40, y: 140, width: 160, height: 80 },
+          { type: 'decision', label: '¿Válido?', x: 50, y: 280, width: 120, height: 100 },
+          { type: 'activity', label: 'Procesar Cobro', x: 40, y: 440, width: 160, height: 80 },
+          { type: 'activity', label: 'Mostrar Error', x: 260, y: 280, width: 160, height: 80 },
+          { type: 'end', label: 'Fin Pago', x: 100, y: 580, width: 40, height: 40 }
+        ],
+        edges: [
+          { source: 'Inicio Pago', target: 'Seleccionar Método' },
+          { source: 'Seleccionar Método', target: '¿Válido?' },
+          { source: '¿Válido?', target: 'Procesar Cobro', label: '[Sí]' },
+          { source: '¿Válido?', target: 'Mostrar Error', label: '[No]' },
+          { source: 'Procesar Cobro', target: 'Fin Pago' },
+          { source: 'Mostrar Error', target: 'Seleccionar Método' }
+        ]
+      }
+    };
+
+    const tpl = templates[templateName];
+    if (!tpl) {
+      this.message.warning('Plantilla no encontrada');
+      return;
+    }
+
+    // Create nodes with unique IDs
+    const idMap = new Map<string, string>();
+    const offset = this.nodes.length > 0 ? Math.max(...this.nodes.map(n => n.x + (n.width || 160))) + 50 : 0;
+
+    for (const tplNode of tpl.nodes) {
+      const id = `${tplNode.type}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      idMap.set(tplNode.label!, id);
+      this.nodes.push({
+        id,
+        type: tplNode.type!,
+        label: tplNode.label!,
+        x: (tplNode.x || 0) + offset,
+        y: tplNode.y || 0,
+        width: tplNode.width || 160,
+        height: tplNode.height || 80,
+        fontSize: 12
+      });
+    }
+
+    for (const tplEdge of tpl.edges) {
+      const srcId = idMap.get(tplEdge.source as string);
+      const tgtId = idMap.get(tplEdge.target as string);
+      if (srcId && tgtId) {
+        this.edges.push({
+          id: `edge_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          source: srcId,
+          target: tgtId,
+          label: tplEdge.label,
+          style: 'solid',
+          color: '#455a64',
+          strokeWidth: 2,
+          opacity: 100,
+          waypoints: []
+        });
+      }
+    }
+
+    this.checkAndExpandLanes();
+    this.broadcastUpdate();
+    this.message.success(`Plantilla "${templateName}" insertada correctamente`);
   }
 }
 

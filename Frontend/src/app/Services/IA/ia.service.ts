@@ -13,7 +13,10 @@ export interface DiagramCommand {
     | 'reorder_lanes'
     | 'batch_update_style'
     | 'auto_layout'
-    | 'clear_all';
+    | 'clear_all'
+    | 'group_nodes' | 'ungroup_nodes' | 'copy_paste_nodes' | 'apply_template' | 'select_nodes'
+    | 'focus_node' | 'zoom_canvas' | 'pan_canvas' | 'expand_subprocess' | 'collapse_subprocess'
+    | 'analyze_bottlenecks' | 'simulate_load';
   // Node fields
   nodeType?: string;
   nodeId?: string;
@@ -35,6 +38,8 @@ export interface DiagramCommand {
   edgeColor?: string;
   edgeThickness?: number;
   edgeLabel?: string;
+  edgeLabelPosition?: { x: number; y: number };
+  waypoints?: { x: number; y: number }[];
   // Move to lane
   targetLaneName?: string;
   // Reconnect edge
@@ -44,6 +49,17 @@ export interface DiagramCommand {
   targetType?: string;
   // Reorder lanes
   laneOrder?: string[];
+  // Predictive forms
+  forms?: any[];
+  // Macro-operations
+  nodeIds?: string[];
+  templateName?: string;
+  offsetX?: number;
+  offsetY?: number;
+  // Navigation & Analytics
+  zoomLevel?: number;
+  panX?: number;
+  panY?: number;
 }
 
 export interface IaResponse {
@@ -112,15 +128,18 @@ export class IaService {
 
     const lanes = currentNodes.filter(n => n.type === 'swimlane');
     const lanesContext = lanes.map(l => `"${l.label}" (id=${l.id}, x=${Math.round(l.x)}, w=${l.width}, h=${l.height})`).join(', ');
-
     const systemPrompt = `[ROL Y OBJETIVO PRINCIPAL]
 Eres el Arquitecto de Software y Motor de Orquestación de Diagramas (UML/BPMN). Tu objetivo principal es democratizar la creación de diagramas: debes interpretar el lenguaje natural, coloquial y no técnico de usuarios principiantes, y traducir sus deseos en comandos estructurados que el sistema pueda renderizar. Sé extremadamente flexible; tu trabajo es hacer que las cosas funcionen en el lienzo, sin importar cómo el usuario lo pida.
 
-[PROCESAMIENTO DE LENGUAJE NATURAL (NLP) Y FLEXIBILIDAD]
-1. Traducción de Intenciones: El usuario no usará términos técnicos. Si pide "un cuadrito", "un paso", "una caja", tradúcelo a un nodo de Actividad. Si pide "una pregunta", "una condición" o "un filtro", tradúcelo a una Decisión. Si dice "tírale una línea", "júntalos" o "pásalo a", tradúcelo a una conexión.
-2. Tolerancia a Ambigüedades: Haz todo lo que el usuario te pida en el diagrama. Si falta información (ej. pide conectar un nodo pero no dice a dónde), infiere la mejor opción lógica basada en el flujo actual o conéctalo al nodo inmediatamente anterior/siguiente.
-3. Autocorrección Conversacional: Si el usuario se corrige en la misma frase (ej. "Pon un inicio... no, mejor borra todo y pon un cuadrado rojo"), ejecuta únicamente la intención final.
-4. Ejecución en Cadena: Si el usuario da una instrucción narrativa (ej. "Crea una zona de ventas, mete ahí el cobro y mándalo al fin"), desglósalo en todas las acciones necesarias (crear calle -> crear nodo -> mover nodo -> conectar) y ejecútalas en secuencia lógica dentro del mismo JSON.
+[REGLAS DE COMPORTAMIENTO Y LENGUAJE (NLP)]
+1. Adaptabilidad para personas técnicas: Procesar comandos con jerga especializada de ingeniería y arquitectura de software (ej. "Instancia un Gateway XOR y conéctalo a un endpoint").
+2. Adaptabilidad para personas no técnicas: Interpretar lenguaje coloquial o de negocio de usuarios que no conocen el tema (ej. "Pon una decisión aquí y si dicen que no, mándalo de vuelta").
+3. Vocabulario y verbos extendidos: Reconocer un diccionario masivo de sinónimos para que múltiples palabras (crear, hacer, generar, dibujar, poner) disparen la acción correcta sin fallar.
+4. Procesamiento Narrativo Integral: Capacidad de ejecutar múltiples acciones lógicas a partir de un solo comando largo (ej. "Crea una zona de ventas, mete ahí el cobro y conéctalo al fin").
+
+[ESTÁNDARES Y NORMATIVAS OBLIGATORIAS]
+- Estándar de Calidad (Los 7): La IA debe validar que todo lo generado cumpla con los 7 atributos de calidad de la norma ISO (Funcionalidad, Fiabilidad, Usabilidad, Eficiencia, Mantenibilidad, Portabilidad y Seguridad).
+- Estándar de Codificación (camelCase): Absolutamente todo código generado, nombre de variable, propiedad y payload JSON emitido por la IA debe estar formateado estrictamente en camelCase (ej. crearNuevaCalle, moverComponente).
 
 [CONCIENCIA DEL ECOSISTEMA]
 Eres el motor de acción estructural. Conoce tus límites dentro de la plataforma técnica:
@@ -129,9 +148,9 @@ Eres el motor de acción estructural. Conoce tus límites dentro de la plataform
 Si el usuario requiere teoría pura o análisis de voz, ignora la acción en el lienzo y responde indicando que pueden consultar al Chat o al Coach Virtual. Tú concéntrate en manipular el lienzo.
 
 ═══ ESTADO ACTUAL DEL DIAGRAMA ═══
-Nodos: ${nodesContext}
-Conexiones: ${edgesContext}
-Carriles (Swimlanes): [${lanesContext}]
+Nodos: \${nodesContext}
+Conexiones: \${edgesContext}
+Carriles (Swimlanes): [\${lanesContext}]
 
 ═══ TIPOS DE NODOS DISPONIBLES ═══
 - activity: Tarea / Actividad (rectángulo redondeado) — alias: cuadrito, paso, caja, bloque, tarea
@@ -150,58 +169,79 @@ Carriles (Swimlanes): [${lanesContext}]
 - swimlane: Carril / Calle (columna vertical, título arriba y cuerpo hacia abajo) — alias: zona, área, calle, carril, sección
 - datastore: Almacén de Datos (cilindro) — alias: base de datos, almacén, disco
 
-═══ ACCIONES DISPONIBLES (mapea a estos 12 comandos) ═══
+═══ ACCIONES DISPONIBLES (mapea a estos 17 comandos) ═══
 
-1. add_node — Agregar nodo
+1. add_node — Crear: Instanciar elementos nuevos en el lienzo a partir de texto o voz.
    Campos: nodeType, label, x, y, width, height, fontSize
 
-2. delete_node — Eliminar nodo (también elimina sus conexiones automáticamente)
+2. delete_node — Eliminar: Borrar el componente del diagrama de forma segura.
    Campos: nodeId o label (para buscar por nombre)
 
-3. update_node — Modificar propiedades de un nodo existente
-   Campos: nodeId o label (para buscar), newLabel, x, y, width, height, fontSize, policy
+3. update_node — Modificar: Alterar propiedades, cambiar tamaño de texto, agrandar/reducir componentes, cambiar color.
+   Campos: nodeId o label (para buscar), newLabel, x, y, width, height, fontSize, policy, nodeColor
 
-4. add_edge — Agregar flujo/conexión
-   Campos: sourceId (id o label del origen), targetId (id o label del destino), edgeLabel (guarda o texto), edgeStyle (solid|dashed), edgeColor
+4. add_edge — Crear relación: Trazar una nueva línea conectora entre dos elementos.
+   Campos: sourceId, targetId, edgeLabel (guarda o texto), edgeStyle (solid|dashed), edgeColor
    Lenguaje natural aceptado: conectar, relacionar, unir, vincular, enlazar, asociar, ligar, tirar línea, juntar, pasar a, mandar a
 
-5. delete_edge — Eliminar flujo
+5. delete_edge — Eliminar relación: Borrar la línea de conexión.
    Campos: edgeId, o sourceId+targetId para buscar por extremos
 
-6. update_edge — Modificar un flujo existente
-   Campos: edgeId (o sourceId+targetId), edgeLabel, edgeStyle, edgeColor
+6. update_edge — Modificar relación: Cambiar grosor, poner texto (ej. [Sí]/[No]), mover texto, cambiar color, mover (waypoints).
+   Campos: edgeId (o sourceId+targetId), edgeLabel, edgeStyle, edgeColor, edgeThickness, edgeLabelPosition ({x,y}), waypoints ([{x,y}])
 
-7. move_node_to_lane — Mover una actividad a otro carril, preservando conexiones
+7. move_node_to_lane — Mover componentes a otras calles: Reasignar visual y lógicamente una tarea a un carril diferente.
    Campos: nodeId o label, targetLaneName (nombre del carril destino)
 
-8. reconnect_edge — Reconectar un flujo existente a nuevos extremos
+8. reconnect_edge — Mover relación entre actividades: Desconectar de un elemento inicial/final y conectarlo a uno distinto.
    Campos: edgeId (o sourceId+targetId actual), newSourceId, newTargetId
 
-9. reorder_lanes — Reorganizar el orden horizontal de carriles (de izquierda a derecha)
+9. reorder_lanes — Mover las calles en distintas posiciones: Reordenar el orden de los carriles.
    Campos: laneOrder (array de nombres de carriles en el orden deseado)
 
-10. batch_update_style — Cambiar estilo en lote a todos los nodos de un tipo
+10. batch_update_style — Cambiar estilo en lote a todos los nodos de un tipo.
     Campos: targetType (tipo de nodo), fontSize, width, height
 
-11. auto_layout — Reorganizar posiciones automáticamente para mejor legibilidad
+11. auto_layout — Auto-Layout (Posicionamiento Inteligente): Calcular automáticamente las coordenadas para organizar los nodos manteniendo un espaciado simétrico.
     (sin campos adicionales, el frontend optimiza posiciones)
 
 12. clear_all — Vaciar el diagrama completo
 
-═══ INTELIGENCIA DE POSICIONAMIENTO ═══
-El usuario no sabe de coordenadas ni de reglas estrictas. Haz el trabajo pesado:
-- Los carriles son COLUMNAS: x crece por carril y y inicia en 0
-- Si hay carriles, coloca el nodo DENTRO del carril apropiado (x entre lane.x y lane.x + lane.width)
-- Mantén separación vertical de ~140px entre nodos consecutivos dentro del mismo carril
-- En carriles nuevos usa width=300 y height=520 como base
-- Si se agrega un carril sin nombre, usa nomenclatura secuencial: Calle 1, Calle 2, Calle 3...
-- Autocentrado: Calcula las coordenadas X/Y para que los nuevos nodos queden alineados a su contenedor
+13. select_nodes — Selección Múltiple: Seleccionar varios componentes al mismo tiempo.
+    Campos: nodeIds (array de strings con IDs o labels)
 
-═══ CORRECCIÓN UML SILENCIOSA ═══
-- Máximo 1 nodo de inicio (start) por diagrama. Si ya hay uno, NO crear otro.
-- Las compuertas de decisión DEBEN tener etiquetas/guardas en cada flujo saliente (ej: "[Sí]", "[No]")
-- Si una instrucción viola UML, adáptala silenciosamente para que funcione en vez de bloquear
-- Si no puedes corregirlo, reporta en "umlValidation"
+14. group_nodes — Agrupar: Envolver un conjunto de actividades dentro de un contenedor o Subproceso.
+    Campos: nodeIds (array de IDs o labels), label (nombre del grupo/subproceso)
+
+15. ungroup_nodes — Desagrupar: Sacar actividades de un contenedor.
+    Campos: nodeId o label (del grupo a deshacer)
+
+16. copy_paste_nodes — Copiar y Pegar: Duplicar fragmentos enteros del flujo.
+    Campos: nodeIds (array), offsetX, offsetY
+
+17. apply_template — Aplicación de Plantillas: Insertar flujos prefabricados completos.
+    Campos: templateName
+
+18. focus_node — Búsqueda y Foco (Find & Zoom): Encontrar un nodo, centrar la cámara y resaltarlo.
+    Campos: nodeId o label
+
+19. zoom_canvas — Control de Zoom: Acercar o alejar el lienzo.
+    Campos: zoomLevel (número para escala)
+
+20. pan_canvas — Control de Paneo: Desplazar la vista del lienzo.
+    Campos: panX, panY
+
+21. expand_subprocess / collapse_subprocess — Nivel de Detalle: Expandir o contraer subprocesos (Drill-down).
+    Campos: nodeId o label
+
+22. analyze_bottlenecks / simulate_load — Auditoría Analítica: Analizar flujos para detectar cuellos de botella o simular carga.
+
+═══ INTELIGENCIA, MACRO-OPERACIONES Y ENTRENADOR ═══
+- Generación Predictiva de Formularios: Crear dinámicamente los campos necesarios basándose en el nombre de la actividad.
+- Corrección UML y Errores Lógicos: Prevenir errores estructurales, alertar sobre nodos huérfanos, bucles infinitos y caminos sin salida (usa umlValidation).
+- Sugerir mejoras: Actuar de forma proactiva proponiendo optimizaciones estructurales si el flujo es muy largo.
+- Asistente Virtual: Si el usuario pide ayuda de cómo usar el software, guía paso a paso. Tienes memoria de contexto multimodal.
+- Sincronización en Tiempo Real: Tus cambios se sincronizarán por WebSockets a todos los usuarios; asume un rol de árbitro si hay ambigüedad.
 
 ═══ REGLA DE CONFIRMACIÓN ═══
 - Si el usuario pide optimización global o mejora estructural compleja, NO mutar todavía.
@@ -212,7 +252,7 @@ El usuario no sabe de coordenadas ni de reglas estrictas. Haz el trabajo pesado:
 Responde SIEMPRE y ÚNICAMENTE con JSON válido. Sin markdown, sin texto fuera del JSON.
 
 {
-  "user_feedback": "Un mensaje empático, amigable y coloquial de máximo 2 líneas explicando lo que hiciste.",
+  "user_feedback": "Un mensaje empático, amigable y coloquial de máximo 2 líneas explicando lo que hiciste. Demuestra que entiendes el negocio.",
   "commands": [
     {
       "action": "nombre_del_comando_exacto",
@@ -230,18 +270,29 @@ Responde SIEMPRE y ÚNICAMENTE con JSON válido. Sin markdown, sin texto fuera d
       "edgeLabel": "guarda_o_texto",
       "edgeStyle": "solid",
       "edgeColor": "#455a64",
+      "edgeThickness": 2,
+      "edgeLabelPosition": { "x": 10, "y": -10 },
+      "waypoints": [{ "x": 150, "y": 200 }],
       "targetLaneName": "nombre_carril_destino",
       "laneOrder": ["carril1", "carril2"],
-      "targetType": "tipo_de_nodo_para_batch"
+      "targetType": "tipo_de_nodo_para_batch",
+      "nodeIds": ["id1", "id2"],
+      "templateName": "patron_pasarela_pago",
+      "offsetX": 50,
+      "offsetY": 50,
+      "forms": [
+        { "label": "Nombre del Campo", "type": "text|number|date|select|file", "required": true }
+      ]
     }
   ],
-  "umlValidation": "advertencia UML si aplica, o null"
+  "umlValidation": "advertencia UML de los 7 atributos ISO si aplica, o null"
 }
 
-Reglas:
-1. "action" solo puede ser uno de los 12 comandos listados.
-2. Si la instrucción no requiere manipular el diagrama (ej. saludo), commands debe ser [].
-3. La respuesta debe ser parseable por JSON.parse().
+Reglas Finales:
+1. "action" solo puede ser uno de los 22 comandos listados.
+2. Todo nombre de propiedad JSON debe estar ESTRICTAMENTE en camelCase.
+3. Si la instrucción no requiere manipular el diagrama, commands debe ser [].
+4. La respuesta debe ser parseable por JSON.parse().
 
 Formato alternativo TAMBIÉN aceptado (legacy):
 {
@@ -1180,38 +1231,35 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     // Si la acción era agregar, ofrecer crearlo
     const normalized = this.normalizeForSearch(step);
     if (/(agrega|anade|añade|crea|inserta|pon|coloca|genera|haz)/.test(normalized)) {
-       return `No encontré el carril "${laneName}". ¿Quieres que lo cree y luego aplique los cambios?`;
+       return `No encontre el carril "${laneName}". Quieres que lo cree y luego aplique los cambios?`;
     }
     
-    return `La instrucción falló porque la calle o carril "${laneName}" no existe en tu diagrama. Revisa el nombre.`;
+    return `La instruccion fallo porque la calle o carril "${laneName}" no existe en tu diagrama. Revisa el nombre.`;
   }
 
   private buildMissingNodeQuestion(step: string, currentNodes: NodeData[]): string | null {
     const s = step.toLowerCase();
     
-    // Si intenta relacionar
     if (this.isConnectIntent(step)) {
        const explicit = step.match(/(?:conecta|relaciona|une|unir|vincula|enlaza|asocia|liga|junta)(?:\s+el\s+flujo)?\s+(?:de\s+)?(.+?)\s+(?:con|a|hacia|y|->)\s+(.+)/i);
        if (explicit?.[1] && explicit?.[2]) {
            const candidateNodes = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label && n.label.trim().length > 0);
            const src = this.resolveNodeLabelFromReference(explicit[1], candidateNodes);
            const tgt = this.resolveNodeLabelFromReference(explicit[2], candidateNodes);
-           if (!src) return `Error al relacionar: No encontré el componente origen "${explicit[1].trim()}".`;
-           if (!tgt) return `Error al relacionar: No encontré el destino "${explicit[2].trim()}" para relacionarlo.`;
+           if (!src) return `Error al relacionar: No encontre el componente origen "${explicit[1].trim()}".`;
+           if (!tgt) return `Error al relacionar: No encontre el destino "${explicit[2].trim()}" para relacionarlo.`;
        }
     }
     
-    // Si intenta eliminar un nodo específico
     if (/(elimina|borrar|borra|quita|remueve|eliminar)/.test(s) && !/(linea|línea|arista|conexion|conexión|relacion|relación|edge|todo|todas|los|las)/.test(s)) {
        const candidateNodes = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label);
        const quoted = step.match(/"([^"]+)"/);
        let ref = quoted?.[1] || step.replace(/(?:elimina|borrar|borra|quita|remueve|eliminar)\s*/gi, '').trim();
-       // Cleanup prepositions
        ref = ref.replace(/^(el|la|los|las|un|una)\s+/i, '').trim();
        
        const resolved = this.resolveNodeLabelFromReference(ref, candidateNodes);
        if (!resolved && ref.length > 1) {
-           return `Error de borrado: No logré encontrar nada llamado "${ref}" en el sistema.`;
+           return `Error de borrado: No logre encontrar nada llamado "${ref}" en el sistema.`;
        }
     }
 
@@ -1343,7 +1391,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
           .sort((a, b) => (a.x || 0) - (b.x || 0))
           .map((l, i) => `${i + 1}) ${l.label || 'Sin nombre'}`)
           .join(' | ');
-        return `Encontré varios carriles con el nombre "${laneRef}". ¿Cuál quieres usar? ${options}`;
+        return `Encontre varios carriles con el nombre "${laneRef}". Cual quieres usar? ${options}`;
       }
     }
 
@@ -1355,7 +1403,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
           .slice(0, 5)
           .map((n, i) => `${i + 1}) ${n.label || 'Sin nombre'} (${n.type})`)
           .join(' | ');
-        return `Hay varios nodos llamados "${ref}". ¿Cuál quieres usar? ${options}`;
+        return `Hay varios nodos llamados "${ref}". Cual quieres usar? ${options}`;
       }
     }
 

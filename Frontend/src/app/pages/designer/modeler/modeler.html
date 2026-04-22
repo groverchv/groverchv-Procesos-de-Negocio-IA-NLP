@@ -42,10 +42,37 @@
           <span nz-icon nzType="redo"></span>
         </button>
         <nz-divider nzType="vertical"></nz-divider>
+
+        <!-- ZOOM CONTROLS -->
+        <button nz-button nzType="text" (click)="zoomIn()" nz-tooltip nzTooltipTitle="Acercar">
+          <span nz-icon nzType="zoom-in"></span>
+        </button>
+        <span style="font-size: 11px; color: #64748b; min-width: 40px; text-align: center;">{{ (zoomLevel * 100).toFixed(0) }}%</span>
+        <button nz-button nzType="text" (click)="zoomOut()" nz-tooltip nzTooltipTitle="Alejar">
+          <span nz-icon nzType="zoom-out"></span>
+        </button>
+        <button nz-button nzType="text" (click)="zoomReset()" nz-tooltip nzTooltipTitle="Zoom 100%">
+          <span nz-icon nzType="border-outer"></span>
+        </button>
+        <nz-divider nzType="vertical"></nz-divider>
+
+        <!-- SEARCH -->
+        <button nz-button nzType="text" (click)="toggleSearch()" nz-tooltip nzTooltipTitle="Buscar (Ctrl+F)">
+          <span nz-icon nzType="file-search"></span>
+        </button>
+
+        <!-- BOTTLENECK DETECTION -->
+        <button nz-button nzType="text" (click)="detectBottlenecks()" nz-tooltip nzTooltipTitle="Detectar Cuellos de Botella">
+          <span nz-icon nzType="warning" style="color: #f59e0b;"></span>
+        </button>
+
+        <!-- AI AUDIT -->
         <button nz-button nzType="text" (click)="runAudit()" nz-tooltip nzTooltipTitle="Auditoría Inteligente (Groq)">
           <span nz-icon nzType="search" nzTheme="outline" style="margin-right: 4px;"></span> Auditar
         </button>
         <nz-divider nzType="vertical"></nz-divider>
+
+        <!-- AI PANEL -->
         <button nz-button [class.ai-active]="showAiPanel" class="ai-btn" (click)="toggleAiPanel()" nz-tooltip nzTooltipTitle="Asistente IA (Groq)">
           <span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 4px;"></span> IA
         </button>
@@ -131,12 +158,20 @@
         <div class="palette-tip" *ngIf="isConnectingMode">
           <p>Clic en origen → Clic en destino</p>
         </div>
+
+        <p class="group-label">PLANTILLAS</p>
+        <div class="palette-item" (click)="insertTemplate('aprobacion')">
+          <span nz-icon nzType="file-done"></span> Flujo Aprobación
+        </div>
+        <div class="palette-item" (click)="insertTemplate('pasarela_pago')">
+          <span nz-icon nzType="credit-card"></span> Pasarela de Pago
+        </div>
       </div>
     </nz-sider>
 
     <!-- ======================== CANVAS ======================== -->
-    <nz-content class="canvas-container" (mousedown)="deselectAll()">
-      <svg class="canvas-svg" #svgElement>
+    <nz-content class="canvas-container" (mousedown)="deselectAll()" [class.canvas-bottleneck-alert]="bottleneckNodeIds.length > 0">
+      <svg class="canvas-svg" #svgElement [attr.viewBox]="viewBoxX + ' ' + viewBoxY + ' ' + viewBoxW + ' ' + viewBoxH">
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
             <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e8eaf6" stroke-width="0.5"/>
@@ -150,7 +185,7 @@
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed" />
           </marker>
         </defs>
-        <rect width="5000" height="5000" fill="url(#grid)" />
+        <rect width="100000" height="100000" x="-50000" y="-50000" fill="url(#grid)" />
 
         <!-- LAYER 1: SWIMLANES -->
         <g *ngFor="let node of nodes">
@@ -202,12 +237,13 @@
           </ng-container>
         </g>
 
-        <g *ngFor="let node of nodes" 
+        <g *ngFor="let node of nodes"
            [id]="'node-' + node.id"
            [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
            (mousedown)="onMouseDown(node, $event)"
-           [class.selected]="selectedNode?.id === node.id"
+           [class.selected]="selectedNode?.id === node.id || selectedNodes.includes(node)"
            [class.error-node]="errorNodeIds.includes(node.id)"
+           [class.bottleneck-node]="bottleneckNodeIds.includes(node.id)"
            [class.exec-finished]="getNodeStatus(node.id) === 'FINISHED'"
            [class.exec-in-process]="getNodeStatus(node.id) === 'IN_PROCESS'"
            [class.exec-in-review]="getNodeStatus(node.id) === 'IN_REVIEW'"
@@ -217,8 +253,8 @@
           <ng-container *ngIf="['decision','parallel'].includes(node.type)">
             <polygon
               [attr.points]="
-                ((node.width||120)/2) + ',0 ' + 
-                (node.width||120) + ',' + ((node.height||100)/2) + ' ' + 
+                ((node.width||120)/2) + ',0 ' +
+                (node.width||120) + ',' + ((node.height||100)/2) + ' ' +
                 ((node.width||120)/2) + ',' + (node.height||100) + ' 0,' + ((node.height||100)/2)"
               [class]="'diamond ' + node.type"
               [class.selected]="selectedNode?.id === node.id" />
@@ -238,22 +274,29 @@
             <circle [attr.cx]="(node.width||120)/2" [attr.cy]="node.height||100" r="4" class="port"/>
             <circle cx="0" [attr.cy]="(node.height||100)/2" r="4" class="port"/>
           </ng-container>
+
+        <!-- SELECTION BOX OVERLAY -->
+        <rect *ngIf="isSelectionBoxActive"
+              [attr.x]="selectionBox.x" [attr.y]="selectionBox.y"
+              [attr.width]="selectionBox.w" [attr.height]="selectionBox.h"
+              fill="rgba(99, 102, 241, 0.08)" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="6,3"
+              style="pointer-events: none;" />
                     <!-- ALL OTHER NODES -->
           <ng-container *ngIf="!['swimlane','decision','parallel'].includes(node.type)">
-            
+
             <!-- CIRCULAR NODES (Start, End, Activity Final, Flow Final) -->
             <g *ngIf="['start','end','activity_final','flow_final'].includes(node.type)">
-              <circle [attr.cx]="(node.width||40)/2" [attr.cy]="(node.height||40)/2" 
+              <circle [attr.cx]="(node.width||40)/2" [attr.cy]="(node.height||40)/2"
                       [attr.r]="(node.width||40)/2" [class]="'event-node ' + node.type" />
               <!-- Bullseye for activity_final -->
-              <circle *ngIf="node.type === 'activity_final'" 
-                      [attr.cx]="(node.width||40)/2" [attr.cy]="(node.height||40)/2" 
+              <circle *ngIf="node.type === 'activity_final'"
+                      [attr.cx]="(node.width||40)/2" [attr.cy]="(node.height||40)/2"
                       [attr.r]="(node.width||40)/4" fill="#1e293b" />
               <!-- X for flow_final -->
               <g *ngIf="node.type === 'flow_final'" stroke="#1e293b" stroke-width="3">
-                <line [attr.x1]="(node.width||40)*0.25" [attr.y1]="(node.height||40)*0.25" 
+                <line [attr.x1]="(node.width||40)*0.25" [attr.y1]="(node.height||40)*0.25"
                       [attr.x2]="(node.width||40)*0.75" [attr.y2]="(node.height||40)*0.75" />
-                <line [attr.x1]="(node.width||40)*0.75" [attr.y1]="(node.height||40)*0.25" 
+                <line [attr.x1]="(node.width||40)*0.75" [attr.y1]="(node.height||40)*0.25"
                       [attr.x2]="(node.width||40)*0.25" [attr.y2]="(node.height||40)*0.75" />
               </g>
             </g>
@@ -272,11 +315,11 @@
             <polygon *ngIf="node.type === 'signal_send'"
                      [attr.points]="'0,0 ' + ((node.width||160)-20) + ',0 ' + (node.width||160) + ',' + ((node.height||60)/2) + ' ' + ((node.width||160)-20) + ',' + (node.height||60) + ' 0,' + (node.height||60)"
                      class="signal-node send" />
-            
+
             <polygon *ngIf="node.type === 'signal_receive'"
                      [attr.points]="'0,0 ' + (node.width||160) + ',0 ' + (node.width||160) + ',' + (node.height||60) + ' 0,' + (node.height||60) + ' 20,' + ((node.height||60)/2)"
                      class="signal-node receive" />
-            
+
             <!-- NOTE -->
             <g *ngIf="node.type === 'note'">
               <path [attr.d]="'M 0 0 L ' + (node.width||140-20) + ' 0 L ' + (node.width||140) + ' 20 L ' + (node.width||140) + ' ' + (node.height||80) + ' L 0 ' + (node.height||80) + ' Z'"
@@ -299,12 +342,12 @@
               [attr.width]="node.width || 160" [attr.height]="node.height || 80"
               class="node-fo" style="pointer-events: none;">
               <div class="node-wrapper" [class.selected]="selectedNode?.id === node.id" [class]="node.type">
-                
+
                 <div *ngIf="['activity','subprocess','signal_send','signal_receive','note'].includes(node.type)" class="activity-body">
                   <div class="node-label" [style.fontSize.px]="node.fontSize || 12">{{node.label}}</div>
                   <div *ngIf="node.type === 'subprocess'" class="sub-marker">+</div>
                 </div>
-                
+
                 <div *ngIf="node.type === 'datastore'" class="activity-body">
                    <div class="node-label">{{node.label}}</div>
                 </div>
@@ -322,10 +365,10 @@
 
         <!-- LAYER 4: COLLABORATIVE CURSORS -->
         <g *ngFor="let cursor of otherCursors | keyvalue; let idx = index" class="collaborative-cursor">
-          <path d="M 0 0 L 16 16 L 8 16 L 0 24 Z" 
-                [attr.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][0 % 5]" 
+          <path d="M 0 0 L 16 16 L 8 16 L 0 24 Z"
+                [attr.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][0 % 5]"
                 [attr.transform]="'translate(' + cursor.value.x + ',' + cursor.value.y + ')'" />
-          <text [attr.x]="cursor.value.x + 12" [attr.y]="cursor.value.y + 24" 
+          <text [attr.x]="cursor.value.x + 12" [attr.y]="cursor.value.y + 24"
                 class="cursor-label" [style.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][idx % 5]">
             Participante
           </text>
@@ -336,7 +379,7 @@
 
     <!-- ======================== RIGHT PANEL (PROPS OR EXECUTION) ======================== -->
     <nz-sider nzWidth="360px" nzTheme="light" class="right-sider" style="display: block;">
-      
+
       <!-- DESIGNER: PROPERTIES BODY -->
       <div *ngIf="!isReadOnly" class="props-body">
         <h5 nz-typography class="props-title">
@@ -542,18 +585,18 @@
         <!-- ACTIVE STATE -->
         <div *ngIf="isExecuting">
           <div class="status-badge active">EJECUCIÓN ACTIVA</div>
-          
+
           <!-- Current node info -->
           <div class="current-node-card" *ngIf="selectedNode">
             <div class="card-meta">
               <span class="node-type-label">{{ (selectedNode!.type || 'Elemento') | uppercase }}</span>
-              <nz-tag *ngIf="currentActivity" 
+              <nz-tag *ngIf="currentActivity"
                       [nzColor]="currentActivity.status === 'FINISHED' ? 'green' : currentActivity.status === 'IN_PROCESS' ? 'orange' : currentActivity.status === 'IN_REVIEW' ? 'blue' : 'default'">
                 {{ currentActivity.status }}
               </nz-tag>
             </div>
             <h3 class="current-node-title">{{ selectedNode!.label || 'Sin nombre' }}</h3>
-            
+
             <p class="current-node-policy" *ngIf="selectedNode!.policy">
               <strong>Regla de negocio:</strong><br>
               {{ selectedNode!.policy }}
@@ -592,8 +635,8 @@
               Selecciona el camino a seguir:
             </p>
             <div class="decision-options">
-              <button *ngFor="let edge of outgoingEdges" 
-                      nz-button nzBlock 
+              <button *ngFor="let edge of outgoingEdges"
+                      nz-button nzBlock
                       [nzType]="'default'"
                       class="decision-path-btn"
                       (click)="resolveDecisionPath(edge)">
@@ -622,7 +665,7 @@
                  [class.active]="act.status === 'IN_PROCESS'"
                  [class.review]="act.status === 'IN_REVIEW'"
                  [class.skipped]="act.status === 'SKIPPED'">
-              <span class="log-dot" 
+              <span class="log-dot"
                     [style.background]="act.status === 'FINISHED' ? '#22c55e' : act.status === 'IN_PROCESS' ? '#f59e0b' : act.status === 'IN_REVIEW' ? '#3b82f6' : act.status === 'SKIPPED' ? '#94a3b8' : '#e2e8f0'">
               </span>
               <div class="log-info">
@@ -693,7 +736,7 @@
       <span class="status-chip" [class.active]="assistantListening">{{ assistantListening ? 'Mic ON' : 'Mic OFF' }}</span>
       <span class="status-chip" [class.active]="assistantSpeaking">{{ assistantSpeaking ? 'Hablando' : 'Silencio' }}</span>
     </div>
-    
+
     <div class="assistant-chat" #assistantChatScroll>
       <div *ngFor="let msg of assistantHistory" class="chat-bubble" [class.user]="msg.role === 'user'">
         {{ msg.content }}
@@ -713,19 +756,19 @@
 
     <div class="assistant-footer">
       <div class="mode-toggle">
-        <button nz-button nzType="text" size="small" 
+        <button nz-button nzType="text" size="small"
                 [class.active]="continuousListening"
                 (click)="toggleContinuousMode()">
           Auto-escucha {{ continuousListening ? 'ON' : 'OFF' }}
         </button>
       </div>
       <div class="input-container">
-        <textarea nz-input [(ngModel)]="assistantInput" 
-                  placeholder="Escribe o habla..." 
+        <textarea nz-input [(ngModel)]="assistantInput"
+                  placeholder="Escribe o habla..."
                   [nzAutosize]="{ minRows: 1, maxRows: 3 }"
                   (keydown.enter)="$event.preventDefault(); sendAssistantQuery()"
                   [disabled]="assistantThinking"></textarea>
-        <button class="send-btn" (click)="sendAssistantQuery()" 
+        <button class="send-btn" (click)="sendAssistantQuery()"
                 [disabled]="assistantThinking || !assistantInput.trim()">
           {{ assistantThinking ? '⏳' : '→' }}
         </button>
@@ -733,3 +776,25 @@
     </div>
   </div>
 </ng-container>
+
+<!-- SEARCH PANEL (Find & Zoom) -->
+<div class="search-panel" *ngIf="showSearchPanel">
+  <div class="search-panel-header">
+    <span nz-icon nzType="file-search" style="margin-right: 6px;"></span>Buscar Componente
+    <button (click)="showSearchPanel = false" class="ai-close">✕</button>
+  </div>
+  <div class="search-panel-body">
+    <input nz-input [(ngModel)]="searchQuery" placeholder="Nombre o tipo..." (ngModelChange)="searchNodes()" />
+    <div class="search-results" *ngIf="searchResults.length > 0">
+      <div *ngFor="let r of searchResults" class="search-result-item" (click)="focusOnNode(r)">
+        <nz-tag [nzColor]="'purple'" style="font-size: 10px;">{{ r.type }}</nz-tag>
+        {{ r.label }}
+      </div>
+    </div>
+    <div *ngIf="searchQuery && searchResults.length === 0" class="search-empty">
+      Sin resultados para "{{ searchQuery }}"
+    </div>
+  </div>
+</div>
+
+

@@ -41,22 +41,12 @@ export class GeminiLiveService {
       return JSON.parse(localStorage.getItem('bpmnflow_config') || '{}');
     } catch { return {}; }
   }
-  private get GEMINI_KEY(): string { return this.config.geminiKey || ''; }
-  private get GROQ_KEY(): string { return this.config.groqKey || ''; }
-  private get ELEVENLABS_KEY(): string { return this.config.elevenLabsKey || ''; }
+  private get GEMINI_KEY(): string { return this.config.geminiKey || 'YOUR_GEMINI_KEY'; }
+  private get GROQ_KEY(): string { return this.config.groqKey || 'YOUR_GROQ_KEY'; }
+  private get ELEVENLABS_KEY(): string { return this.config.elevenLabsKey || 'YOUR_ELEVENLABS_KEY'; }
   private get ELEVENLABS_VOICE(): string { return this.config.elevenLabsVoice || '21m00Tcm4TlvDq8ikWAM'; }
   private get VOICE_LANG(): string { return this.config.language || 'es-ES'; }
   private get TTS_ENABLED(): boolean { return this.config.enableTTS !== false; }
-
-  private hasValidKey(key: string): boolean {
-    if (!key) return false;
-    const trimmed = key.trim();
-    return trimmed.length > 8 && !/^YOUR_/i.test(trimmed);
-  }
-
-  private get hasGeminiKey(): boolean { return this.hasValidKey(this.GEMINI_KEY); }
-  private get hasGroqKey(): boolean { return this.hasValidKey(this.GROQ_KEY); }
-  private get hasElevenLabsKey(): boolean { return this.hasValidKey(this.ELEVENLABS_KEY); }
 
   private get WS_URL(): string {
     return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${this.GEMINI_KEY}`;
@@ -78,11 +68,6 @@ export class GeminiLiveService {
    */
   async connect(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
-
-    if (!this.hasGeminiKey) {
-      this.zone.run(() => this.isConnected$.next(false));
-      throw new Error('Gemini key not configured');
-    }
 
     return new Promise((resolve, reject) => {
       try {
@@ -125,56 +110,27 @@ export class GeminiLiveService {
     const setup = {
       setup: {
         model: 'models/gemini-2.0-flash-exp',
-        generationConfig: {
-          responseModalities: ['TEXT', 'AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: 'Aoede'
+        generation_config: {
+          response_modalities: ['TEXT', 'AUDIO'],
+          speech_config: {
+            voice_config: {
+              prebuilt_voice_config: {
+                voice_name: 'Aoede'
               }
             }
           }
         },
-        systemInstruction: {
+        system_instruction: {
           parts: [{
-            text: `Eres el Arquitecto UML y Motor de Estado de BPMNFlow.
+            text: `Eres Tonny-AI, el asistente virtual inteligente de BPMNFlow.
+Tu nombre es Tonny y eres experto en modelado de procesos de negocio.
 
-Rol dual:
-1) Copiloto: asesorar, optimizar flujos y explicar conceptos.
-2) Motor CRUD: ejecutar mutaciones exactas sobre el diagrama.
-
-Tono:
-- Profesional, técnico, directo y minimalista.
-- Sin texto ornamental.
-
-Reglas críticas:
-- Si propones mejora estructural compleja, pide confirmación exacta: "¿Quieres que aplique estos cambios por ti?".
-- No ejecutes mutaciones masivas sin confirmación explícita.
-- Si hay autocorrecciones, obedece la última intención.
-- Si detectas interrupción (alto, espera, cancela), detén plan previo y sigue la nueva directriz.
-
-Contrato de salida para acciones sobre lienzo (JSON estricto):
-{
-  "assistant_speech": "texto técnico para TTS",
-  "status_icon": "📊 | ⚙️ | 🛑 | 💡 | 🔄",
-  "operations": [
-    {
-      "action": "CREATE | UPDATE | DELETE | MOVE | RESIZE",
-      "element_type": "swimlane | node | edge | form | text",
-      "target_id": "id o null",
-      "payload": { "x": 0, "y": 0, "properties": {} }
-    }
-  ]
-}
-
-Regla condicional:
-- En sugerencia, operations = [] y assistant_speech pide confirmación.
-- En orden directa o confirmación explícita, completa operations.
-
-Contexto del sistema:
-- BPMNFlow modela procesos con nodos, aristas, swimlanes y formularios.
-- Swimlanes: columnas verticales con título arriba y flujo de arriba hacia abajo.
-- Responde en español.`
+CONTEXTO:
+- BPMNFlow es un modelador BPMN/UML profesional.
+- Eres amigable, profesional y proactivo.
+- Responde SIEMPRE en español.
+- Sé conciso en voz (3-4 frases máximo).
+- Puedes ver el diagrama a través de capturas de canvas y analizar su estructura.`
           }]
         }
       }
@@ -188,6 +144,18 @@ Contexto del sistema:
   private handleMessage(data: any) {
     try {
       const msg = typeof data === 'string' ? JSON.parse(data) : data;
+
+      // Handle remote errors from Gemini
+      if (msg.error) {
+        console.error('[GeminiLive] Remote error:', msg.error);
+        this.zone.run(() => {
+          this.messages$.next({
+            role: 'assistant',
+            content: `❌ Error de Gemini: ${msg.error.message || 'Error de autenticación o cuota'}. Revisa tu API Key.`
+          });
+        });
+        return;
+      }
 
       // Handle text response
       if (msg.serverContent?.modelTurn?.parts) {
@@ -353,39 +321,10 @@ Contexto del sistema:
   async fallbackQuery(text: string): Promise<void> {
     this.conversationHistory.push({ role: 'user', content: text });
 
-    if (!this.hasGroqKey) {
-      const local = this.localFriendlyReply(text);
-      this.conversationHistory.push({ role: 'assistant', content: local });
-      this.zone.run(() => this.messages$.next({ role: 'assistant', content: local }));
-      await this.speakElevenLabs(local);
-      return;
-    }
-
-    const systemPrompt = `Eres el Arquitecto UML y Motor de Estado de BPMNFlow.
-Responde en español, técnico y directo.
+    const systemPrompt = `Eres Tonny-AI, asistente virtual de BPMNFlow. Responde en español, sé conciso (máx 3-4 oraciones).
 ${this.diagramContext ? '\n' + this.diagramContext : ''}
 
-  Rol dual:
-  - Copiloto: asesorar y detectar mejoras de flujo.
-  - Motor CRUD: ejecutar operaciones precisas sobre el diagrama.
-
-  Reglas:
-  - Si hay mejora estructural compleja, responde con operations=[] y pregunta: "¿Quieres que aplique estos cambios por ti?"
-  - Si el usuario confirma o da orden inequívoca, llena operations.
-  - Si hay autocorrección, aplica la última intención.
-  - Si detectas "alto", "espera" o "cancela", descarta plan previo.
-
-  Formato obligatorio de salida para acciones:
-  {
-    "assistant_speech": "texto",
-    "status_icon": "📊 | ⚙️ | 🛑 | 💡 | 🔄",
-    "operations": []
-  }
-
-  Reglas de modelado actuales:
-  - Los carriles (swimlanes) son columnas verticales
-  - El título del carril va arriba
-  - El flujo dentro del carril va de arriba hacia abajo`;
+Puedes ayudar con: uso del modelador, conceptos BPMN/UML, resolver problemas, sugerir mejoras al diagrama, explicar funcionalidades.`;
 
     try {
       const response = await fetch(this.GROQ_URL, {
@@ -405,13 +344,16 @@ ${this.diagramContext ? '\n' + this.diagramContext : ''}
         })
       });
 
+      if (response.status === 401) {
+        throw new Error('API Key de Groq inválida o no configurada.');
+      }
+
       if (!response.ok) {
-        throw new Error(`Groq HTTP ${response.status}`);
+        throw new Error(`Error de Groq: ${response.statusText}`);
       }
 
       const data = await response.json();
-      const raw = data.choices?.[0]?.message?.content || 'No pude generar una respuesta.';
-      const content = this.extractAssistantSpeech(raw);
+      const content = data.choices?.[0]?.message?.content || 'No pude generar una respuesta.';
       this.conversationHistory.push({ role: 'assistant', content });
 
       this.zone.run(() => {
@@ -421,13 +363,23 @@ ${this.diagramContext ? '\n' + this.diagramContext : ''}
       // Speak with ElevenLabs
       await this.speakElevenLabs(content);
 
-    } catch (e) {
-      const local = this.localFriendlyReply(text);
+    } catch (e: any) {
+      console.error('[GeminiLive] Error crítico:', e);
       this.zone.run(() => {
-        this.messages$.next({ role: 'assistant', content: local });
+        this.messages$.next({ 
+          role: 'assistant', 
+          content: `❌ Lo siento, hubo un error técnico al procesar tu solicitud: ${e.message}` 
+        });
       });
-      await this.speakElevenLabs(local);
     }
+  }
+
+  /**
+   * Local responder for common questions when APIs are unavailable
+   */
+  private localSimpleResponder(text: string): string {
+    // Mantengo el método por estructura pero ya no lo uso como fallback primario por petición del usuario
+    return 'Error de procesamiento local.';
   }
 
   /**
@@ -439,11 +391,6 @@ ${this.diagramContext ? '\n' + this.diagramContext : ''}
     if (!this.TTS_ENABLED) return;
 
     this.zone.run(() => this.isSpeaking$.next(true));
-
-    if (!this.hasElevenLabsKey) {
-      this.browserSpeak(cleanText);
-      return;
-    }
 
     try {
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.ELEVENLABS_VOICE}`, {
@@ -458,6 +405,11 @@ ${this.diagramContext ? '\n' + this.diagramContext : ''}
           voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 }
         })
       });
+
+      if (response.status === 401) {
+        console.warn('[GeminiLive] ElevenLabs API Key inválida.');
+        throw new Error('401');
+      }
 
       if (!response.ok) throw new Error('ElevenLabs error');
       const blob = await response.blob();
@@ -570,43 +522,52 @@ Responde en español con formato:
   }
 
   /**
+   * Capture and send the current SVG canvas as an image to Gemini for vision analysis
+   */
+  public captureCanvas(svgElement: SVGSVGElement) {
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+    try {
+      const clone = svgElement.cloneNode(true) as SVGSVGElement;
+      const fos = clone.querySelectorAll('foreignObject');
+      fos.forEach(fo => fo.remove());
+      
+      const serializer = new XMLSerializer();
+      let source = serializer.serializeToString(clone);
+      
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      const svgBase64 = btoa(unescape(encodeURIComponent(source)));
+      img.src = 'data:image/svg+xml;base64,' + svgBase64;
+      
+      img.onload = () => {
+        try {
+          canvas.width = img.width || 1200;
+          canvas.height = img.height || 800;
+          ctx?.drawImage(img, 0, 0);
+          const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+          
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            const msg = {
+              clientContent: {
+                turns: [{
+                  role: 'user',
+                  parts: [{ inlineData: { mimeType: 'image/jpeg', data: base64 } }]
+                }],
+                turnComplete: false
+              }
+            };
+            this.ws.send(JSON.stringify(msg));
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
+  }
+
+  /**
    * Clear conversation
    */
   clearHistory() {
     this.conversationHistory = [];
-  }
-
-  private extractAssistantSpeech(raw: string): string {
-    if (!raw || typeof raw !== 'string') return 'No pude generar una respuesta.';
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.assistant_speech === 'string' && parsed.assistant_speech.trim()) {
-        return parsed.assistant_speech.trim();
-      }
-    } catch {
-      // Ignore non-JSON responses
-    }
-    return raw;
-  }
-
-  private localFriendlyReply(text: string): string {
-    const t = (text || '').toLowerCase().trim();
-    const greeting = /hola|buenas|qué tal|como estas|cómo estás|hey|hi/i.test(t);
-    const suggest = /suger|idea|mejora|optim|propuesta/i.test(t);
-    const help = /ayuda|como|cómo|explica|para que|para qué/i.test(t);
-
-    if (greeting) {
-      return 'Hola. Estoy lista para ayudarte con tu diagrama. Puedes pedirme crear elementos, moverlos, revisar lógica o proponer mejoras.';
-    }
-
-    if (suggest) {
-      return 'Perfecto, me encantan tus sugerencias. Compárteme el cambio y te respondo con pasos concretos o lo traduzco a acciones para el diagrama.';
-    }
-
-    if (help) {
-      return 'Puedo ayudarte en tres modos: 1) resolver dudas rápidas, 2) sugerir mejoras del flujo, 3) convertir instrucciones en operaciones sobre el lienzo.';
-    }
-
-    return 'Recibido. Puedo responderte de forma conversacional y también ayudarte a ejecutar cambios en el diagrama. Si quieres, empezamos por tu objetivo del proceso.';
   }
 }
