@@ -1,11 +1,8 @@
 import { Injectable, NgZone } from '@angular/core';
 import { Subject, BehaviorSubject } from 'rxjs';
-
-export interface GeminiLiveMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  audioUrl?: string;
-}
+import { GeminiLiveMessage } from '../../models/gemini-live.model';
+import { IaService } from './ia.service';
+import { AI_KEYS } from './keys.config';
 
 @Injectable({
   providedIn: 'root'
@@ -41,9 +38,9 @@ export class GeminiLiveService {
       return JSON.parse(localStorage.getItem('bpmnflow_config') || '{}');
     } catch { return {}; }
   }
-  private get GEMINI_KEY(): string { return this.config.geminiKey || 'YOUR_GEMINI_KEY'; }
-  private get GROQ_KEY(): string { return this.config.groqKey || 'YOUR_GROQ_KEY'; }
-  private get ELEVENLABS_KEY(): string { return this.config.elevenLabsKey || 'YOUR_ELEVENLABS_KEY'; }
+  private get GEMINI_KEY(): string { return this.config.geminiKey || AI_KEYS.gemini; }
+  private get GROQ_KEY(): string { return this.config.groqKey || AI_KEYS.groq; }
+  private get ELEVENLABS_KEY(): string { return this.config.elevenLabsKey || AI_KEYS.elevenlabs; }
   private get ELEVENLABS_VOICE(): string { return this.config.elevenLabsVoice || '21m00Tcm4TlvDq8ikWAM'; }
   private get VOICE_LANG(): string { return this.config.language || 'es-ES'; }
   private get TTS_ENABLED(): boolean { return this.config.enableTTS !== false; }
