@@ -96,10 +96,11 @@ export interface ApiKeysConfig {
               </div>
 
               <div class="key-group">
-                <label><span class="key-label">ID de Voz (ElevenLabs)</span></label>
-                <input nz-input [(ngModel)]="config.elevenLabsVoice"
-                       placeholder="21m00Tcm4TlvDq8ikWAM" />
-                <span class="key-hint">Voz masculina recomendada: Daniel, Josh o Antoni</span>
+                <label><span class="key-label">Voz de Tonny (ElevenLabs)</span></label>
+                <select nz-input [(ngModel)]="config.elevenLabsVoice" style="width:100%; height:36px;">
+                  <option *ngFor="let v of voiceOptions" [value]="v.id">{{v.name}} — {{v.desc}}</option>
+                </select>
+                <span class="key-hint">Todas estas voces son compatibles con español y el plan gratuito</span>
               </div>
             </div>
 
@@ -188,11 +189,32 @@ export class SettingsModalComponent {
   showGemini = false;
   showEleven = false;
 
+  voiceOptions = [
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: '🇪🇸 Sarah', desc: 'Femenina suave, joven' },
+    { id: 'FGY2WhTYpPnrIDTdsKH5', name: '🇲🇽 Laura', desc: 'Femenina cálida, clara' },
+    { id: 'XB0fDUnXU5powFXDhCwa', name: '🇪🇸 Charlotte', desc: 'Femenina elegante' },
+    { id: 'Xb7hH8MSUJpSbSDYk0k2', name: '🇪🇸 Alice', desc: 'Femenina segura, profesional' },
+    { id: 'XrExE9yKIg1WjnnlVkGX', name: '🇲🇽 Matilda', desc: 'Femenina cálida, amigable' },
+    { id: 'pFZP5JQG7iQjIQuC4Bku', name: '🇪🇸 Lily', desc: 'Femenina suave, británica' },
+    { id: 'cgSgspJ2msm6clMCkdEW', name: '🇲🇽 Jessica', desc: 'Femenina expresiva' },
+    { id: 'onwK4e9ZLuTAKqWW03F9', name: '🇪🇸 Daniel', desc: 'Masculina grave, profesional' },
+    { id: 'nPczCjzI2devNBz1zQrb', name: '🇪🇸 Brian', desc: 'Masculina profunda, narrador' },
+    { id: 'cjVigY5qzO86Huf0OWal', name: '🇲🇽 Eric', desc: 'Masculina amigable, casual' },
+    { id: 'iP95p4xoKVk53GoZ742B', name: '🇲🇽 Chris', desc: 'Masculina casual, joven' },
+    { id: 'TX3LPaxmHKxFdv7VOQHJ', name: '🇪🇸 Liam', desc: 'Masculina joven, enérgica' },
+    { id: 'IKne3meq5aSn9XLyUdCD', name: '🇲🇽 Charlie', desc: 'Masculina casual, relajada' },
+    { id: 'bIHbv24MWmeRgasZH58o', name: '🇪🇸 Will', desc: 'Masculina amigable' },
+    { id: 'pqHfZKP75CvOlQylNhV4', name: '🇪🇸 Bill', desc: 'Masculina profunda, seria' },
+    { id: 'JBFqnCBsd6RMkjVDRZzb', name: '🇪🇸 George', desc: 'Masculina cálida, madura' },
+    { id: 'N2lVS1w4EtoT3dr4eOWO', name: '🇪🇸 Callum', desc: 'Masculina intensa' },
+    { id: 'SAz9YHcvj6GT2YYXdXww', name: '🌎 River', desc: 'No binaria, versátil' },
+  ];
+
   config: ApiKeysConfig = {
     groqKey: '',
     geminiKey: '',
     elevenLabsKey: '',
-    elevenLabsVoice: '21m00Tcm4TlvDq8ikWAM',
+    elevenLabsVoice: 'onwK4e9ZLuTAKqWW03F9',
     enableTTS: true,
     enableVoiceInput: true,
     language: 'es-ES'

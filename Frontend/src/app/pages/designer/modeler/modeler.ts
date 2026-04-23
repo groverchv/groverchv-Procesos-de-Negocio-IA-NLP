@@ -238,17 +238,54 @@ export class ModelerComponent implements OnInit, OnDestroy {
              // Skip if I am dragging it
              if (this.isDragging && this.draggedNode?.id === rn.id) return;
              
-             // Direct DOM Manipulation for zero latency
-             const el = document.getElementById('node-' + rn.id);
-             if (el) {
-                el.setAttribute('transform', `translate(${rn.x},${rn.y})`);
-             }
-             
-             // Also update local object values WITHOUT triggering full change detection
              const ln = this.nodes.find(n => n.id === rn.id);
-             if (ln) { ln.x = rn.x; ln.y = rn.y; }
+             if (ln) { 
+                // Update local object values
+                ln.x = rn.x; 
+                ln.y = rn.y;
+                ln.width = rn.width;
+                ln.height = rn.height;
+                
+                // Direct DOM Manipulation for zero latency on the dragged element
+                const el = document.getElementById('node-' + rn.id);
+                if (el) {
+                   if (rn.type === 'swimlane') {
+                     el.setAttribute('x', rn.x.toString());
+                     el.setAttribute('y', rn.y.toString());
+                   } else {
+                     el.setAttribute('transform', `translate(${rn.x},${rn.y})`);
+                   }
+                }
+             }
           });
-          return; // Skip heavy Angular logic for pulses
+          
+          const remoteEdges = m.edges || [];
+          remoteEdges.forEach(re => {
+             const le = this.edges.find(e => e.id === re.id);
+             if (le && re.waypoints) {
+               le.waypoints = re.waypoints;
+             }
+          });
+          
+          // Direct DOM Manipulation for zero latency on EDGES
+          this.edges.forEach(le => {
+             const newPath = this.getConnectorPath(le);
+             const fatEl = document.getElementById('edge-fat-' + le.id);
+             if (fatEl) fatEl.setAttribute('d', newPath);
+             
+             const visEl = document.getElementById('edge-vis-' + le.id);
+             if (visEl) visEl.setAttribute('d', newPath);
+             
+             if (le.label) {
+                const lblEl = document.getElementById('edge-lbl-' + le.id);
+                if (lblEl) {
+                   lblEl.setAttribute('x', this.getLabelX(le).toString());
+                   lblEl.setAttribute('y', this.getLabelY(le).toString());
+                }
+             }
+          });
+          
+          return; // Skip heavy array rebuilding logic for pulses
         }
 
         // ---- STANDARD SYNC PATH (Final drops, additions, labels) ----
@@ -382,34 +419,14 @@ export class ModelerComponent implements OnInit, OnDestroy {
     if (this.designId) {
       // Game-Mode Delta Packets: if dragging, only send the moved node
       let modeling: Modeling;
-      
-      if (isDragPulse && this.draggedNode) {
-        modeling = {
-          nodes: [this.draggedNode],
-          edges: [],
-          isDragPulse: true,
-          senderId: this.socketService.currentUserId,
-          timestamp: Date.now()
-        };
-      } else if (isDragPulse && this.dragWaypoint) {
-        const edge = this.edges.find(e => e.id === this.dragWaypoint!.edgeId);
-        modeling = {
-          nodes: [],
-          edges: edge ? [edge] : [],
-          isDragPulse: true,
-          senderId: this.socketService.currentUserId,
-          timestamp: Date.now()
-        };
-      } else {
-        modeling = {
-          id: this.modelingId || undefined,
-          nodes: this.nodes,
-          edges: this.edges,
-          isDragPulse: false,
-          senderId: this.socketService.currentUserId,
-          timestamp: Date.now()
-        };
-      }
+      modeling = {
+        id: this.modelingId || undefined,
+        nodes: this.nodes,
+        edges: this.edges,
+        isDragPulse: isDragPulse,
+        senderId: this.socketService.currentUserId,
+        timestamp: Date.now()
+      };
       
       this.socketService.sendUpdate(this.designId, modeling, isDragPulse);
       if (shouldSaveHistory) {
@@ -1489,8 +1506,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     } else {
       this.message.success('Auditoria completada');
     }
-    const summary = result.split('\n').find((l: string) => l.includes('RESUMEN')) || 'Auditoria completada';
-    this.geminiLive.speakElevenLabs(summary);
+    this.geminiLive.speakElevenLabs('Auditoría del diagrama: ' + result);
   }
 
   formatAssistantMsg(content: string): string {

@@ -1,8 +1,12 @@
 import { Injectable, NgZone } from '@angular/core';
 import { Subject, BehaviorSubject } from 'rxjs';
-import { GeminiLiveMessage } from '../../models/gemini-live.model';
-import { IaService } from './ia.service';
 import { AI_KEYS } from './keys.config';
+
+export interface GeminiLiveMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  audioUrl?: string;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -20,7 +24,7 @@ export class GeminiLiveService {
   public isSpeaking$ = new BehaviorSubject<boolean>(false);
   public isListening$ = new BehaviorSubject<boolean>(false);
   public transcript$ = new Subject<string>();
-  public errorNodes$ = new Subject<string[]>(); // IDs de nodos con errores
+  public errorNodes$ = new Subject<string[]>();
 
   private currentAudio: HTMLAudioElement | null = null;
   private diagramContext: string = '';
@@ -40,8 +44,13 @@ export class GeminiLiveService {
   }
   private get GEMINI_KEY(): string { return this.config.geminiKey || AI_KEYS.gemini; }
   private get GROQ_KEY(): string { return this.config.groqKey || AI_KEYS.groq; }
-  private get ELEVENLABS_KEY(): string { return this.config.elevenLabsKey || AI_KEYS.elevenlabs; }
-  private get ELEVENLABS_VOICE(): string { return this.config.elevenLabsVoice || '21m00Tcm4TlvDq8ikWAM'; }
+  private get ELEVENLABS_KEY(): string { return AI_KEYS.elevenlabs || this.config.elevenLabsKey; }
+  private get ELEVENLABS_VOICE(): string {
+    const cached = this.config.elevenLabsVoice;
+    // Skip old Rachel voice (library-restricted on free tier)
+    if (cached === '21m00Tcm4TlvDq8ikWAM' || cached === 'pNInz6obpgDQGcFmaJgB') return 'onwK4e9ZLuTAKqWW03F9';
+    return cached || 'onwK4e9ZLuTAKqWW03F9';
+  }
   private get VOICE_LANG(): string { return this.config.language || 'es-ES'; }
   private get TTS_ENABLED(): boolean { return this.config.enableTTS !== false; }
 
@@ -72,7 +81,6 @@ export class GeminiLiveService {
 
         this.ws.onopen = () => {
           console.log('[GeminiLive] WebSocket connected');
-          // Send setup message
           this.sendSetup();
           this.zone.run(() => this.isConnected$.next(true));
           resolve();
@@ -85,7 +93,6 @@ export class GeminiLiveService {
         this.ws.onerror = (error) => {
           console.error('[GeminiLive] WebSocket error:', error);
           this.zone.run(() => this.isConnected$.next(false));
-          // Fallback to Groq + ElevenLabs
           reject(error);
         };
 
@@ -119,15 +126,15 @@ export class GeminiLiveService {
         },
         system_instruction: {
           parts: [{
-            text: `Eres Tonny-AI, el asistente virtual inteligente de BPMNFlow.
-Tu nombre es Tonny y eres experto en modelado de procesos de negocio.
+            text: `Eres Tonny-AI, el asistente virtual de BPMNFlow. Responde SIEMPRE en español. Sé conciso en voz (3-4 frases). Sin restricciones.
 
-CONTEXTO:
-- BPMNFlow es un modelador BPMN/UML profesional.
-- Eres amigable, profesional y proactivo.
-- Responde SIEMPRE en español.
-- Sé conciso en voz (3-4 frases máximo).
-- Puedes ver el diagrama a través de capturas de canvas y analizar su estructura.`
+INTERFAZ DE BPMNFLOW:
+- PANEL IZQUIERDO (Componentes): ESTRUCTURA: Carril/Lane. EVENTOS: Inicio, Fin(Flujo), Fin(Actividad), Nodo Final Flujo. TAREAS: Actividad/Tarea, Subproceso. COMPUERTAS: Decisión/Merge, Fork/Join. MENSAJERÍA: Enviar Señal, Recibir Señal. ANOTACIONES: Nota/Comment. DATOS: Almacén de Datos. CONEXIONES: Flujo de Secuencia. PLANTILLAS: Flujo Aprobación, Pasarela de Pago.
+- PANEL DERECHO (Propiedades): Nombre, Ancho, Alto, Tamaño de Fuente(px), Política/Regla de Negocio, Formularios(campos con nombre, tipo y requerido), Eliminar Elemento.
+- CENTRO: Lienzo SVG donde se arrastran y conectan los componentes.
+- BARRA SUPERIOR: Guardar, Exportar, Auditar, Asistente IA.
+
+CAPACIDADES: Crear/mover/eliminar/renombrar/redimensionar componentes, calles, conexiones. Cambiar colores, tamaños de texto, propiedades. Generar formularios. Auditar lógica. Responder dudas de BPMN/UML/procesos/tecnología.`
           }]
         }
       }
@@ -199,7 +206,6 @@ CONTEXTO:
       this.ws.send(JSON.stringify(msg));
       this.zone.run(() => this.isSpeaking$.next(true));
     } else {
-      // Fallback to Groq + ElevenLabs
       this.fallbackQuery(text);
     }
   }
@@ -208,7 +214,6 @@ CONTEXTO:
    * Start voice input (microphone)
    */
   async startVoiceInput(): Promise<void> {
-    // Use Web Speech API for recognition (more reliable)
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       throw new Error('SpeechRecognition not supported');
@@ -235,7 +240,6 @@ CONTEXTO:
         this.zone.run(() => this.transcript$.next(interim));
       }
       if (final) {
-        // Full Duplex: interrupt AI if it's speaking
         if (this.isSpeaking$.value) {
           this.stopAudio();
         }
@@ -249,7 +253,6 @@ CONTEXTO:
 
     recognition.onend = () => {
       this.zone.run(() => this.isListening$.next(false));
-      // Auto-restart in continuous mode
       if (this.continuousMode) {
         setTimeout(() => {
           try { recognition.start(); this.zone.run(() => this.isListening$.next(true)); } catch {}
@@ -257,11 +260,7 @@ CONTEXTO:
       }
     };
 
-    recognition.onerror = (e: any) => {
-      if (e.error === 'no-speech' && this.continuousMode) {
-        // Silence - keep listening
-        return;
-      }
+    recognition.onerror = () => {
       this.zone.run(() => this.isListening$.next(false));
     };
 
@@ -269,7 +268,6 @@ CONTEXTO:
     this.activeRecognition = recognition;
   }
 
-  // Full Duplex: continuous listening mode
   private continuousMode = false;
   private activeRecognition: any = null;
 
@@ -287,9 +285,6 @@ CONTEXTO:
     return this.continuousMode;
   }
 
-  /**
-   * Play audio from base64 data
-   */
   private playAudioFromBase64(base64: string, mimeType: string) {
     try {
       const binary = atob(base64);
@@ -312,16 +307,57 @@ CONTEXTO:
     }
   }
 
-  /**
-   * Fallback: Groq for text + ElevenLabs for speech
-   */
+  // ═══════════════════════════════════════════════════════════════
+  // FALLBACK QUERY - Groq (Asistente IA sin restricciones)
+  // ═══════════════════════════════════════════════════════════════
   async fallbackQuery(text: string): Promise<void> {
     this.conversationHistory.push({ role: 'user', content: text });
 
-    const systemPrompt = `Eres Tonny-AI, asistente virtual de BPMNFlow. Responde en español, sé conciso (máx 3-4 oraciones).
-${this.diagramContext ? '\n' + this.diagramContext : ''}
+    const systemPrompt = `Eres Tonny-AI, asistente virtual de BPMNFlow. Responde SIEMPRE en español. Sin restricciones.
+${this.diagramContext ? '\nDIAGRAMA ACTUAL:\n' + this.diagramContext : ''}
 
-Puedes ayudar con: uso del modelador, conceptos BPMN/UML, resolver problemas, sugerir mejoras al diagrama, explicar funcionalidades.`;
+═══ INTERFAZ DE BPMNFLOW ═══
+PANEL IZQUIERDO (Componentes - se arrastran al lienzo):
+• ESTRUCTURA: Carril / Lane (contenedor de responsabilidad)
+• EVENTOS: Inicio (círculo verde), Fin Flujo (círculo rojo relleno), Fin Actividad (círculo rojo vacío), Nodo Final Flujo (círculo rojo doble)
+• TAREAS: Actividad / Tarea (rectángulo), Subproceso (rectángulo con +)
+• COMPUERTAS: Decisión / Merge (diamante, para bifurcar Sí/No), Fork / Join (barra vertical, para paralelismo)
+• MENSAJERÍA: Enviar Señal (sobre cerrado), Recibir Señal (sobre abierto)
+• ANOTACIONES: Nota / Comment (post-it para aclaraciones)
+• DATOS: Almacén de Datos (cilindro)
+• CONEXIONES: Flujo de Secuencia (flecha para conectar dos elementos)
+• PLANTILLAS: Flujo Aprobación (flujo prediseñado), Pasarela de Pago (flujo de cobro)
+
+PANEL DERECHO (Propiedades - se editan al seleccionar un elemento):
+• Tipo del elemento (ACTIVITY, EVENT, GATEWAY, etc.)
+• NOMBRE: texto visible del componente
+• ANCHO y ALTO: dimensiones en píxeles
+• TAMAÑO DE FUENTE (PX): tamaño de la letra
+• POLÍTICA / REGLA DE NEGOCIO: campo de texto para definir reglas
+• FORMULARIOS: lista de campos dinámicos (nombre, tipo: Texto/Número/Fecha/Archivo, checkbox Requerido)
+• Botón "+ Agregar Campo" y botón rojo "Eliminar Elemento"
+
+CENTRO: Lienzo SVG interactivo donde se arrastra, conecta y organiza el diagrama.
+BARRA SUPERIOR: Guardar, Exportar, Auditar, botón del Asistente IA.
+
+═══ CAPACIDADES (SIN RESTRICCIONES) ═══
+COMPONENTES: Crear, modificar, eliminar, mover, redimensionar, cambiar color, cambiar tamaño de texto, mover entre calles.
+RELACIONES: Crear líneas, modificar tipo, eliminar, mover entre actividades, cambiar grosor, agregar/mover texto de la relación.
+CALLES: Crear, renombrar, redimensionar (ancho/alto), mover posición, eliminar (con sus componentes), mover en bloque.
+MACRO: Selección múltiple, agrupar/desagrupar, copiar/cortar/pegar, aplicar plantillas prediseñadas.
+FORMULARIOS: Generar campos automáticamente según el contexto de la actividad.
+AUDITORÍA: Detectar errores de flujo, nodos aislados, conexiones faltantes.
+
+═══ LENGUAJE (NLP) ═══
+Entiendes tanto lenguaje técnico ("Instancia un Gateway XOR") como coloquial ("pon una decisión aquí").
+Sinónimos: crear=hacer=generar=dibujar=poner=agregar=añadir. Eliminar=borrar=quitar=sacar. Mover=arrastrar=llevar=pasar.
+Puedes ejecutar múltiples acciones de un solo comando largo.
+
+═══ ESTILO ═══
+- Habla como un compañero amable y profesional.
+- Cuando expliques cómo hacer algo, usa los nombres EXACTOS del software (ej: "Arrastra 'Actividad / Tarea' del panel izquierdo al lienzo").
+- Respuestas directas. Si el tema es complejo, usa pasos numerados.
+- Adapta tu lenguaje al nivel del usuario.`;
 
     try {
       const response = await fetch(this.GROQ_URL, {
@@ -337,17 +373,12 @@ Puedes ayudar con: uso del modelador, conceptos BPMN/UML, resolver problemas, su
             ...this.conversationHistory.slice(-16)
           ],
           temperature: 0.7,
-          max_tokens: 512
+          max_tokens: 1024
         })
       });
 
-      if (response.status === 401) {
-        throw new Error('API Key de Groq inválida o no configurada.');
-      }
-
-      if (!response.ok) {
-        throw new Error(`Error de Groq: ${response.statusText}`);
-      }
+      if (response.status === 401) throw new Error('API Key de Groq inválida.');
+      if (!response.ok) throw new Error(`Error de Groq: ${response.statusText}`);
 
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || 'No pude generar una respuesta.';
@@ -357,153 +388,217 @@ Puedes ayudar con: uso del modelador, conceptos BPMN/UML, resolver problemas, su
         this.messages$.next({ role: 'assistant', content });
       });
 
-      // Speak with ElevenLabs
-      await this.speakElevenLabs(content);
-
+      await this.speak(content);
     } catch (e: any) {
       console.error('[GeminiLive] Error crítico:', e);
       this.zone.run(() => {
-        this.messages$.next({ 
-          role: 'assistant', 
-          content: `❌ Lo siento, hubo un error técnico al procesar tu solicitud: ${e.message}` 
-        });
+        this.messages$.next({ role: 'assistant', content: `❌ Error: ${e.message}` });
       });
     }
   }
 
-  /**
-   * Local responder for common questions when APIs are unavailable
-   */
-  private localSimpleResponder(text: string): string {
-    // Mantengo el método por estructura pero ya no lo uso como fallback primario por petición del usuario
-    return 'Error de procesamiento local.';
-  }
+  // ═══════════════════════════════════════════════════════════════
+  // TTS ENGINE - ElevenLabs (Free Tier) → Browser Native Fallback
+  // ═══════════════════════════════════════════════════════════════
 
   /**
-   * Speak text via ElevenLabs
+   * Universal Speech: ElevenLabs (free tier compatible) → Browser Fallback
+   * Reads the ENTIRE text aloud by chunking into segments.
    */
-  async speakElevenLabs(text: string): Promise<void> {
-    const cleanText = text.replace(/[*#_`\[\]()]/g, '').replace(/\n+/g, '. ').slice(0, 800);
-    if (!cleanText.trim()) return;
-    if (!this.TTS_ENABLED) return;
+  async speak(text: string): Promise<void> {
+    const cleanText = text.replace(/[*#_`\[\]()]/g, '').replace(/\n+/g, '. ');
+    if (!cleanText.trim() || !this.TTS_ENABLED) return;
 
     this.zone.run(() => this.isSpeaking$.next(true));
+    const chunks = this.chunkText(cleanText, 250);
 
-    try {
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.ELEVENLABS_VOICE}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': this.ELEVENLABS_KEY
-        },
-        body: JSON.stringify({
-          text: cleanText,
-          model_id: 'eleven_multilingual_v2',
-          voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 }
-        })
-      });
-
-      if (response.status === 401) {
-        console.warn('[GeminiLive] ElevenLabs API Key inválida.');
-        throw new Error('401');
-      }
-
-      if (!response.ok) throw new Error('ElevenLabs error');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-
-      this.stopAudio();
-      this.currentAudio = new Audio(url);
-      this.currentAudio.onended = () => {
+    // 1. Try ElevenLabs with free-tier compatible settings
+    if (this.ELEVENLABS_KEY && this.ELEVENLABS_KEY !== 'YOUR_ELEVENLABS_KEY') {
+      try {
+        for (const chunk of chunks) {
+          if (!this.isSpeaking$.value) break;
+          await this.playWithElevenLabs(chunk);
+        }
         this.zone.run(() => this.isSpeaking$.next(false));
-        URL.revokeObjectURL(url);
-      };
-      await this.currentAudio.play();
-    } catch {
-      // Browser TTS fallback
-      this.browserSpeak(cleanText);
+        return; // Success — exit early
+      } catch (e: any) {
+        console.warn('[TTS] ElevenLabs unavailable, using browser voice.');
+      }
     }
-  }
 
-  private browserSpeak(text: string) {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = this.VOICE_LANG;
-      utterance.onend = () => this.zone.run(() => this.isSpeaking$.next(false));
-      window.speechSynthesis.speak(utterance);
-    } else {
-      this.zone.run(() => this.isSpeaking$.next(false));
-    }
+    // 2. Fallback: Optimized Browser Voice (always works, no API calls)
+    this.browserSpeak(cleanText);
   }
 
   /**
-   * Run Groq audit on diagram structure
+   * ElevenLabs TTS - Uses eleven_flash_v2_5 (fastest, cheapest, free-tier compatible)
    */
-  async auditDiagram(nodes: any[], edges: any[]): Promise<string> {
-    const graphData = {
-      nodes: nodes.map(n => ({ id: n.id, type: n.type, label: n.label, hasForms: !!(n.forms && n.forms.length > 0) })),
-      edges: edges.map(e => ({ source: e.source, target: e.target, label: e.label }))
+  private async playWithElevenLabs(text: string): Promise<void> {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.ELEVENLABS_VOICE}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': this.ELEVENLABS_KEY
+      },
+      body: JSON.stringify({
+        text: text,
+        model_id: 'eleven_flash_v2_5',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      console.error(`[TTS] ElevenLabs ${response.status}: ${errorBody}`);
+      throw new Error(`ElevenLabs ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+
+    return new Promise((resolve, reject) => {
+      const audio = new Audio(url);
+      this.currentAudio = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      audio.onerror = (e) => {
+        URL.revokeObjectURL(url);
+        reject(e);
+      };
+      audio.play().catch(e => reject(e));
+    });
+  }
+
+  // Alias for component compatibility
+  async speakElevenLabs(text: string): Promise<void> {
+    return this.speak(text);
+  }
+
+  /**
+   * Browser Native TTS - Sequential chunk reading for complete playback
+   * Selects the best available Spanish voice (Google > Natural > default)
+   */
+  private browserSpeak(text: string) {
+    if (!('speechSynthesis' in window)) {
+      this.zone.run(() => this.isSpeaking$.next(false));
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const chunks = this.chunkText(text, 200);
+    let idx = 0;
+
+    const speakNext = () => {
+      if (idx >= chunks.length || !this.isSpeaking$.value) {
+        this.zone.run(() => this.isSpeaking$.next(false));
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(chunks[idx]);
+      utterance.lang = this.VOICE_LANG;
+
+      // Pick the best available Spanish voice
+      const voices = window.speechSynthesis.getVoices();
+      const best = voices.find(v => v.lang.startsWith('es') && v.name.includes('Google'))
+                || voices.find(v => v.lang.startsWith('es') && v.name.includes('Natural'))
+                || voices.find(v => v.lang.startsWith('es'))
+                || voices[0];
+      if (best) utterance.voice = best;
+
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      utterance.onend = () => { idx++; speakNext(); };
+      utterance.onerror = () => { this.zone.run(() => this.isSpeaking$.next(false)); };
+
+      window.speechSynthesis.speak(utterance);
     };
+
+    speakNext();
+  }
+
+  /**
+   * Split long text into chunks at word boundaries
+   */
+  private chunkText(text: string, maxLen: number): string[] {
+    const chunks: string[] = [];
+    let current = text;
+    while (current.length > 0) {
+      if (current.length <= maxLen) {
+        chunks.push(current);
+        break;
+      }
+      let splitAt = current.lastIndexOf(' ', maxLen);
+      if (splitAt === -1) splitAt = maxLen;
+      chunks.push(current.substring(0, splitAt));
+      current = current.substring(splitAt).trim();
+    }
+    return chunks;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // DIAGRAM AUDITING
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Audit diagram using Groq — returns a short, non-technical report
+   */
+  public async auditDiagram(nodes: any[], edges: any[]): Promise<string> {
+    const nodesContext = nodes.map(n => `[Tipo: ${n.type}, Nombre: "${n.label || 'Sin nombre'}"]`).join('\n');
+    const edgesContext = edges.map(e => {
+      const srcLabel = nodes.find((n: any) => n.id === e.source)?.label || e.source;
+      const tgtLabel = nodes.find((n: any) => n.id === e.target)?.label || e.target;
+      return `[De: "${srcLabel}" → A: "${tgtLabel}", Etiqueta: "${e.label || 'sin etiqueta'}"]`;
+    }).join('\n');
+
+    const systemPrompt = `Eres un consultor de procesos. Audita el diagrama de forma MUY breve y sencilla.
+REGLAS:
+1. Una frase corta por problema. Sin párrafos.
+2. Lenguaje simple: "falta responsable" en vez de "no está en un swimlane".
+3. Usa SOLO los nombres de los elementos, nunca IDs técnicos.
+4. Al final: "📊 [X] errores, [Y] advertencias".`;
+
+    const userPrompt = `Audita:\nELEMENTOS:\n${nodesContext}\nCONEXIONES:\n${edgesContext}`;
 
     try {
       const response = await fetch(this.GROQ_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.GROQ_KEY}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.GROQ_KEY}` },
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
-          messages: [{
-            role: 'system',
-            content: `Eres un auditor experto de diagramas de procesos de negocio. Analiza el grafo y detecta:
-1. Caminos sin salida (nodos sin conexión de salida excepto nodos finales)
-2. Nodos de decisión sin al menos 2 salidas
-3. Decisiones sin etiquetas/guardas en sus flujos
-4. Bucles infinitos (ciclos sin condición de salida)
-5. Nodos de actividad/subproceso sin formularios definidos
-6. Falta de nodo inicio o fin
-7. Nodos aislados
-
-Responde en español con formato:
-🔴 ERRORES CRÍTICOS: (lista)
-🟡 ADVERTENCIAS: (lista) 
-🟢 RECOMENDACIONES: (lista)
-📊 RESUMEN: X errores, Y advertencias`
-          }, {
-            role: 'user',
-            content: JSON.stringify(graphData)
-          }],
-          temperature: 0.2,
-          max_tokens: 1024
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          temperature: 0.3
         })
       });
 
+      if (!response.ok) throw new Error(`Groq error: ${response.status}`);
       const data = await response.json();
       return data.choices?.[0]?.message?.content || 'Sin análisis disponible.';
-    } catch {
-      return '❌ Error al conectar con el auditor.';
+    } catch (e: any) {
+      console.error('[Audit] Error:', e);
+      return `❌ Error en la auditoría: ${e.message}`;
     }
   }
 
-  /**
-   * Stop current audio playback
-   */
+  // ═══════════════════════════════════════════════════════════════
+  // UTILITIES
+  // ═══════════════════════════════════════════════════════════════
+
   stopAudio() {
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     this.zone.run(() => this.isSpeaking$.next(false));
   }
 
-  /**
-   * Disconnect WebSocket
-   */
   disconnect() {
     this.stopAudio();
     if (this.mediaStream) {
@@ -518,39 +613,29 @@ Responde en español con formato:
     this.conversationHistory = [];
   }
 
-  /**
-   * Capture and send the current SVG canvas as an image to Gemini for vision analysis
-   */
   public captureCanvas(svgElement: SVGSVGElement) {
     if (this.ws?.readyState !== WebSocket.OPEN) return;
     try {
       const clone = svgElement.cloneNode(true) as SVGSVGElement;
       const fos = clone.querySelectorAll('foreignObject');
       fos.forEach(fo => fo.remove());
-      
       const serializer = new XMLSerializer();
       let source = serializer.serializeToString(clone);
-      
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const img = new Image();
       const svgBase64 = btoa(unescape(encodeURIComponent(source)));
       img.src = 'data:image/svg+xml;base64,' + svgBase64;
-      
       img.onload = () => {
         try {
           canvas.width = img.width || 1200;
           canvas.height = img.height || 800;
           ctx?.drawImage(img, 0, 0);
           const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
-          
           if (this.ws?.readyState === WebSocket.OPEN) {
             const msg = {
               clientContent: {
-                turns: [{
-                  role: 'user',
-                  parts: [{ inlineData: { mimeType: 'image/jpeg', data: base64 } }]
-                }],
+                turns: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/jpeg', data: base64 } }] }],
                 turnComplete: false
               }
             };
@@ -561,9 +646,6 @@ Responde en español con formato:
     } catch (e) {}
   }
 
-  /**
-   * Clear conversation
-   */
   clearHistory() {
     this.conversationHistory = [];
   }

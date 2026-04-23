@@ -190,6 +190,7 @@
         <!-- LAYER 1: SWIMLANES -->
         <g *ngFor="let node of nodes">
           <foreignObject *ngIf="node.type === 'swimlane'"
+                         [id]="'node-' + node.id"
                          [attr.x]="node.x" [attr.y]="node.y"
                          [attr.width]="node.width" [attr.height]="node.height"
                          class="node-fo" (mousedown)="onMouseDown(node, $event)">
@@ -202,13 +203,15 @@
         <!-- LAYER 2: EDGES -->
         <g *ngFor="let edge of edges">
           <!-- Fat invisible click area for easier dragging -->
-          <path [attr.d]="getConnectorPath(edge)"
+          <path [id]="'edge-fat-' + edge.id"
+                [attr.d]="getConnectorPath(edge)"
                 stroke="transparent" stroke-width="24" fill="none"
                 style="cursor: grab;"
                 (mousedown)="startLineDrag($event, edge)"
                 (dblclick)="addWaypoint($event, edge)" />
           <!-- Visible connector -->
-          <path [attr.d]="getConnectorPath(edge)"
+          <path [id]="'edge-vis-' + edge.id"
+                [attr.d]="getConnectorPath(edge)"
                 class="connector" [class.selected]="selectedEdge?.id === edge.id"
                 [attr.stroke]="edge.color || '#455a64'"
                 [attr.stroke-width]="edge.strokeWidth || 2"
@@ -220,6 +223,7 @@
                 style="pointer-events: none;" />
           <!-- Edge label -->
           <foreignObject *ngIf="edge.label"
+                         [id]="'edge-lbl-' + edge.id"
                          [attr.x]="getLabelX(edge)" [attr.y]="getLabelY(edge)"
                          width="120" height="34" style="pointer-events: none; overflow: visible;">
             <div class="edge-label">{{edge.label}}</div>
