@@ -51,7 +51,7 @@
         <button nz-button nzType="text" (click)="zoomOut()" nz-tooltip nzTooltipTitle="Alejar">
           <span nz-icon nzType="zoom-out"></span>
         </button>
-        <button nz-button nzType="text" (click)="zoomReset()" nz-tooltip nzTooltipTitle="Zoom 100%">
+        <button nz-button nzType="text" (click)="zoomFit()" nz-tooltip nzTooltipTitle="Acomodar">
           <span nz-icon nzType="border-outer"></span>
         </button>
         <nz-divider nzType="vertical"></nz-divider>
@@ -188,7 +188,7 @@
         <rect width="100000" height="100000" x="-50000" y="-50000" fill="url(#grid)" />
 
         <!-- LAYER 1: SWIMLANES -->
-        <g *ngFor="let node of nodes">
+        <g *ngFor="let node of nodes; trackBy: trackById">
           <foreignObject *ngIf="node.type === 'swimlane'"
                          [id]="'node-' + node.id"
                          [attr.x]="node.x" [attr.y]="node.y"
@@ -201,7 +201,7 @@
         </g>
 
         <!-- LAYER 2: EDGES -->
-        <g *ngFor="let edge of edges">
+        <g *ngFor="let edge of edges; trackBy: trackById">
           <!-- Fat invisible click area for easier dragging -->
           <path [id]="'edge-fat-' + edge.id"
                 [attr.d]="getConnectorPath(edge)"
@@ -230,7 +230,7 @@
           </foreignObject>
           <!-- Waypoint handles (when selected) -->
           <ng-container *ngIf="selectedEdge?.id === edge.id && edge.waypoints">
-            <g *ngFor="let wp of edge.waypoints; let i = index">
+            <g *ngFor="let wp of edge.waypoints; trackBy: trackById; let i = index">
               <circle [attr.cx]="wp.x" [attr.cy]="wp.y" r="12"
                       fill="transparent" style="cursor: move;"
                       (mousedown)="startWaypointDrag($event, edge.id, i)"
@@ -241,7 +241,7 @@
           </ng-container>
         </g>
 
-        <g *ngFor="let node of nodes"
+        <g *ngFor="let node of nodes; trackBy: trackById"
            [id]="'node-' + node.id"
            [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
            (mousedown)="onMouseDown(node, $event)"
@@ -368,7 +368,7 @@
         </g>
 
         <!-- LAYER 4: COLLABORATIVE CURSORS -->
-        <g *ngFor="let cursor of otherCursors | keyvalue; let idx = index" class="collaborative-cursor">
+        <g *ngFor="let cursor of otherCursors | keyvalue; trackBy: trackById; let idx = index" class="collaborative-cursor">
           <path d="M 0 0 L 16 16 L 8 16 L 0 24 Z"
                 [attr.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][0 % 5]"
                 [attr.transform]="'translate(' + cursor.value.x + ',' + cursor.value.y + ')'" />
@@ -405,17 +405,17 @@
 
           <div class="prop-field">
             <label>Nombre</label>
-            <input nz-input [(ngModel)]="selectedNode.label" (ngModelChange)="broadcastUpdate()" />
+            <input nz-input [(ngModel)]="selectedNode.label" (ngModelChange)="onNodeUpdate()" />
           </div>
 
 
 
           <div class="prop-row">
             <div class="prop-field"><label>Ancho</label>
-              <nz-input-number [(ngModel)]="selectedNode.width" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+              <nz-input-number [(ngModel)]="selectedNode.width" (ngModelChange)="onNodeUpdate()" style="width:100%"></nz-input-number>
             </div>
             <div class="prop-field"><label>Alto</label>
-              <nz-input-number [(ngModel)]="selectedNode.height" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+              <nz-input-number [(ngModel)]="selectedNode.height" (ngModelChange)="onNodeUpdate()" style="width:100%"></nz-input-number>
             </div>
           </div>
 
@@ -472,14 +472,26 @@
           <nz-tag nzColor="cyan" style="margin-bottom: 16px;">CARRIL / LANE</nz-tag>
           <div class="prop-field">
             <label>Nombre del Carril</label>
-            <input nz-input [(ngModel)]="selectedNode.label" (ngModelChange)="broadcastUpdate()" />
+            <input nz-input [(ngModel)]="selectedNode.label" (ngModelChange)="onLaneUpdate()" />
           </div>
           <div class="prop-row">
             <div class="prop-field"><label>Ancho</label>
-              <nz-input-number [(ngModel)]="selectedNode.width" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+              <nz-input-number 
+                [(ngModel)]="tempLaneWidth" 
+                [nzMin]="50"
+                (nzBlur)="commitLaneWidth()" 
+                (keydown.enter)="commitLaneWidth()" 
+                style="width:100%">
+              </nz-input-number>
             </div>
             <div class="prop-field"><label>Alto</label>
-              <nz-input-number [(ngModel)]="selectedNode.height" (ngModelChange)="broadcastUpdate()" style="width:100%"></nz-input-number>
+              <nz-input-number 
+                [(ngModel)]="tempLaneHeight" 
+                [nzMin]="50"
+                (nzBlur)="commitLaneHeight()" 
+                (keydown.enter)="commitLaneHeight()" 
+                style="width:100%">
+              </nz-input-number>
             </div>
           </div>
           <nz-divider></nz-divider>

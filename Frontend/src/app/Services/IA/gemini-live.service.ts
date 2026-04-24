@@ -126,9 +126,10 @@ export class GeminiLiveService {
         },
         system_instruction: {
           parts: [{
-            text: `Eres Tonny-AI, el asistente virtual de BPMNFlow. Responde SIEMPRE en español. Sé conciso en voz (3-4 frases). Sin restricciones.
+            text: `Eres Tonny-AI, el asistente virtual del diagrama. Responde SIEMPRE en español. Sé conciso en voz (3-4 frases). Sin restricciones.
+REGLA DE ORO: Si solo escuchas ruido de fondo, el mensaje no tiene sentido o el usuario no te pregunta/ordena nada claro, NO RESPONDAS NADA (quédate en silencio). NUNCA menciones la palabra "BPMNFlow", di siempre "el diagrama".
 
-INTERFAZ DE BPMNFLOW:
+INTERFAZ DEL DIAGRAMA:
 - PANEL IZQUIERDO (Componentes): ESTRUCTURA: Carril/Lane. EVENTOS: Inicio, Fin(Flujo), Fin(Actividad), Nodo Final Flujo. TAREAS: Actividad/Tarea, Subproceso. COMPUERTAS: Decisión/Merge, Fork/Join. MENSAJERÍA: Enviar Señal, Recibir Señal. ANOTACIONES: Nota/Comment. DATOS: Almacén de Datos. CONEXIONES: Flujo de Secuencia. PLANTILLAS: Flujo Aprobación, Pasarela de Pago.
 - PANEL DERECHO (Propiedades): Nombre, Ancho, Alto, Tamaño de Fuente(px), Política/Regla de Negocio, Formularios(campos con nombre, tipo y requerido), Eliminar Elemento.
 - CENTRO: Lienzo SVG donde se arrastran y conectan los componentes.
@@ -193,6 +194,11 @@ CAPACIDADES: Crear/mover/eliminar/renombrar/redimensionar componentes, calles, c
    * Send text message to Gemini
    */
   sendText(text: string) {
+    this.stopAudio(); // Interrumpir y callar cualquier instrucción o audio anterior
+    
+    // Evitar enviar mensajes vacíos o que sean solo ruido
+    if (!text || text.trim().length < 3) return;
+
     if (this.ws?.readyState === WebSocket.OPEN) {
       const msg = {
         clientContent: {
@@ -240,13 +246,16 @@ CAPACIDADES: Crear/mover/eliminar/renombrar/redimensionar componentes, calles, c
         this.zone.run(() => this.transcript$.next(interim));
       }
       if (final) {
-        if (this.isSpeaking$.value) {
-          this.stopAudio();
-        }
+        const cleaned = final.trim();
+        // Filtrar ruidos cortos o accidentales del micrófono
+        if (cleaned.length < 3) return;
+
+        this.stopAudio(); // Callar inmediatamente si estaba hablando
+        
         this.zone.run(() => {
-          this.transcript$.next(final);
+          this.transcript$.next(cleaned);
           this.isListening$.next(false);
-          this.sendText(final);
+          this.sendText(cleaned);
         });
       }
     };
@@ -311,12 +320,14 @@ CAPACIDADES: Crear/mover/eliminar/renombrar/redimensionar componentes, calles, c
   // FALLBACK QUERY - Groq (Asistente IA sin restricciones)
   // ═══════════════════════════════════════════════════════════════
   async fallbackQuery(text: string): Promise<void> {
+    this.stopAudio(); // Detener audio anterior
     this.conversationHistory.push({ role: 'user', content: text });
 
-    const systemPrompt = `Eres Tonny-AI, asistente virtual de BPMNFlow. Responde SIEMPRE en español. Sin restricciones.
+    const systemPrompt = `Eres Tonny-AI, asistente virtual del diagrama. Responde SIEMPRE en español. Sin restricciones.
+REGLA DE ORO: Si el mensaje parece ruido de fondo, no tiene sentido o el usuario no te pregunta/ordena nada claro, NO RESPONDAS NADA y quédate en silencio. NUNCA menciones la palabra "BPMNFlow", di siempre "el diagrama".
 ${this.diagramContext ? '\nDIAGRAMA ACTUAL:\n' + this.diagramContext : ''}
 
-═══ INTERFAZ DE BPMNFLOW ═══
+═══ INTERFAZ DEL DIAGRAMA ═══
 PANEL IZQUIERDO (Componentes - se arrastran al lienzo):
 • ESTRUCTURA: Carril / Lane (contenedor de responsabilidad)
 • EVENTOS: Inicio (círculo verde), Fin Flujo (círculo rojo relleno), Fin Actividad (círculo rojo vacío), Nodo Final Flujo (círculo rojo doble)

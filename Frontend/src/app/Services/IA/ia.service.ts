@@ -15,8 +15,8 @@ export interface DiagramCommand {
     | 'auto_layout'
     | 'clear_all'
     | 'group_nodes' | 'ungroup_nodes' | 'copy_paste_nodes' | 'apply_template' | 'select_nodes'
-    | 'focus_node' | 'zoom_canvas' | 'pan_canvas' | 'expand_subprocess' | 'collapse_subprocess'
-    | 'analyze_bottlenecks' | 'simulate_load';
+    | 'focus_node' | 'zoom_canvas' | 'zoom_fit' | 'pan_canvas' | 'expand_subprocess' | 'collapse_subprocess'
+    | 'analyze_bottlenecks' | 'simulate_load' | 'clear_lane';
   // Node fields
   nodeType?: string;
   nodeId?: string;
@@ -228,13 +228,18 @@ Carriles (Swimlanes): [\${lanesContext}]
 19. zoom_canvas — Control de Zoom: Acercar o alejar el lienzo.
     Campos: zoomLevel (número para escala)
 
-20. pan_canvas — Control de Paneo: Desplazar la vista del lienzo.
+20. zoom_fit — Acomodar diagrama: Ajustar la vista para que todo el diagrama entre en pantalla (acomodar / encajar todo).
+
+21. pan_canvas — Control de Paneo: Desplazar la vista del lienzo.
     Campos: panX, panY
 
 21. expand_subprocess / collapse_subprocess — Nivel de Detalle: Expandir o contraer subprocesos (Drill-down).
     Campos: nodeId o label
 
 22. analyze_bottlenecks / simulate_load — Auditoría Analítica: Analizar flujos para detectar cuellos de botella o simular carga.
+
+23. clear_lane — Vaciar carril: Elimina todos los componentes y tareas que están dentro de un carril (calle) específico, dejando el carril vacío pero sin borrar el carril en sí. Úsalo cuando el usuario pida "borrar los componentes de la calle X".
+    Campos: targetLaneName (nombre del carril a vaciar)
 
 ═══ INTELIGENCIA, MACRO-OPERACIONES Y ENTRENADOR ═══
 - Generación Predictiva de Formularios: Crear dinámicamente los campos necesarios basándose en el nombre de la actividad.
@@ -421,10 +426,10 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private parseLaneReference(message: string): string | null {
     if (!message) return null;
-    const byNumber = message.match(/\b(?:en|a|al|hacia)\b\s+(?:el\s+|la\s+)?(?:calle|carril|swimlane|zona|area|seccion|pista|pool|departamento|sector|pasillo)\s*(\d+)/i);
+    const byNumber = message.match(/\b(?:en|a|al|hacia|de|del|desde)\b\s+(?:el\s+|la\s+)?(?:calle|carril|swimlane|zona|area|seccion|pista|pool|departamento|sector|pasillo)\s*(\d+)/i);
     if (byNumber?.[1]) return byNumber[1];
 
-    const byName = message.match(/\b(?:en|a|al|hacia|sobre|dentro)\b\s+(?:el\s+|la\s+)?(?:calle|carril|swimlane|zona|area|seccion|pista|pool|departamento|sector|pasillo)\s+([\p{L}\d_-]+)/iu);
+    const byName = message.match(/\b(?:en|a|al|hacia|sobre|dentro|de|del|desde)\b\s+(?:el\s+|la\s+)?(?:calle|carril|swimlane|zona|area|seccion|pista|pool|departamento|sector|pasillo)\s+([\p{L}\d_-]+)/iu);
     return byName?.[1] || null;
   }
 
@@ -685,6 +690,12 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
         continue;
       }
 
+      const moveNode = this.tryParseMoveNode(step, simulatedNodes);
+      if (moveNode) {
+        commands.push(moveNode);
+        continue;
+      }
+
       const addNodes = this.tryParseAddNode(step, simulatedNodes);
       if (addNodes) {
         const arr = Array.isArray(addNodes) ? addNodes : [addNodes];
@@ -700,12 +711,6 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
             height: addNode.height || 80
           });
         }
-        continue;
-      }
-
-      const moveNode = this.tryParseMoveNode(step, simulatedNodes);
-      if (moveNode) {
-        commands.push(moveNode);
         continue;
       }
 
@@ -779,7 +784,8 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     const noise = [
       /por\s+favor/gi, /puedes/gi, /me\s+gustaria\s+que/gi, /me\s+gustaría\s+que/gi,
       /quisiera/gi, /haz\s+que/gi, /deberias\s+de/gi, /deberías\s+de/gi,
-      /quiero\s+que/gi, /procede\s+a/gi, /favor\s+de/gi, /necesito\s+que/gi
+      /quiero\s+que/gi, /procede\s+a/gi, /favor\s+de/gi, /necesito\s+que/gi,
+      /\bahora\b/gi, /\bbien\b/gi, /\bbueno\b/gi, /\bmira\b/gi, /\boye\b/gi, /\balguna\b/gi
     ];
     noise.forEach(r => value = value.replace(r, ''));
     
@@ -823,19 +829,19 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private splitIntoSteps(message: string): string[] {
     return (message || '')
-      .split(/\s*(?:,|;|\by\b|\bluego\b|\bdespués\b|\bentonces\b|\by\s+luego\b)\s*/i)
+      .split(/\s*(?:,|;|\by\b|\bluego\b|\bdespués\b|\bentonces\b|\by\s+luego\b|\bahora\b|\bal\s+tiro\b|\by\s+ahora\b)\s*/i)
       .map(s => s.trim())
       .filter(Boolean);
   }
 
   private tryParseAddNode(step: string, currentNodes: NodeData[]): DiagramCommand | DiagramCommand[] | null {
     const s = step.toLowerCase();
-    const asksAdd = /(agrega|añade|crea|inserta|pon|ponme|coloca|genera|haz|mete|dame|plantea|proyecta|instala|dibuja|traza|abre|dispone|sitúa|situa)/.test(s);
+    const asksAdd = /\b(agrega|añade|crea|inserta|pon|ponme|coloca|genera|haz|mete|dame|plantea|proyecta|instala|dibuja|traza|abre|dispone|sitúa|situa|arm[ao]|construy|fabric[ao]|diseñ[ao]|desarroll[ao]|fund[ao]|mont[ao]|establec|inicia|form[ao]|forj[ao]|origin[ao]|invent[ao]|agreguemos|añadamos|creemos|insertemos|pongamos|coloquemos|generemos|hagamos|metamos|planteemos|dibujemos|diseñemos|montemos)\b/i.test(s);
     if (!asksAdd) return null;
 
     // Extraer multiplicador ("agrega 3 calles")
     let count = 1;
-    const countMatch = s.match(/(?:agrega|crea|añade|inserta|pon|ponme|dame|haz)\s+(un|una|dos|tres|cuatro|cinco|\d+)\b/i);
+    const countMatch = s.match(/(?:agrega|crea|añade|inserta|pon|ponme|dame|haz|mete|dibuja|construy|arm|monta|diseñ|genera|agreguemos|creemos|añadamos|hagamos|pongamos|metamos|dibujemos)\s+(un|una|dos|tres|cuatro|cinco|\d+)\b/i);
     if (countMatch && countMatch[1]) {
       const p = countMatch[1];
       if (p === 'un' || p === 'una') count = 1;
@@ -1076,24 +1082,51 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private tryParseMoveNode(step: string, currentNodes: NodeData[]): DiagramCommand | null {
     const s = step.toLowerCase();
-    if (!/(muev[ae]|mover|traslad[ae]|pas[a|e|ar]|llev[a|e|ar]|cambia\s+de\s+(?:calle|zona)|acomod[ae]|ubic[ae]|situ[ae]|desplaz[ae])/i.test(s)) return null;
-
-    const laneRef = this.parseLaneReference(step);
-    const lane = this.resolveLaneFromReference(laneRef, currentNodes);
-    if (!lane) return null;
+    if (!/\b(muev[aeo]|mover|traslad[aeo]|pas[a|e|o|ar]|llev[a|e|o|ar]|cambi[a|e|o]\s+de\s+(?:calle|zona|carril|area)|acomod[aeo]|ubic[aeo]|situ[aeo]|desplaz[aeo]|reubic[aeo]|empuj[aeo]|mand[aeo]|transfer|transfier|transport|migr[aeo]|movamos|traslademos|pasemos|llevemos|cambiemos|acomodemos|ubiquemos|situemos|desplacemos|posiciona|pon)\b/i.test(s)) return null;
 
     const candidates = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label);
     const quoted = step.match(/"([^"]+)"/);
     const nodeLabel = quoted?.[1]
       ? this.resolveNodeLabelFromReference(quoted[1], candidates)
-      : this.resolveNodeLabelFromReference(step.replace(/(?:mueve|mover|traslada|pasar|llevar|a\s+la\s+calle|al\s+carril).*/gi, '').trim(), candidates);
+      : this.resolveNodeLabelFromReference(step.replace(/(?:mueve|mover|traslada|trasladar|pasa|pasar|lleva|llevar|manda|mandar|transfiere|reubica|ubica|desplaza|posiciona|pon|a\s+la\s+calle|al\s+carril|a\s+la\s+zona|mas\s+abajo|mas\s+arriba|mas\s+a\s+la\s+derecha|mas\s+a\s+la\s+izquierda|abajo|arriba|derecha|izquierda).*/gi, '').trim(), candidates);
 
     if (!nodeLabel) return null;
-    return {
-      action: 'move_node_to_lane',
-      label: nodeLabel,
-      targetLaneName: lane.label || undefined
-    };
+    const node = currentNodes.find(n => n.label === nodeLabel);
+
+    // Caso 1: Movimiento a carril
+    const laneRef = this.parseLaneReference(step);
+    const lane = this.resolveLaneFromReference(laneRef, currentNodes);
+    if (lane) {
+      return {
+        action: 'move_node_to_lane',
+        label: nodeLabel,
+        targetLaneName: lane.label || undefined
+      };
+    }
+
+    // Caso 2: Movimiento relativo
+    if (node) {
+      let nx = node.x;
+      let ny = node.y;
+      const stepDist = 120;
+
+      if (s.includes('abajo') || s.includes('descend')) ny += stepDist;
+      else if (s.includes('arriba') || s.includes('subir')) ny = Math.max(0, ny - stepDist);
+      
+      if (s.includes('derecha')) nx += stepDist;
+      else if (s.includes('izquierda')) nx = Math.max(0, nx - stepDist);
+
+      if (nx !== node.x || ny !== node.y) {
+        return {
+          action: 'update_node',
+          label: nodeLabel,
+          x: nx,
+          y: ny
+        };
+      }
+    }
+
+    return null;
   }
 
   private tryParseStyle(step: string, currentNodes: NodeData[]): DiagramCommand | DiagramCommand[] | null {
@@ -1135,29 +1168,24 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private tryParseDeleteNodesInLane(step: string, currentNodes: NodeData[]): DiagramCommand[] | null {
     const s = step.toLowerCase();
-    if (!/(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|limpia|aniquila|liquida|purga|desecha|vuela|quiebra)\s+(todo|todas|los|las)/.test(s) &&
-        !/(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|limpia|aniquila|liquida|purga|desecha|vuela|quiebra)\s+.*(nodos|componentes|actividades|tareas|elementos|cosas|pasos)/.test(s)) {
+    if (!/\b(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|limpia|aniquila|liquida|purga|desecha|vuela|quiebra|vacia|tumba|mata|arrasa|revienta|fulmina|eliminemos|borremos|quitemos|removamos|limpiemos|vaciemos)\b\s+(todo|todas|los|las|cualquier)/.test(s) &&
+        !/\b(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|limpia|aniquila|liquida|purga|desecha|vuela|quiebra|vacia|tumba|mata|arrasa|revienta|fulmina|eliminemos|borremos|quitemos|removamos|limpiemos|vaciemos)\b\s+.*(nodos|componentes|actividades|tareas|elementos|cosas|pasos|basura)/.test(s) &&
+        !/\b(vacia|limpia|desocupa|despeja|vaciemos|limpiemos|desocupemos|despejemos)\b\s+.*(calle|zona|carril|area|pista|seccion)/.test(s)) {
       return null;
     }
 
-    const laneRef = this.parseLaneReference(step);
+    const laneRef = this.parseLaneReference(step) || step.match(/(?:calle|zona|carril|departamento|campo|espacio|area)\s+([\p{L}\d_-]+)/iu)?.[1];
     if (!laneRef) return null;
 
     const lane = this.resolveLaneFromReference(laneRef, currentNodes);
     if (!lane) return null;
 
-    const laneX = lane.x || 0;
-    const laneW = lane.width || 300;
-
-    const nodesInLane = currentNodes.filter(n => n.type !== 'swimlane' && (n.x || 0) >= laneX && (n.x || 0) < (laneX + laneW));
-    if (nodesInLane.length === 0) return null;
-
-    return nodesInLane.map(n => ({ action: 'delete_node', label: n.label }));
+    return [{ action: 'clear_lane', targetLaneName: lane.label }];
   }
 
   private tryParseDeleteNode(step: string, currentNodes: NodeData[]): DiagramCommand | null {
     const s = step.toLowerCase();
-    if (!/(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra)/.test(s)) return null;
+    if (!/\b(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra|cargate|revienta|mata|funde|tumba|limpia|arrasa|pela|desecha|bota|deshaz|borralo|eliminemos|borremos|quitemos|removamos|matemos|limpiemos)\b/.test(s)) return null;
     
     // Evitar interceptar comandos de eliminar "líneas/edges"
     if (/(linea|línea|arista|conexion|conexión|relacion|relación|edge|flecha|ruta)/.test(s)) return null;
@@ -1166,7 +1194,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     const quoted = step.match(/"([^"]+)"/);
     const resolved = quoted?.[1]
       ? this.resolveNodeLabelFromReference(quoted[1], candidates)
-      : this.resolveNodeLabelFromReference(step.replace(/(?:elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra)\s*/gi, ''), candidates);
+      : this.resolveNodeLabelFromReference(step.replace(/(?:elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra|cargate|revienta|mata|funde|tumba|limpia|arrasa|pela|bota|deshaz|borralo)\s*/gi, ''), candidates);
 
     return resolved ? { action: 'delete_node', label: resolved } : null;
   }
@@ -1241,7 +1269,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     const s = step.toLowerCase();
     
     if (this.isConnectIntent(step)) {
-       const explicit = step.match(/(?:conecta|relaciona|une|unir|vincula|enlaza|asocia|liga|junta)(?:\s+el\s+flujo)?\s+(?:de\s+)?(.+?)\s+(?:con|a|hacia|y|->)\s+(.+)/i);
+       const explicit = step.match(/(?:conecta|relaciona|relacion|une|unir|vincula|enlaza|asocia|liga|junta)(?:\s+el\s+flujo)?\s+(?:de\s+)?(.+?)\s+(?:con|a|hacia|y|->)\s+(.+)/i);
        if (explicit?.[1] && explicit?.[2]) {
            const candidateNodes = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label && n.label.trim().length > 0);
            const src = this.resolveNodeLabelFromReference(explicit[1], candidateNodes);
@@ -1268,7 +1296,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private tryParseRename(step: string, currentNodes: NodeData[]): DiagramCommand | null {
     const s = this.normalizeForSearch(step);
-    if (!/(renombr[ae]|cambi[ae]|modific[ae]|actualiz[ae]|reemplaz[ae]|poner\s+nombre|ponle\s+nombre|llama(?:r|le)?|rectifica|ajusta|perfecciona|edita|reforma|altera)/.test(s)) {
+    if (!/\b(renombr[ae]|cambi[ae]|modific[ae]|actualiz[ae]|reemplaz[ae]|poner\s+nombre|ponle\s+nombre|llama(?:r|le|la)?|rectifica|ajusta|perfecciona|edita|reforma|altera|bautiza|titula|renombremos|cambiemos|modifiquemos|actualicemos|bauticemos|titulemos)\b/.test(s)) {
       return null;
     }
 
@@ -1306,7 +1334,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     const trimmed = step.trim();
 
     // Check strict Lane renaming first
-    const lanePattern = trimmed.match(/(?:renombr[ae]|cambi[ae](?:r)?|modific[ae](?:r)?|actualiz[ae](?:r)?|reemplaz[ae](?:r)?(?:\s+(?:el\s+)?nombre(?:\s+de)?)?)\s+(?:la\s+|el\s+)?((?:calle|carril|swimlane|zona|area|área)\s*[\p{L}\d_-]+)\s+(?:a|por|como)\s+"?([\p{L}\d_ -]{2,})"?$/iu);
+    const lanePattern = trimmed.match(/(?:renombr[ae]|cambi[ae](?:r)?|modific[ae](?:r)?|actualiz[ae](?:r)?|reemplaz[ae](?:r)?|bautiz[ae](?:r)?|titul[ae](?:r)?|renombremos|cambiemos|modifiquemos|actualicemos|bauticemos|titulemos(?:\s+(?:el\s+)?nombre(?:\s+de)?)?)\s+(?:la\s+|el\s+)?((?:calle|carril|swimlane|zona|area|área|seccion)\s*[\p{L}\d_-]+)\s+(?:a|por|como|para\s+que\s+sea)\s+"?([\p{L}\d_ -]{2,})"?$/iu);
     if (lanePattern?.[1] && lanePattern?.[2]) {
       return {
         targetRef: lanePattern[1].trim(),
@@ -1316,7 +1344,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     }
 
     // Node renaming (or fallback)
-    const base = trimmed.match(/(?:renombr[ae]|cambi[ae](?:r)?|modific[ae](?:r)?|actualiz[ae](?:r)?|reemplaz[ae](?:r)?(?:\s+(?:el\s+)?nombre(?:\s+de)?)?|pon(?:er|le)?\s+nombre\s+(?:a|de)?|llámale|llama)\s+(?:la\s+|el\s+|al\s+)?(.+?)\s+(?:a|por|como)\s+"?([\p{L}\d_ -]{2,})"?$/iu);
+    const base = trimmed.match(/(?:renombr[ae]|cambi[ae](?:r)?|modific[ae](?:r)?|actualiz[ae](?:r)?|reemplaz[ae](?:r)?|bautiz[ae](?:r)?|titul[ae](?:r)?|renombremos|cambiemos|modifiquemos|actualicemos|bauticemos|titulemos(?:\s+(?:el\s+)?nombre(?:\s+de)?)?|pon(?:er|le)?\s+nombre\s+(?:a|de)?|llámale|llama|llámala|llamemos)\s+(?:la\s+|el\s+|al\s+)?(.+?)\s+(?:a|por|como|para\s+que\s+sea)\s+"?([\p{L}\d_ -]{2,})"?$/iu);
     if (base?.[1] && base?.[2]) {
       return {
         targetRef: base[1].replace(/^de\s+/i, '').trim(),
@@ -1329,7 +1357,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
   }
 
   private isConnectIntent(text: string): boolean {
-    return /(conecta(?:r|le)?|relaciona(?:r|le)?|une(?:r|le)?|vincula(?:r|le)?|enlaza(?:r|le)?|asocia(?:r|le)?|liga(?:r|le)?|junta(?:r|le)?|tirale?|pasalo?|mandalo?|manda\s+a|pasa\s+a|tira.*linea|tira.*línea|apunta(?:le)?\s+a|dirige)/i.test(text || '');
+    return /(conecta(?:r|le|la|los|las|mos|dos)?|relaciona(?:r|le|la|los|las|mos|dos)?|une(?:r|le|la|los|las|mos|dos)?|vincula(?:r|le|la|los|las|mos|dos)?|enlaza(?:r|le|la|los|las|mos|dos)?|asocia(?:r|le|la|los|las|mos|dos)?|liga(?:r|le|la|los|las|mos|dos)?|junta(?:r|le|la|los|las|mos|dos)?|tira(?:le|la|mos)?|pasa(?:lo|la|le|mos)?|manda(?:lo|la|le|mos)?|manda\s+a|pasa\s+a|tira.*linea|tira.*línea|apunta(?:le)?\s+a|dirige|encadena|amarra|conforma|concatena|engancha|conectemos|relacionemos|unamos|vinculemos|enlacemos|asociemos|liguemos|juntemos)/i.test(text || '');
   }
 
   private normalizeForSearch(value: string): string {
@@ -1370,7 +1398,11 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
   }
 
   private findNodeMatches(ref: string, nodes: NodeData[]): NodeData[] {
-    const cleanRef = (ref || '').replace(/["'.,;:!?()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+    let cleanRef = (ref || '').replace(/["'.,;:!?()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    // Eliminar prefijos comunes de lenguaje natural que ensucian la búsqueda de etiquetas
+    cleanRef = cleanRef.replace(/^(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|la\s+pregunta|la\s+condicion|el\s+subproceso|un|una|el|la|los|las)\s+/i, '').trim();
+
     if (!cleanRef) return [];
 
     const candidates = nodes.filter(n => !!n.label && n.label.trim().length > 0);

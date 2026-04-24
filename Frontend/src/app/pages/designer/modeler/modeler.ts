@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
@@ -88,6 +88,10 @@ export class ModelerComponent implements OnInit, OnDestroy {
   showValidation = false;
   validationResult: ValidationResult | null = null;
 
+  // Buffers para edición de propiedades de calles (evitan saltos mientras se teclea)
+  tempLaneWidth: number = 300;
+  tempLaneHeight: number = 520;
+
   // ---- Voice Assistant (Gemini Live) ----
   showAssistantPanel = false;
   assistantInput = '';
@@ -148,7 +152,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
     private iaService: IaService,
     private message: NzMessageService,
     private processInstanceService: ProcessInstanceService,
-    private geminiLive: GeminiLiveService
+    private geminiLive: GeminiLiveService,
+    private ngZone: NgZone
   ) {
     this.designId = this.route.snapshot.paramMap.get('designId');
   }
@@ -209,6 +214,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
             lane.height = Math.max(lane.height || 0, 520);
           });
         this.saveHistory();
+        setTimeout(() => this.zoomFit(), 100);
       },
       error: (err) => console.error('Error loading initial modeling data', err)
     });
@@ -219,10 +225,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.socketSubscription = this.socketService.connect(this.designId!).subscribe({
       next: (m: Modeling) => {
         if (m.type === 'force_sync') {
-           this.message.warning(m.error || 'Colisión detectada. Sincronizando lienzo...');
-           this.nodes = m.nodes || [];
-           this.edges = m.edges || [];
-           this.lastReceivedTimestamp = Date.now();
+           this.ngZone.run(() => {
+             this.message.warning(m.error || 'Colisión detectada. Sincronizando lienzo...');
+             this.nodes = m.nodes || [];
+             this.edges = m.edges || [];
+             this.lastReceivedTimestamp = Date.now();
+           });
            return;
         }
 
@@ -232,38 +240,44 @@ export class ModelerComponent implements OnInit, OnDestroy {
         
         const remoteNodes = m.nodes || [];
         
-        // ---- HIGH SPEED PULSE PATH ----
+        // ---- HIGH SPEED PULSE PATH (runs OUTSIDE zone for max FPS) ----
         if (m.isDragPulse) {
           remoteNodes.forEach(rn => {
-             // Skip if I am dragging it
              if (this.isDragging && this.draggedNode?.id === rn.id) return;
              
              const ln = this.nodes.find(n => n.id === rn.id);
              if (ln) { 
-                // Update local object values
-                ln.x = rn.x; 
-                ln.y = rn.y;
-                ln.width = rn.width;
-                ln.height = rn.height;
+                Object.assign(ln, rn);
                 
-                // Direct DOM Manipulation for zero latency on the dragged element
                 const el = document.getElementById('node-' + rn.id);
                 if (el) {
                    if (rn.type === 'swimlane') {
                      el.setAttribute('x', rn.x.toString());
                      el.setAttribute('y', rn.y.toString());
+                     el.setAttribute('width', (rn.width || 300).toString());
+                     el.setAttribute('height', (rn.height || 520).toString());
+                     // Also update lane dimensions directly on the rect
+                     const rect = el.querySelector('rect');
+                     if (rect) {
+                       rect.setAttribute('width', (rn.width || 300).toString());
+                       rect.setAttribute('height', (rn.height || 520).toString());
+                     }
                    } else {
                      el.setAttribute('transform', `translate(${rn.x},${rn.y})`);
                    }
                 }
+             } else {
+               this.nodes = [...this.nodes, rn];
              }
           });
           
           const remoteEdges = m.edges || [];
           remoteEdges.forEach(re => {
              const le = this.edges.find(e => e.id === re.id);
-             if (le && re.waypoints) {
-               le.waypoints = re.waypoints;
+             if (le) {
+               Object.assign(le, re);
+             } else {
+               this.edges = [...this.edges, re];
              }
           });
           
@@ -285,33 +299,47 @@ export class ModelerComponent implements OnInit, OnDestroy {
              }
           });
           
-          return; // Skip heavy array rebuilding logic for pulses
+          return;
         }
 
-        // ---- STANDARD SYNC PATH (Final drops, additions, labels) ----
-        const remoteEdges = m.edges || [];
-        remoteNodes.forEach(rn => {
-          if (this.isDragging && this.draggedNode?.id === rn.id) return;
-          const index = this.nodes.findIndex(n => n.id === rn.id);
-          if (index !== -1) {
-            this.nodes[index] = { ...this.nodes[index], ...rn }; 
-          } else {
-            this.nodes.push(rn);
+        // ---- STANDARD SYNC PATH (runs INSIDE zone to trigger Angular re-render) ----
+        this.ngZone.run(() => {
+          const remoteEdges = m.edges || [];
+
+          // Actualización atómica de nodos para evitar descalces entre calles y componentes
+          this.nodes = remoteNodes.map(rn => {
+            const local = this.nodes.find(n => n.id === rn.id);
+            // Si yo estoy arrastrando este nodo, preservo mi posición local para evitar saltos (jitters)
+            if (local && this.isDragging && this.draggedNode?.id === rn.id) {
+              return { ...rn, x: local.x, y: local.y }; 
+            }
+            return rn;
+          });
+
+          this.edges = remoteEdges.map(re => {
+            const local = this.edges.find(e => e.id === re.id);
+            if (local && this.dragWaypoint && this.dragWaypoint.edgeId === re.id) {
+              return { ...re, waypoints: local.waypoints };
+            }
+            return re;
+          });
+          
+          // Forzar sincronización de atributos DOM después de un cambio de estado masivo
+          if (!m.isDragPulse) {
+            setTimeout(() => {
+              this.nodes.forEach(n => {
+                const el = document.getElementById('node-' + n.id);
+                if (el) {
+                  if (n.type === 'swimlane') {
+                    el.setAttribute('x', n.x.toString());
+                    el.setAttribute('width', (n.width || 300).toString());
+                  } else {
+                    el.setAttribute('transform', `translate(${n.x},${n.y})`);
+                  }
+                }
+              });
+            }, 0);
           }
-        });
-        this.nodes = this.nodes.filter(ln => {
-           if (this.isDragging && this.draggedNode?.id === ln.id) return true;
-           return remoteNodes.some(rn => rn.id === ln.id);
-        });
-        remoteEdges.forEach(re => {
-          if (this.dragWaypoint && this.dragWaypoint.edgeId === re.id) return;
-          const index = this.edges.findIndex(e => e.id === re.id);
-          if (index !== -1) { this.edges[index] = { ...this.edges[index], ...re }; } 
-          else { this.edges.push(re); }
-        });
-        this.edges = this.edges.filter(le => {
-          if (this.dragWaypoint && this.dragWaypoint.edgeId === le.id) return true;
-          return remoteEdges.some(re => re.id === le.id);
         });
       },
       error: (err) => console.error('Socket error', err)
@@ -421,8 +449,9 @@ export class ModelerComponent implements OnInit, OnDestroy {
       let modeling: Modeling;
       modeling = {
         id: this.modelingId || undefined,
-        nodes: this.nodes,
-        edges: this.edges,
+        // Clone arrays to ensure fresh state is sent and change detection is triggered locally
+        nodes: [...this.nodes],
+        edges: [...this.edges],
         isDragPulse: isDragPulse,
         senderId: this.socketService.currentUserId,
         timestamp: Date.now()
@@ -474,6 +503,10 @@ export class ModelerComponent implements OnInit, OnDestroy {
     }
 
     this.selectedNode = node;
+    if (node.type === 'swimlane') {
+      this.tempLaneWidth = node.width || 300;
+      this.tempLaneHeight = node.height || 520;
+    }
   }
 
   selectEdge(edge: EdgeData, event: MouseEvent) {
@@ -519,7 +552,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       opacity: 100,
       waypoints: []
     };
-    this.edges.push(newEdge);
+    this.edges = [...this.edges, newEdge];
     this.broadcastUpdate();
   }
 
@@ -542,7 +575,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     pt.x = event.clientX;
     pt.y = event.clientY;
     const svgPt = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-    edge.waypoints.push({ x: svgPt.x, y: svgPt.y });
+    edge.waypoints = [...(edge.waypoints || []), { x: svgPt.x, y: svgPt.y }];
     this.broadcastUpdate();
   }
 
@@ -640,6 +673,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       if (this.draggedNode.type === 'swimlane') {
         this.draggedNode.x = Math.max(0, newX);
         this.draggedNode.y = 0;
+        // Ahora permitimos que las calles se reorganicen MIENTRAS arrastras para un feedback instantáneo
         this.syncLanesLayout(true);
       } else {
         this.draggedNode.x = Math.max(0, newX);
@@ -669,22 +703,30 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== LANE LAYOUT =====
 
   syncLanesLayout(isDragging = false) {
-    const lanes = this.nodes.filter(n => n.type === 'swimlane').sort((a, b) => a.x - b.x);
-    if (lanes.length < 2 && !isDragging) return;
+    const allLanes = this.nodes.filter(n => n.type === 'swimlane');
+    if (allLanes.length < 2 && !isDragging) return;
 
-    if (isDragging && this.draggedNode && this.draggedNode.type === 'swimlane') {
-      // Keep lane in column space while dragging.
-      const dragged = this.draggedNode;
-      dragged.y = 0;
-    } else {
-      // Snap layout: lanes side by side as columns
-      let currentX = 0;
-      lanes.forEach(lane => {
-        const oldX = lane.x;
-        const laneW = lane.width || 300;
-        lane.x = currentX;
+    // Ordenar carriles por su posición X actual
+    const sortedLanes = [...allLanes].sort((a, b) => a.x - b.x);
+
+    let currentX = 0;
+    sortedLanes.forEach(lane => {
+      const oldX = lane.x;
+      const laneW = lane.width || 300;
+      
+      if (isDragging && this.draggedNode?.id === lane.id) {
+        // La calle que estoy arrastrando mantiene su posición libre, 
+        // pero "reserva" su espacio en el flujo para las demás.
+        currentX += laneW;
+      } else {
+        // Las calles que NO estoy arrastrando se acomodan automáticamente
+        const newX = currentX;
+        const deltaX = newX - oldX;
+        
+        lane.x = newX;
         lane.y = 0;
-        const deltaX = lane.x - oldX;
+
+        // Mover hijos solo si la calle cambió de posición significativamente
         if (deltaX !== 0) {
           this.nodes
             .filter(n =>
@@ -692,24 +734,63 @@ export class ModelerComponent implements OnInit, OnDestroy {
               n.x >= oldX && n.x < (oldX + laneW) &&
               n.y >= lane.y && n.y <= (lane.y + (lane.height || 520))
             )
-            .forEach(child => { child.x += deltaX; });
+            .forEach(child => { 
+              child.x += deltaX; 
+              // Actualizar DOM inmediatamente si es pulso
+              if (isDragging) {
+                const el = document.getElementById('node-' + child.id);
+                if (el) el.setAttribute('transform', `translate(${child.x},${child.y})`);
+              }
+            });
         }
         currentX += laneW;
-      });
+      }
+    });
+
+    this.checkAndExpandLanes();
+  }
+
+  onLaneUpdate() {
+    this.syncLanesLayout();
+    this.checkAndExpandLanes();
+    this.broadcastUpdate();
+  }
+
+  // Métodos para actualizar dimensiones solo cuando se termina de editar
+  commitLaneWidth() {
+    if (this.selectedNode && this.selectedNode.type === 'swimlane') {
+      this.selectedNode.width = this.tempLaneWidth;
+      this.onLaneUpdate();
     }
+  }
+
+  commitLaneHeight() {
+    if (this.selectedNode && this.selectedNode.type === 'swimlane') {
+      this.selectedNode.height = this.tempLaneHeight;
+      this.onLaneUpdate();
+    }
+  }
+
+  onNodeUpdate() {
+    this.checkAndExpandLanes();
+    this.broadcastUpdate();
   }
 
   checkAndExpandLanes() {
     const lanes = this.nodes.filter(n => n.type === 'swimlane');
     const otherNodes = this.nodes.filter(n => n.type !== 'swimlane');
     
-    // Carriles verticales lado a lado: expandir altura para acomodar flujo vertical
+    // Calculate required height based on vertical flow
     let maxBottom = 520;
     otherNodes.forEach(node => {
       const bottom = node.y + (node.height || 80) + 100;
       if (bottom > maxBottom) maxBottom = bottom;
     });
-    lanes.forEach(lane => { lane.height = maxBottom; });
+    
+    // Apply to ALL lanes to keep them aligned
+    lanes.forEach(lane => { 
+      lane.height = maxBottom; 
+    });
   }
 
   // ===== NODE CRUD =====
@@ -752,7 +833,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       width: defaultW, height: defaultH, fontSize: 12
     };
 
-    this.nodes.push(newNode);
+    this.nodes = [...this.nodes, newNode];
     this.selectedNode = newNode;
     this.checkAndExpandLanes();
     this.broadcastUpdate();
@@ -1350,6 +1431,42 @@ export class ModelerComponent implements OnInit, OnDestroy {
           this.nodes = [];
           this.edges = [];
           break;
+
+        // === CLEAR LANE ===
+        case 'clear_lane': {
+          const lane = this.nodes.find(n => n.type === 'swimlane' && (n.label || '').toLowerCase() === (cmd.targetLaneName || '').toLowerCase());
+          if (lane) {
+            const laneX = lane.x;
+            const laneY = lane.y;
+            const laneW = lane.width || 300;
+            const laneH = lane.height || 520;
+            
+            const nodesToDelete = this.nodes.filter(n => 
+              n.type !== 'swimlane' &&
+              n.x >= laneX && n.x < laneX + laneW &&
+              n.y >= laneY && n.y <= laneY + laneH
+            ).map(n => n.id);
+            
+            this.nodes = this.nodes.filter(n => !nodesToDelete.includes(n.id));
+            this.edges = this.edges.filter(e => !nodesToDelete.includes(e.source) && !nodesToDelete.includes(e.target));
+          } else {
+            this.message.warning(`Carril "${cmd.targetLaneName}" no encontrado.`);
+          }
+          break;
+        }
+
+        // === ZOOM ===
+        case 'zoom_fit':
+          this.zoomFit();
+          break;
+        case 'zoom_canvas':
+          if (cmd.zoomLevel) {
+            this.zoomLevel = cmd.zoomLevel;
+            this.viewBoxW = 3000 / this.zoomLevel;
+            this.viewBoxH = 2000 / this.zoomLevel;
+            this.applyViewBox();
+          }
+          break;
       }
     }
     this.checkAndExpandLanes();
@@ -1815,11 +1932,26 @@ export class ModelerComponent implements OnInit, OnDestroy {
   onWheel(event: WheelEvent) {
     if (!this.svgElement) return;
     event.preventDefault();
-    const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
-    this.viewBoxW *= zoomFactor;
-    this.viewBoxH *= zoomFactor;
-    this.zoomLevel = 3000 / this.viewBoxW;
     const svg: SVGSVGElement = this.svgElement.nativeElement;
+    
+    // Convert mouse position to SVG coordinates BEFORE zoom
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX;
+    pt.y = event.clientY;
+    const cursorSvg = pt.matrixTransform(svg.getScreenCTM()!.inverse());
+    
+    const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
+    
+    const newW = this.viewBoxW * zoomFactor;
+    const newH = this.viewBoxH * zoomFactor;
+    
+    // Adjust viewBox origin so the SVG point under the cursor stays fixed
+    this.viewBoxX = cursorSvg.x - (cursorSvg.x - this.viewBoxX) * zoomFactor;
+    this.viewBoxY = cursorSvg.y - (cursorSvg.y - this.viewBoxY) * zoomFactor;
+    this.viewBoxW = newW;
+    this.viewBoxH = newH;
+    
+    this.zoomLevel = 3000 / this.viewBoxW;
     svg.setAttribute('viewBox', `${this.viewBoxX} ${this.viewBoxY} ${this.viewBoxW} ${this.viewBoxH}`);
   }
 
@@ -1837,12 +1969,37 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.applyViewBox();
   }
 
-  zoomReset() {
-    this.viewBoxX = 0;
-    this.viewBoxY = 0;
-    this.viewBoxW = 3000;
-    this.viewBoxH = 2000;
-    this.zoomLevel = 1;
+  zoomFit() {
+    if (this.nodes.length === 0) {
+      this.viewBoxX = 0;
+      this.viewBoxY = 0;
+      this.viewBoxW = 3000;
+      this.viewBoxH = 2000;
+      this.zoomLevel = 1;
+      this.applyViewBox();
+      return;
+    }
+    const margin = 100;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    this.nodes.forEach(n => {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + (n.width || 160));
+      maxY = Math.max(maxY, n.y + (n.height || 80));
+    });
+    
+    minX -= margin;
+    minY -= margin;
+    maxX += margin;
+    maxY += margin;
+    
+    this.viewBoxX = minX;
+    this.viewBoxY = minY;
+    this.viewBoxW = maxX - minX;
+    this.viewBoxH = maxY - minY;
+    
+    this.zoomLevel = 3000 / this.viewBoxW;
     this.applyViewBox();
   }
 
@@ -2005,6 +2162,11 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.checkAndExpandLanes();
     this.broadcastUpdate();
     this.message.success(`Plantilla "${templateName}" insertada correctamente`);
+  }
+
+  // ===== TRACKING (Performance & Socket Sync) =====
+  trackById(index: number, item: any): string {
+    return item.id || (item.key ? item.key : index.toString());
   }
 }
 
