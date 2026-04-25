@@ -23,7 +23,7 @@ import { ModelingSocketService } from '../../../web-sockets/modeling-socket.serv
 import { NodeData, EdgeData, Modeling, Form, ValidationResult } from '../../../services/types';
 import { IaService, DiagramCommand } from '../../../services/ia/ia.service';
 import { ProcessInstanceService } from '../../../services/process-instance.service';
-import { GeminiLiveService } from '../../../services/ia/gemini-live.service';
+import { GeminiLiveService } from '../../../services/ia/groq-live.service';
 import { SettingsModalComponent } from '../../../components/settings-modal/settings-modal';
 
 @Component({
@@ -57,6 +57,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   isDragging = false;
   draggedNode: NodeData | null = null;
   draggedChildren: NodeData[] = [];
+  draggedWaypoints: { x: number, y: number }[] = [];
   offset = { x: 0, y: 0 };
   dragWaypoint: { edgeId: string, index: number } | null = null;
 
@@ -166,7 +167,6 @@ export class ModelerComponent implements OnInit, OnDestroy {
       this.loadDesignDetails();
       this.loadInitialData();
       this.connectToSocket();
-      this.setupVoiceRecognition();
       if (this.isReadOnly) {
         this.loadActiveInstance();
       }
@@ -635,10 +635,30 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.offset = { x: svgPt.x - node.x, y: svgPt.y - node.y };
 
     if (node.type === 'swimlane') {
-      // In column-based lanes we snap/move children on layout sync, not during drag.
-      this.draggedChildren = [];
+      const laneW = node.width || 300;
+      const oldX = node.x;
+      
+      // Capturar hijos (actividades)
+      this.draggedChildren = this.nodes.filter(n => {
+        if (n.type === 'swimlane') return false;
+        const nodeCenterX = n.x + (n.width || 160) / 2;
+        return nodeCenterX >= oldX - 5 && nodeCenterX <= oldX + laneW + 5;
+      });
+
+      // Capturar waypoints de flechas
+      this.draggedWaypoints = [];
+      this.edges.forEach(e => {
+        if (e.waypoints) {
+          e.waypoints.forEach(wp => {
+            if (wp.x >= oldX - 5 && wp.x <= oldX + laneW + 5) {
+              this.draggedWaypoints.push(wp);
+            }
+          });
+        }
+      });
     } else {
       this.draggedChildren = [];
+      this.draggedWaypoints = [];
     }
     event.stopPropagation();
   }
@@ -671,9 +691,26 @@ export class ModelerComponent implements OnInit, OnDestroy {
       const newY = svgPt.y - this.offset.y;
 
       if (this.draggedNode.type === 'swimlane') {
-        this.draggedNode.x = Math.max(0, newX);
+        const oldX = this.draggedNode.x;
+        const nextX = newX; // Permitir valores negativos para facilitar el reordenamiento al inicio
+        const deltaX = nextX - oldX;
+
+        this.draggedNode.x = nextX;
         this.draggedNode.y = 0;
-        // Ahora permitimos que las calles se reorganicen MIENTRAS arrastras para un feedback instantáneo
+
+        // Mover hijos capturados en tiempo real
+        this.draggedChildren.forEach(child => {
+          child.x += deltaX;
+          const el = document.getElementById('node-' + child.id);
+          if (el) el.setAttribute('transform', `translate(${child.x},${child.y})`);
+        });
+
+        // Mover waypoints capturados
+        if (this.draggedWaypoints) {
+          this.draggedWaypoints.forEach(wp => wp.x += deltaX);
+        }
+
+        // Reorganizar el resto de calles
         this.syncLanesLayout(true);
       } else {
         this.draggedNode.x = Math.max(0, newX);
@@ -715,8 +752,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       const laneW = lane.width || 300;
       
       if (isDragging && this.draggedNode?.id === lane.id) {
-        // La calle que estoy arrastrando mantiene su posición libre, 
-        // pero "reserva" su espacio en el flujo para las demás.
+        // La calle que estoy arrastrando ya movió sus propios hijos en onMouseMove
         currentX += laneW;
       } else {
         // Las calles que NO estoy arrastrando se acomodan automáticamente
@@ -726,23 +762,41 @@ export class ModelerComponent implements OnInit, OnDestroy {
         lane.x = newX;
         lane.y = 0;
 
-        // Mover hijos solo si la calle cambió de posición significativamente
-        if (deltaX !== 0) {
-          this.nodes
-            .filter(n =>
-              n.type !== 'swimlane' &&
-              n.x >= oldX && n.x < (oldX + laneW) &&
-              n.y >= lane.y && n.y <= (lane.y + (lane.height || 520))
-            )
-            .forEach(child => { 
-              child.x += deltaX; 
-              // Actualizar DOM inmediatamente si es pulso
+        // Mover hijos con la lógica de centro
+        this.nodes.forEach(n => {
+          if (n.type !== 'swimlane') {
+            // CRITICAL: If this node is already being dragged as a child of another lane, DON'T touch it
+            if (isDragging && this.draggedChildren.some(dc => dc.id === n.id)) {
+              return;
+            }
+
+            const nodeCenterX = n.x + (n.width || 160) / 2;
+            if (nodeCenterX >= oldX - 5 && nodeCenterX <= oldX + laneW + 5) {
+              n.x += deltaX;
               if (isDragging) {
-                const el = document.getElementById('node-' + child.id);
-                if (el) el.setAttribute('transform', `translate(${child.x},${child.y})`);
+                const el = document.getElementById('node-' + n.id);
+                if (el) el.setAttribute('transform', `translate(${n.x},${n.y})`);
+              }
+            }
+          }
+        });
+
+        // Mover waypoints de flechas
+        this.edges.forEach(e => {
+          if (e.waypoints) {
+            e.waypoints.forEach(wp => {
+              // CRITICAL: If this waypoint is already being dragged, DON'T touch it
+              if (isDragging && this.draggedWaypoints.includes(wp)) {
+                return;
+              }
+
+              if (wp.x >= oldX - 5 && wp.x <= oldX + laneW + 5) {
+                wp.x += deltaX;
               }
             });
-        }
+          }
+        });
+
         currentX += laneW;
       }
     });
@@ -1227,18 +1281,26 @@ export class ModelerComponent implements OnInit, OnDestroy {
         }
 
         case 'delete_node': {
-          const toDelete = cmd.nodeId || this.nodes.find(n => n.label === cmd.label)?.id;
-          if (toDelete) {
-            this.nodes = this.nodes.filter(n => n.id !== toDelete);
-            this.edges = this.edges.filter(e => e.source !== toDelete && e.target !== toDelete);
+          const query = (cmd.nodeId || cmd.label || '').toLowerCase().trim();
+          const toDeleteNode = this.nodes.find(n => 
+            n.id === cmd.nodeId || 
+            (n.label || '').toLowerCase().trim() === query
+          );
+          if (toDeleteNode) {
+            const toDeleteId = toDeleteNode.id;
+            this.nodes = this.nodes.filter(n => n.id !== toDeleteId);
+            this.edges = this.edges.filter(e => e.source !== toDeleteId && e.target !== toDeleteId);
+            this.syncLanesLayout(false);
           }
           break;
         }
 
         case 'update_node': {
-          const n = cmd.nodeId
-            ? this.nodes.find(n => n.id === cmd.nodeId)
-            : this.nodes.find(n => n.label === cmd.label);
+          const query = (cmd.nodeId || cmd.label || '').toLowerCase().trim();
+          const n = this.nodes.find(n => 
+            (cmd.nodeId && n.id === cmd.nodeId) || 
+            (!cmd.nodeId && (n.label || '').toLowerCase().trim() === query)
+          );
           if (n) {
             if (cmd.newLabel !== undefined) n.label = cmd.newLabel;
             else if (cmd.label !== undefined && !cmd.nodeId) { /* label used for lookup, skip */ }
@@ -1256,8 +1318,10 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
         // === EDGE MANAGEMENT ===
         case 'add_edge': {
-          const srcNode = this.nodes.find(n => n.id === cmd.sourceId || n.label === cmd.sourceId);
-          const tgtNode = this.nodes.find(n => n.id === cmd.targetId || n.label === cmd.targetId);
+          const srcQ = (cmd.sourceId || '').toLowerCase().trim();
+          const tgtQ = (cmd.targetId || '').toLowerCase().trim();
+          const srcNode = this.nodes.find(n => n.id === cmd.sourceId || (n.label || '').toLowerCase().trim() === srcQ);
+          const tgtNode = this.nodes.find(n => n.id === cmd.targetId || (n.label || '').toLowerCase().trim() === tgtQ);
           if (srcNode && tgtNode) {
             this.edges.push({
               id: `edge_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
@@ -1275,13 +1339,16 @@ export class ModelerComponent implements OnInit, OnDestroy {
           if (cmd.edgeId) {
             this.edges = this.edges.filter(e => e.id !== cmd.edgeId);
           } else if (cmd.sourceId && cmd.targetId) {
-            const src = this.nodes.find(n => n.id === cmd.sourceId || n.label === cmd.sourceId);
-            const tgt = this.nodes.find(n => n.id === cmd.targetId || n.label === cmd.targetId);
+            const srcQ = (cmd.sourceId || '').toLowerCase().trim();
+            const tgtQ = (cmd.targetId || '').toLowerCase().trim();
+            const src = this.nodes.find(n => n.id === cmd.sourceId || (n.label || '').toLowerCase().trim() === srcQ);
+            const tgt = this.nodes.find(n => n.id === cmd.targetId || (n.label || '').toLowerCase().trim() === tgtQ);
             if (src && tgt) {
               this.edges = this.edges.filter(e => !(e.source === src.id && e.target === tgt.id));
             }
           } else if (cmd.sourceId) {
-            const node = this.nodes.find(n => n.id === cmd.sourceId || n.label === cmd.sourceId);
+            const srcQ = (cmd.sourceId || '').toLowerCase().trim();
+            const node = this.nodes.find(n => n.id === cmd.sourceId || (n.label || '').toLowerCase().trim() === srcQ);
             if (node) {
               this.edges = this.edges.filter(e => e.source !== node.id && e.target !== node.id);
             }
@@ -1294,9 +1361,16 @@ export class ModelerComponent implements OnInit, OnDestroy {
           if (cmd.edgeId) {
             e = this.edges.find(e => e.id === cmd.edgeId);
           } else if (cmd.sourceId && cmd.targetId) {
-            const src = this.nodes.find(n => n.id === cmd.sourceId || n.label === cmd.sourceId);
-            const tgt = this.nodes.find(n => n.id === cmd.targetId || n.label === cmd.targetId);
-            if (src && tgt) e = this.edges.find(e => e.source === src.id && e.target === tgt.id);
+            const srcQ = (cmd.sourceId || '').toLowerCase().trim();
+            const tgtQ = (cmd.targetId || '').toLowerCase().trim();
+            const src = this.nodes.find(n => n.id === cmd.sourceId || (n.label || '').toLowerCase().trim() === srcQ);
+            const tgt = this.nodes.find(n => n.id === cmd.targetId || (n.label || '').toLowerCase().trim() === tgtQ);
+            if (src && tgt) {
+              e = this.edges.find(e => 
+                (e.source === src.id && e.target === tgt.id) || 
+                (e.source === tgt.id && e.target === src.id)
+              );
+            }
           }
           if (e) {
             if (cmd.edgeLabel !== undefined) e.label = cmd.edgeLabel;
@@ -1310,11 +1384,14 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
         // === SWIMLANE OPERATIONS ===
         case 'move_node_to_lane': {
-          const node = cmd.nodeId
-            ? this.nodes.find(n => n.id === cmd.nodeId)
-            : this.nodes.find(n => n.label === cmd.label);
+          const query = (cmd.nodeId || cmd.label || '').toLowerCase().trim();
+          const node = this.nodes.find(n => 
+            (cmd.nodeId && n.id === cmd.nodeId) || 
+            (!cmd.nodeId && (n.label || '').toLowerCase().trim() === query)
+          );
+          const laneQ = (cmd.targetLaneName || '').toLowerCase().trim();
           const targetLane = this.nodes.find(n =>
-            n.type === 'swimlane' && n.label === cmd.targetLaneName
+            n.type === 'swimlane' && (n.label || '').toLowerCase().trim() === laneQ
           );
           if (node && targetLane) {
             // Carriles verticales: nodos dentro se colocan de arriba a abajo, centrados
@@ -1329,25 +1406,66 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
         case 'reorder_lanes': {
           if (cmd.laneOrder && cmd.laneOrder.length > 0) {
-            let currentX = 0;
+            const laneNodes = this.nodes.filter(n => n.type === 'swimlane');
+            
+            // 1. Mapear qué nodos y waypoints pertenecen a qué calle actualmente (ESTÁTICO)
+            const laneMap = new Map<string, { nodes: NodeData[], waypoints: {x: number, y: number}[] }>();
+            
+            laneNodes.forEach(lane => {
+              const oldX = lane.x;
+              const laneW = lane.width || 300;
+              
+              const nodesInLane = this.nodes.filter(n => {
+                if (n.type === 'swimlane') return false;
+                const nodeCenterX = n.x + (n.width || 160) / 2;
+                return nodeCenterX >= oldX - 5 && nodeCenterX <= oldX + laneW + 5;
+              });
+
+              const wpsInLane: {x: number, y: number}[] = [];
+              this.edges.forEach(e => {
+                if (e.waypoints) {
+                  e.waypoints.forEach(wp => {
+                    if (wp.x >= oldX - 5 && wp.x <= oldX + laneW + 5) {
+                      wpsInLane.push(wp);
+                    }
+                  });
+                }
+              });
+
+              laneMap.set(lane.label || '', { nodes: nodesInLane, waypoints: wpsInLane });
+            });
+
+            // 2. Ejecutar el movimiento basado en el mapeo previo
+            let nextX = 0;
             for (const laneName of cmd.laneOrder) {
-              const lane = this.nodes.find(n => n.type === 'swimlane' && n.label === laneName);
-              if (lane) {
-                const oldX = lane.x;
-                const laneW = lane.width || 300;
-                const deltaX = currentX - oldX;
-                lane.x = currentX;
+              const lane = laneNodes.find(n => n.label === laneName);
+              const mapping = laneMap.get(laneName);
+              
+              if (lane && mapping) {
+                const deltaX = nextX - lane.x;
+                
+                // Mover calle
+                lane.x = nextX;
                 lane.y = 0;
-                // Move all nodes inside this lane
-                this.nodes
-                  .filter(n =>
-                    n.type !== 'swimlane' &&
-                    n.x >= oldX && n.x < oldX + laneW &&
-                    n.y >= lane.y && n.y <= lane.y + (lane.height || 520)
-                  )
-                  .forEach(n => n.x += deltaX);
-                currentX += laneW;
+
+                // Mover sus nodos hijos
+                mapping.nodes.forEach(n => n.x += deltaX);
+                
+                // Mover sus waypoints
+                mapping.waypoints.forEach(wp => wp.x += deltaX);
+
+                nextX += (lane.width || 300);
               }
+            }
+
+            // 3. Sincronizar cambios
+            if (this.socketService && this.modelingId) {
+              this.socketService.sendUpdate(this.modelingId, {
+                nodes: this.nodes,
+                edges: this.edges,
+                senderId: this.socketService.currentUserId,
+                timestamp: Date.now()
+              });
             }
           }
           break;
@@ -1467,6 +1585,20 @@ export class ModelerComponent implements OnInit, OnDestroy {
             this.applyViewBox();
           }
           break;
+
+        case 'navigate':
+          if (cmd.targetPath !== undefined) {
+            this.message.loading(`Navegando a: ${cmd.targetPath}...`);
+            setTimeout(() => {
+              this.router.navigate([cmd.targetPath]);
+            }, 1500);
+          }
+          break;
+
+        case 'open_settings':
+          this.showSettings = true;
+          this.message.info('Abriendo panel de ajustes...');
+          break;
       }
     }
     this.checkAndExpandLanes();
@@ -1487,9 +1619,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
         const transcript = event.results[0][0].transcript;
         this.aiInput = transcript;
         this.isListening = false;
-        // Se borró this.sendAiCommand() para permitir al usuario revisar/modificar el texto
+        // Auto-enviar al terminar de hablar para mayor velocidad
+        setTimeout(() => this.sendAiCommand(), 300);
       };
-      this.recognition.onend = () => { this.isListening = false; };
+      this.recognition.onend = () => { 
+        this.isListening = false; 
+      };
       this.recognition.onerror = () => { this.isListening = false; };
     }
   }
@@ -1561,11 +1696,16 @@ export class ModelerComponent implements OnInit, OnDestroy {
         this.assistantSubscriptions.push(
           this.geminiLive.isConnected$.subscribe(v => this.assistantConnected = v)
         );
+        this.assistantSubscriptions.push(
+          this.geminiLive.commands$.subscribe(cmds => {
+            this.executeAiCommands(cmds);
+          })
+        );
       }
 
       try {
         await this.geminiLive.connect();
-        this.message.success('Tonny conectado');
+        this.message.success('Guía Personal conectado');
         
         this.visionInterval = setInterval(() => {
           if (this.assistantConnected) {
@@ -1597,10 +1737,11 @@ export class ModelerComponent implements OnInit, OnDestroy {
     const query = this.assistantInput.trim();
     if (!query || this.assistantThinking) return;
     this.assistantInput = '';
-    this.assistantHistory.push({ role: 'user', content: query });
     this.assistantThinking = true;
     this.scrollAssistantToBottom();
     
+    // Siempre actualizar contexto antes de enviar
+    this.geminiLive.setDiagramContext(this.nodes, this.edges);
     this.geminiLive.sendText(query);
   }
 

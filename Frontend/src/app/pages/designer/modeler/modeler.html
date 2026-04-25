@@ -9,32 +9,34 @@
         </svg>
       </div>
       <div class="title-info">
-        <h4 nz-typography>Diseño #{{designId?.slice(-6)}}</h4>
+
         <span class="status-tag" *ngIf="!isReadOnly">
           <span class="autosave-dot"></span> Autoguardado en tiempo real
         </span>
       </div>
-    </div>
 
-    <!-- Connected users badge (Canva-style pill) -->
-    <div class="connected-badge" *ngIf="connectedUsers > 0">
-      <div class="users-pill">
-        <div class="avatars-stack">
-          <div class="user-avatar" *ngFor="let i of [].constructor(connectedUsers > 4 ? 4 : connectedUsers); let idx = index"
-               [style.background]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][idx % 5]"
-               [style.zIndex]="10 - idx"
-               [style.marginLeft.px]="idx === 0 ? 0 : -10">
-            {{ ['A','B','C','D','E'][idx % 5] }}
+      <!-- Connected users badge moved here -->
+      <div class="connected-badge" *ngIf="connectedUsers > 0 && !isReadOnly" style="margin-left: 20px;">
+        <div class="users-pill">
+          <div class="avatars-stack">
+            <div class="user-avatar" *ngFor="let i of [].constructor(connectedUsers > 4 ? 4 : connectedUsers); let idx = index"
+                 [style.background]="'hsl(' + (idx * 137.5) + ', 70%, 50%)'"
+                 [style.margin-left]="idx === 0 ? '0' : '-10px'"
+                 [style.z-index]="10 - idx">
+              {{ ['A','B','C','D'][idx] || '?' }}
+            </div>
+            <div class="more-avatars" *ngIf="connectedUsers > 4">+{{connectedUsers - 4}}</div>
           </div>
-          <div class="more-avatars" *ngIf="connectedUsers > 4">+{{connectedUsers - 4}}</div>
+          <span class="pill-text">{{connectedUsers}} en línea</span>
         </div>
-        <span class="pill-text">{{ connectedUsers }} en línea</span>
       </div>
     </div>
 
+
+
     <div class="header-right">
       <!-- DESIGNER TOOLS -->
-      <nz-space *ngIf="!isReadOnly">
+      <nz-space *ngIf="!isReadOnly" nzSize="middle">
         <button nz-button nzType="text" (click)="undo()" nz-tooltip nzTooltipTitle="Deshacer (Ctrl+Z)">
           <span nz-icon nzType="undo"></span>
         </button>
@@ -76,6 +78,9 @@
         <button nz-button [class.ai-active]="showAiPanel" class="ai-btn" (click)="toggleAiPanel()" nz-tooltip nzTooltipTitle="Asistente IA (Groq)">
           <span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 4px;"></span> IA
         </button>
+        <button nz-button [class.ai-active]="showAssistantPanel" class="ai-btn" (click)="toggleAssistant()" nz-tooltip nzTooltipTitle="Guía Personal (ElevenLabs)">
+          <span nz-icon nzType="audio" nzTheme="outline" style="margin-right: 4px;"></span> Guía Personal
+        </button>
         <button nz-button nzType="text" (click)="speakLastAi()" nz-tooltip nzTooltipTitle="Leer respuesta IA (ElevenLabs)">
           <span nz-icon nzType="sound" nzTheme="fill" style="color: #64748b;"></span>
         </button>
@@ -106,42 +111,24 @@
           <div class="icon-circle start"></div> Inicio
         </div>
         <div class="palette-item" (click)="addNode('end')">
-          <div class="icon-circle end"></div> Fin (Flujo)
-        </div>
-        <div class="palette-item" (click)="addNode('activity_final')">
-          <div class="icon-circle final"></div> Fin (Actividad)
-        </div>
-        <div class="palette-item" (click)="addNode('flow_final')">
-          <div class="icon-circle flow-final"></div> Nodo Final Flujo
+          <div class="icon-circle end"></div> Fin
         </div>
 
         <p class="group-label">TAREAS</p>
         <div class="palette-item" (click)="addNode('activity')">
           <div class="icon-rect"></div> Actividad / Tarea
         </div>
-        <div class="palette-item" (click)="addNode('subprocess')">
-          <div class="icon-rect sub"></div> Subproceso
-        </div>
 
         <p class="group-label">COMPUERTAS</p>
         <div class="palette-item" (click)="addNode('decision')">
           <div class="icon-diamond"></div> Decisión / Merge
         </div>
-        <div class="palette-item" (click)="addNode('fork')">
-          <div class="icon-bar"></div> Fork / Join
-        </div>
 
-        <p class="group-label">MENSAJERÍA</p>
-        <div class="palette-item" (click)="addNode('signal_send')">
-          <div class="icon-signal send"></div> Enviar Señal
-        </div>
-        <div class="palette-item" (click)="addNode('signal_receive')">
-          <div class="icon-signal receive"></div> Recibir Señal
-        </div>
 
-        <p class="group-label">ANOTACIONES</p>
-        <div class="palette-item" (click)="addNode('note')">
-          <span nz-icon nzType="form"></span> Nota / Comment
+<p class="group-label">CONEXIONES</p>
+        <div class="palette-item flow" [class.active]="isConnectingMode" (click)="toggleConnectionMode()">
+          <span nz-icon nzType="arrow-right" style="font-size: 16px;"></span>
+          {{ isConnectingMode ? '✓ ACTIVO' : 'Flujo de Secuencia' }}
         </div>
 
         <p class="group-label">DATOS</p>
@@ -149,11 +136,7 @@
           <span nz-icon nzType="database"></span> Almacén de Datos
         </div>
 
-        <p class="group-label">CONEXIONES</p>
-        <div class="palette-item flow" [class.active]="isConnectingMode" (click)="toggleConnectionMode()">
-          <span nz-icon nzType="arrow-right" style="font-size: 16px;"></span>
-          {{ isConnectingMode ? '✓ ACTIVO' : 'Flujo de Secuencia' }}
-        </div>
+        
 
         <div class="palette-tip" *ngIf="isConnectingMode">
           <p>Clic en origen → Clic en destino</p>
@@ -368,21 +351,68 @@
         </g>
 
         <!-- LAYER 4: COLLABORATIVE CURSORS -->
-        <g *ngFor="let cursor of otherCursors | keyvalue; trackBy: trackById; let idx = index" class="collaborative-cursor">
-          <path d="M 0 0 L 16 16 L 8 16 L 0 24 Z"
-                [attr.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][0 % 5]"
-                [attr.transform]="'translate(' + cursor.value.x + ',' + cursor.value.y + ')'" />
-          <text [attr.x]="cursor.value.x + 12" [attr.y]="cursor.value.y + 24"
-                class="cursor-label" [style.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][idx % 5]">
-            Participante
-          </text>
-        </g>
+        <ng-container *ngIf="!isReadOnly">
+          <g *ngFor="let cursor of otherCursors | keyvalue; trackBy: trackById; let idx = index" class="collaborative-cursor">
+            <path d="M 0 0 L 16 16 L 8 16 L 0 24 Z"
+                  [attr.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][0 % 5]"
+                  [attr.transform]="'translate(' + cursor.value.x + ',' + cursor.value.y + ')'" />
+            <text [attr.x]="cursor.value.x + 12" [attr.y]="cursor.value.y + 24"
+                  class="cursor-label" [style.fill]="['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'][idx % 5]">
+              Participante
+            </text>
+          </g>
+        </ng-container>
       </svg>
     </nz-content>
 
 
     <!-- ======================== RIGHT PANEL (PROPS OR EXECUTION) ======================== -->
     <nz-sider nzWidth="360px" nzTheme="light" class="right-sider" style="display: block;">
+
+      <!-- INTEGRATED AI PANEL (Only for Designer) -->
+      <div class="ai-sidebar-integrated" *ngIf="!isReadOnly && showAiPanel">
+        <div class="ai-sidebar-header">
+          <span><span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 6px;"></span>Comandos IA</span>
+          <button (click)="showAiPanel = false" class="ai-close-mini">✕</button>
+        </div>
+        <div class="ai-sidebar-body">
+          <div class="ai-message-mini" *ngIf="aiLastMessage" [class.loading]="aiLoading">{{ aiLastMessage }}</div>
+          <div class="ai-input-group">
+            <input [(ngModel)]="aiInput" placeholder="Comando..." (keydown.enter)="sendAiCommand()" [disabled]="aiLoading" />
+            <div class="ai-action-btns">
+              <button class="ai-mini-btn voice" [class.active]="isListening" (click)="toggleVoice()">
+                <span nz-icon [nzType]="isListening ? 'pause-circle' : 'audio'"></span>
+              </button>
+              <button class="ai-mini-btn send" (click)="sendAiCommand()" [disabled]="aiLoading || !aiInput">
+                <span nz-icon nzType="arrow-right"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INTEGRATED VOICE ASSISTANT (Only for Designer) -->
+      <div class="assistant-sidebar-integrated" *ngIf="!isReadOnly && showAssistantPanel">
+        <div class="assistant-header-mini">
+          <div class="assistant-status-mini">
+            <div class="pulse-dot" [class.active]="assistantListening || assistantSpeaking"></div>
+            <span>Guía Personal</span>
+          </div>
+          <button class="close-btn-mini" (click)="showAssistantPanel = false">✕</button>
+        </div>
+        <div class="assistant-chat-mini" #assistantChatScroll>
+          <div *ngFor="let msg of assistantHistory" class="chat-bubble-mini" [class.user]="msg.role === 'user'">
+            {{ msg.content }}
+          </div>
+          <div *ngIf="assistantThinking" class="chat-bubble-mini thinking">...</div>
+        </div>
+        <div class="assistant-footer-mini">
+          <textarea nz-input [(ngModel)]="assistantInput" placeholder="Habla o escribe..." [nzAutosize]="{ minRows: 1, maxRows: 2 }" (keydown.enter)="$event.preventDefault(); sendAssistantQuery()"></textarea>
+          <button class="mic-btn-mini" [class.active]="assistantListening" (click)="toggleAssistantVoice()">
+            <span nz-icon [nzType]="assistantListening ? 'pause-circle' : 'audio'"></span>
+          </button>
+        </div>
+      </div>
 
       <!-- DESIGNER: PROPERTIES BODY -->
       <div *ngIf="!isReadOnly" class="props-body">
@@ -706,93 +736,6 @@
 
 <!-- AI/ASSISTANT PANELS (Only for Designer) -->
 <ng-container *ngIf="!isReadOnly">
-  <!-- AI FLOATING PANEL -->
-  <div class="ai-panel" *ngIf="showAiPanel">
-    <div class="ai-panel-header">
-      <span><span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 6px;"></span>Experto BPMN · <small>IA</small></span>
-      <button (click)="showAiPanel = false" class="ai-close">✕</button>
-    </div>
-    <div class="ai-panel-body">
-      <div class="ai-message" *ngIf="aiLastMessage" [class.loading]="aiLoading">{{ aiLastMessage }}</div>
-      <div class="ai-input-row">
-        <input id="ai-input" [(ngModel)]="aiInput" placeholder="Comando..." (keydown.enter)="sendAiCommand()" [disabled]="aiLoading" />
-        <button class="ai-voice-btn" [class.active]="isListening" (click)="toggleVoice()" nz-tooltip nzTooltipTitle="Dictar por voz">
-          <span nz-icon [nzType]="isListening ? 'pause-circle' : 'audio'" nzTheme="outline"></span>
-        </button>
-        <button class="ai-send-btn" (click)="sendAiCommand()" [disabled]="aiLoading">
-          <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- VOICE ASSISTANT FAB -->
-  <div class="assistant-fab" (click)="toggleAssistant()" [class.active]="showAssistantPanel">
-    <span *ngIf="!assistantListening">🎧</span>
-    <span *ngIf="assistantListening">🔴</span>
-  </div>
-
-  <!-- ASSISTANT PANEL -->
-  <div class="assistant-panel" *ngIf="showAssistantPanel">
-    <div class="assistant-header">
-      <div class="assistant-status">
-        <div class="pulse-dot" [class.active]="assistantListening || assistantSpeaking"></div>
-        <div>
-          <div class="assistant-title-main">Asistente BPMN</div>
-          <div class="assistant-subline">
-            {{ assistantListening ? 'Escuchando...' : (assistantConnected ? 'Conectado' : 'Modo local') }}
-          </div>
-        </div>
-      </div>
-      <button class="close-btn" (click)="showAssistantPanel = false">✕</button>
-    </div>
-
-    <div class="assistant-toolbar">
-      <span class="status-chip" [class.online]="assistantConnected">{{ assistantConnected ? 'Cloud' : 'Local' }}</span>
-      <span class="status-chip" [class.active]="assistantListening">{{ assistantListening ? 'Mic ON' : 'Mic OFF' }}</span>
-      <span class="status-chip" [class.active]="assistantSpeaking">{{ assistantSpeaking ? 'Hablando' : 'Silencio' }}</span>
-    </div>
-
-    <div class="assistant-chat" #assistantChatScroll>
-      <div *ngFor="let msg of assistantHistory" class="chat-bubble" [class.user]="msg.role === 'user'">
-        {{ msg.content }}
-      </div>
-      <div *ngIf="assistantThinking" class="chat-bubble assistant-thinking">Pensando...</div>
-    </div>
-
-    <div class="assistant-transcript" *ngIf="assistantTranscript && assistantListening">
-      <span>Transcripción:</span> {{ assistantTranscript }}
-    </div>
-
-    <div class="assistant-quick-actions">
-      <button class="quick-btn" (click)="assistantInput='Hola, ¿me ayudas a mejorar este flujo?'">Saludar</button>
-      <button class="quick-btn" (click)="assistantInput='¿Ves errores lógicos en el diagrama actual?'">Auditar lógica</button>
-      <button class="quick-btn" (click)="assistantInput='Sugiere mejoras de paralelismo y cuellos de botella'">Sugerir mejoras</button>
-    </div>
-
-    <div class="assistant-footer">
-      <div class="mode-toggle">
-        <button nz-button nzType="text" size="small"
-                [class.active]="continuousListening"
-                (click)="toggleContinuousMode()">
-          Auto-escucha {{ continuousListening ? 'ON' : 'OFF' }}
-        </button>
-      </div>
-      <div class="input-container">
-        <textarea nz-input [(ngModel)]="assistantInput"
-                  placeholder="Escribe o habla..."
-                  [nzAutosize]="{ minRows: 1, maxRows: 3 }"
-                  (keydown.enter)="$event.preventDefault(); sendAssistantQuery()"
-                  [disabled]="assistantThinking"></textarea>
-        <button class="send-btn" (click)="sendAssistantQuery()"
-                [disabled]="assistantThinking || !assistantInput.trim()">
-          {{ assistantThinking ? '⏳' : '→' }}
-        </button>
-      </div>
-    </div>
-  </div>
-</ng-container>
-
 <!-- SEARCH PANEL (Find & Zoom) -->
 <div class="search-panel" *ngIf="showSearchPanel">
   <div class="search-panel-header">

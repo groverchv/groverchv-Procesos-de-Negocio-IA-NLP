@@ -16,7 +16,7 @@ export interface DiagramCommand {
     | 'clear_all'
     | 'group_nodes' | 'ungroup_nodes' | 'copy_paste_nodes' | 'apply_template' | 'select_nodes'
     | 'focus_node' | 'zoom_canvas' | 'zoom_fit' | 'pan_canvas' | 'expand_subprocess' | 'collapse_subprocess'
-    | 'analyze_bottlenecks' | 'simulate_load' | 'clear_lane';
+    | 'analyze_bottlenecks' | 'simulate_load' | 'clear_lane' | 'navigate' | 'open_settings';
   // Node fields
   nodeType?: string;
   nodeId?: string;
@@ -27,6 +27,7 @@ export interface DiagramCommand {
   width?: number;
   height?: number;
   fontSize?: number;
+  nodeColor?: string;
 
   policy?: string;
   responsible?: string;
@@ -60,6 +61,8 @@ export interface DiagramCommand {
   zoomLevel?: number;
   panX?: number;
   panY?: number;
+  // Navigation
+  targetPath?: string;
 }
 
 export interface IaResponse {
@@ -88,6 +91,7 @@ export class IaService {
   private get API_KEY(): string {
     try {
       const config = JSON.parse(localStorage.getItem('bpmnflow_config') || '{}');
+      // Usando la clave proporcionada por el usuario para activación inmediata
       return config.groqKey || '';
     } catch { return ''; }
   }
@@ -95,6 +99,17 @@ export class IaService {
     const key = this.API_KEY.trim();
     return key.length > 8 && !/^YOUR_/i.test(key);
   }
+  private static readonly VERBS = {
+    CREATE: /\b(agrega|añade|crea|inserta|pon|ponme|coloca|genera|haz|mete|dame|plantea|proyecta|instala|dibuja|traza|abre|dispone|sitúa|situa|arm[ao]|construy|fabric[ao]|diseñ[ao]|desarroll[ao]|fund[ao]|mont[ao]|establec|inicia|form[ao]|forj[ao]|origin[ao]|invent[ao]|agreguemos|añadamos|creemos|insertemos|pongamos|metamos|dibujemos|diseñemos|montemos)\b/i,
+    DELETE: /\b(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra|cargate|revienta|mata|funde|tumba|limpia|arrasa|pela|bota|deshaz|borralo|eliminemos|borremos|quitemos|removamos|matemos|limpiemos)\b/i,
+    UPDATE: /\b(renombr[ae]|cambi[ae]|modific[ae]|actualiz[ae]|reemplaz[ae]|poner\s+nombre|ponle\s+nombre|llama(?:r|le|la)?|rectifica|ajusta|perfecciona|edita|reforma|altera|bautiza|titula|renombremos|cambiemos|modifiquemos|actualicemos|bauticemos|titulemos)\b/i,
+    MOVE: /\b(muev[aeo]|mover|traslad[aeo]|pas[a|e|o|ar]|llev[a|e|o|ar]|cambi[a|e|o]\s+de\s+(?:calle|zona|carril|area)|acomod[aeo]|ubic[aeo]|situ[aeo]|desplaz[aeo]|reubic[aeo]|empuj[aeo]|mand[aeo]|transfer|transfier|transport|migr[aeo]|movamos|traslademos|pasemos|llevemos|cambiemos|acomodemos|ubiquemos|situemos|desplacemos|posiciona|pon)\b/i,
+    CONNECT: /\b(conecta(?:r|le|la|los|las|mos|dos)?|relaciona(?:r|le|la|los|las|mos|dos)?|une(?:r|le|la|los|las|mos|dos)?|vincula(?:r|le|la|los|las|mos|dos)?|enlaza(?:r|le|la|los|las|mos|dos)?|asocia(?:r|le|la|los|las|mos|dos)?|liga(?:r|le|la|los|las|mos|dos)?|junta(?:r|le|la|los|las|mos|dos)?|tira(?:le|la|mos)?|pasa(?:lo|la|le|mos)?|manda(?:lo|la|le|mos)?|manda\s+a|pasa\s+a|tira.*linea|tira.*línea|apunta(?:le)?\s+a|dirige|encadena|amarra|conforma|concatena|engancha|conectemos|relacionemos|unamos|vinculemos|enlacemos|asociemos|liguemos|juntemos)\b/i,
+    REORDER: /\b(ordena|reordena|organiza|acomoda|distribuye|reorganiza|alinea|nivela|estratifica|jerarquiza|desplaza|posiciona|mueve|pon|pasa)\b/i,
+    STYLE: /\b(agranda|aumenta|crece|sube|maximiza|achica|reduce|disminuye|baja|minimiza|ancha|ampli|engorda|ensancha|angosta|estrech|delgaza|engrosa|agros(?:a|e)|gruesa|pinta|colorea|pon|cambia|haz|ponle|redimensiona|ajusta|setea)\b/i,
+    APPEND: /\b(agrega|añade|pon|ponle|inserta|suma|adiciona|incluye|anexa|completa)\s+.*(texto|caracter|signo|letra|palabra|frase|contenido|interrogacion|interrogación|pregunta)\b/i
+  };
+
   private static readonly CONFIRM_WORDS = /\b(si|sí|dale|procesa|hazlo|aplicar|aplícalo|ejecuta)\b/i;
   private static readonly IMPROVEMENT_WORDS = /\b(mejorar|mejora|optimiza|optimizar|ayudame a mejorar|ayúdame a mejorar)\b/i;
   private static readonly INTERRUPT_WORDS = /\b(alto|espera|cancela|cancelar|deten|detener)\b/i;
@@ -103,19 +118,7 @@ export class IaService {
 
   processCommand(userMessage: string, currentNodes: NodeData[], currentEdges: EdgeData[]): Observable<IaResponse> {
 
-    // If no valid API key, use local fallback directly (no 401 errors)
-    if (!this.hasValidApiKey) {
-      const fallback = this.localFallback(userMessage, currentNodes);
-      if (fallback.commands.length > 0) {
-        return of(fallback);
-      }
-      return of({
-        commands: [],
-        explanation: fallback.explanation || 'No logré entender el comando localmente. Modifica tu frase o usa tu API Key en Configuración para activar comprensión en la nube.',
-        umlValidation: undefined
-      });
-    }
-
+    // Always attempt cloud processing first, the error handler will handle missing keys
     const nodesContext = JSON.stringify(currentNodes.map(n => ({
       id: n.id, type: n.type, label: n.label, x: Math.round(n.x), y: Math.round(n.y),
       width: n.width, height: n.height, fontSize: n.fontSize
@@ -128,202 +131,18 @@ export class IaService {
 
     const lanes = currentNodes.filter(n => n.type === 'swimlane');
     const lanesContext = lanes.map(l => `"${l.label}" (id=${l.id}, x=${Math.round(l.x)}, w=${l.width}, h=${l.height})`).join(', ');
-    const systemPrompt = `[ROL Y OBJETIVO PRINCIPAL]
-Eres el Arquitecto de Software y Motor de Orquestación de Diagramas (UML/BPMN). Tu objetivo principal es democratizar la creación de diagramas: debes interpretar el lenguaje natural, coloquial y no técnico de usuarios principiantes, y traducir sus deseos en comandos estructurados que el sistema pueda renderizar. Sé extremadamente flexible; tu trabajo es hacer que las cosas funcionen en el lienzo, sin importar cómo el usuario lo pida.
-
-[REGLAS DE COMPORTAMIENTO Y LENGUAJE (NLP)]
-1. Adaptabilidad para personas técnicas: Procesar comandos con jerga especializada de ingeniería y arquitectura de software (ej. "Instancia un Gateway XOR y conéctalo a un endpoint").
-2. Adaptabilidad para personas no técnicas: Interpretar lenguaje coloquial o de negocio de usuarios que no conocen el tema (ej. "Pon una decisión aquí y si dicen que no, mándalo de vuelta").
-3. Vocabulario y verbos extendidos: Reconocer un diccionario masivo de sinónimos para que múltiples palabras (crear, hacer, generar, dibujar, poner) disparen la acción correcta sin fallar.
-4. Procesamiento Narrativo Integral: Capacidad de ejecutar múltiples acciones lógicas a partir de un solo comando largo (ej. "Crea una zona de ventas, mete ahí el cobro y conéctalo al fin").
-
-[ESTÁNDARES Y NORMATIVAS OBLIGATORIAS]
-- Estándar de Calidad (Los 7): La IA debe validar que todo lo generado cumpla con los 7 atributos de calidad de la norma ISO (Funcionalidad, Fiabilidad, Usabilidad, Eficiencia, Mantenibilidad, Portabilidad y Seguridad).
-- Estándar de Codificación (camelCase): Absolutamente todo código generado, nombre de variable, propiedad y payload JSON emitido por la IA debe estar formateado estrictamente en camelCase (ej. crearNuevaCalle, moverComponente).
-
-[CONCIENCIA DEL ECOSISTEMA]
-Eres el motor de acción estructural. Conoce tus límites dentro de la plataforma técnica:
-- Asistente de Chat: Se encarga de enseñar y responder dudas teóricas sobre BPMN.
-- Coach Virtual (Gemini Live): Se encarga del análisis en tiempo real por voz, detectando bucles y dando feedback hablado.
-Si el usuario requiere teoría pura o análisis de voz, ignora la acción en el lienzo y responde indicando que pueden consultar al Chat o al Coach Virtual. Tú concéntrate en manipular el lienzo.
-
-═══ ESTADO ACTUAL DEL DIAGRAMA ═══
-Nodos: \${nodesContext}
-Conexiones: \${edgesContext}
-Carriles (Swimlanes): [\${lanesContext}]
-
-═══ TIPOS DE NODOS DISPONIBLES ═══
-- activity: Tarea / Actividad (rectángulo redondeado) — alias: cuadrito, paso, caja, bloque, tarea
-- subprocess: Subproceso (rectángulo con ícono +)
-- decision: Compuerta Exclusiva XOR (rombo) — alias: pregunta, condición, filtro, rombo, si/no
-- parallel: Compuerta Paralela AND (rombo con +)
-- start: Nodo Inicial (círculo sólido) — alias: inicio, bolita, comienzo
-- end: Nodo Final (círculo con borde) — alias: fin, final, salida
-- activity_final: Actividad Nodo Final (círculo tipo "bullseye")
-- flow_final: Nodo Final del Flujo (círculo con X)
-- fork: Tenedor (barra vertical fina para ramificar flujos paralelos)
-- join: Unión / Merge (barra vertical fina para unir flujos paralelos)
-- signal_send: Envío de Señales (pentágono/flecha hacia la derecha)
-- signal_receive: Recepción de señal (pentágono con muesca a la izquierda)
-- note: Nota o Comentario (rectángulo con esquina doblada) — alias: nota, comentario, post-it
-- swimlane: Carril / Calle (columna vertical, título arriba y cuerpo hacia abajo) — alias: zona, área, calle, carril, sección
-- datastore: Almacén de Datos (cilindro) — alias: base de datos, almacén, disco
-
-═══ ACCIONES DISPONIBLES (mapea a estos 17 comandos) ═══
-
-1. add_node — Crear: Instanciar elementos nuevos en el lienzo a partir de texto o voz.
-   Campos: nodeType, label, x, y, width, height, fontSize
-
-2. delete_node — Eliminar: Borrar el componente del diagrama de forma segura.
-   Campos: nodeId o label (para buscar por nombre)
-
-3. update_node — Modificar: Alterar propiedades, cambiar tamaño de texto, agrandar/reducir componentes, cambiar color.
-   Campos: nodeId o label (para buscar), newLabel, x, y, width, height, fontSize, policy, nodeColor
-
-4. add_edge — Crear relación: Trazar una nueva línea conectora entre dos elementos.
-   Campos: sourceId, targetId, edgeLabel (guarda o texto), edgeStyle (solid|dashed), edgeColor
-   Lenguaje natural aceptado: conectar, relacionar, unir, vincular, enlazar, asociar, ligar, tirar línea, juntar, pasar a, mandar a
-
-5. delete_edge — Eliminar relación: Borrar la línea de conexión.
-   Campos: edgeId, o sourceId+targetId para buscar por extremos
-
-6. update_edge — Modificar relación: Cambiar grosor, poner texto (ej. [Sí]/[No]), mover texto, cambiar color, mover (waypoints).
-   Campos: edgeId (o sourceId+targetId), edgeLabel, edgeStyle, edgeColor, edgeThickness, edgeLabelPosition ({x,y}), waypoints ([{x,y}])
-
-7. move_node_to_lane — Mover componentes a otras calles: Reasignar visual y lógicamente una tarea a un carril diferente.
-   Campos: nodeId o label, targetLaneName (nombre del carril destino)
-
-8. reconnect_edge — Mover relación entre actividades: Desconectar de un elemento inicial/final y conectarlo a uno distinto.
-   Campos: edgeId (o sourceId+targetId actual), newSourceId, newTargetId
-
-9. reorder_lanes — Mover las calles en distintas posiciones: Reordenar el orden de los carriles.
-   Campos: laneOrder (array de nombres de carriles en el orden deseado)
-
-10. batch_update_style — Cambiar estilo en lote a todos los nodos de un tipo.
-    Campos: targetType (tipo de nodo), fontSize, width, height
-
-11. auto_layout — Auto-Layout (Posicionamiento Inteligente): Calcular automáticamente las coordenadas para organizar los nodos manteniendo un espaciado simétrico.
-    (sin campos adicionales, el frontend optimiza posiciones)
-
-12. clear_all — Vaciar el diagrama completo
-
-13. select_nodes — Selección Múltiple: Seleccionar varios componentes al mismo tiempo.
-    Campos: nodeIds (array de strings con IDs o labels)
-
-14. group_nodes — Agrupar: Envolver un conjunto de actividades dentro de un contenedor o Subproceso.
-    Campos: nodeIds (array de IDs o labels), label (nombre del grupo/subproceso)
-
-15. ungroup_nodes — Desagrupar: Sacar actividades de un contenedor.
-    Campos: nodeId o label (del grupo a deshacer)
-
-16. copy_paste_nodes — Copiar y Pegar: Duplicar fragmentos enteros del flujo.
-    Campos: nodeIds (array), offsetX, offsetY
-
-17. apply_template — Aplicación de Plantillas: Insertar flujos prefabricados completos.
-    Campos: templateName
-
-18. focus_node — Búsqueda y Foco (Find & Zoom): Encontrar un nodo, centrar la cámara y resaltarlo.
-    Campos: nodeId o label
-
-19. zoom_canvas — Control de Zoom: Acercar o alejar el lienzo.
-    Campos: zoomLevel (número para escala)
-
-20. zoom_fit — Acomodar diagrama: Ajustar la vista para que todo el diagrama entre en pantalla (acomodar / encajar todo).
-
-21. pan_canvas — Control de Paneo: Desplazar la vista del lienzo.
-    Campos: panX, panY
-
-21. expand_subprocess / collapse_subprocess — Nivel de Detalle: Expandir o contraer subprocesos (Drill-down).
-    Campos: nodeId o label
-
-22. analyze_bottlenecks / simulate_load — Auditoría Analítica: Analizar flujos para detectar cuellos de botella o simular carga.
-
-23. clear_lane — Vaciar carril: Elimina todos los componentes y tareas que están dentro de un carril (calle) específico, dejando el carril vacío pero sin borrar el carril en sí. Úsalo cuando el usuario pida "borrar los componentes de la calle X".
-    Campos: targetLaneName (nombre del carril a vaciar)
-
-═══ INTELIGENCIA, MACRO-OPERACIONES Y ENTRENADOR ═══
-- Generación Predictiva de Formularios: Crear dinámicamente los campos necesarios basándose en el nombre de la actividad.
-- Corrección UML y Errores Lógicos: Prevenir errores estructurales, alertar sobre nodos huérfanos, bucles infinitos y caminos sin salida (usa umlValidation).
-- Sugerir mejoras: Actuar de forma proactiva proponiendo optimizaciones estructurales si el flujo es muy largo.
-- Asistente Virtual: Si el usuario pide ayuda de cómo usar el software, guía paso a paso. Tienes memoria de contexto multimodal.
-- Sincronización en Tiempo Real: Tus cambios se sincronizarán por WebSockets a todos los usuarios; asume un rol de árbitro si hay ambigüedad.
-
-═══ REGLA DE CONFIRMACIÓN ═══
-- Si el usuario pide optimización global o mejora estructural compleja, NO mutar todavía.
-- Responde con commands: [] y en user_feedback pregunta: "¿Quieres que aplique estos cambios por ti?"
-- Solo ejecutar cambios masivos cuando el usuario confirme (sí, procesa, hazlo, dale).
-
-═══ FORMATO DE RESPUESTA (JSON ESTRICTO) ═══
-Responde SIEMPRE y ÚNICAMENTE con JSON válido. Sin markdown, sin texto fuera del JSON.
-
-{
-  "user_feedback": "Un mensaje empático, amigable y coloquial de máximo 2 líneas explicando lo que hiciste. Demuestra que entiendes el negocio.",
-  "commands": [
-    {
-      "action": "nombre_del_comando_exacto",
-      "nodeType": "tipo_si_aplica",
-      "nodeId": "id_si_aplica",
-      "label": "nombre_del_nodo",
-      "newLabel": "nuevo_nombre_si_aplica",
-      "x": 100,
-      "y": 200,
-      "width": 160,
-      "height": 80,
-      "fontSize": 12,
-      "sourceId": "id_o_label_origen",
-      "targetId": "id_o_label_destino",
-      "edgeLabel": "guarda_o_texto",
-      "edgeStyle": "solid",
-      "edgeColor": "#455a64",
-      "edgeThickness": 2,
-      "edgeLabelPosition": { "x": 10, "y": -10 },
-      "waypoints": [{ "x": 150, "y": 200 }],
-      "targetLaneName": "nombre_carril_destino",
-      "laneOrder": ["carril1", "carril2"],
-      "targetType": "tipo_de_nodo_para_batch",
-      "nodeIds": ["id1", "id2"],
-      "templateName": "patron_pasarela_pago",
-      "offsetX": 50,
-      "offsetY": 50,
-      "forms": [
-        { "label": "Nombre del Campo", "type": "text|number|date|select|file", "required": true }
-      ]
-    }
-  ],
-  "umlValidation": "advertencia UML de los 7 atributos ISO si aplica, o null"
-}
-
-Reglas Finales:
-1. "action" solo puede ser uno de los 22 comandos listados.
-2. Todo nombre de propiedad JSON debe estar ESTRICTAMENTE en camelCase.
-3. Si la instrucción no requiere manipular el diagrama, commands debe ser [].
-4. La respuesta debe ser parseable por JSON.parse().
-
-Formato alternativo TAMBIÉN aceptado (legacy):
-{
-  "assistant_speech": "texto",
-  "operations": [ { "action": "CREATE", "element_type": "node", "target_id": null, "payload": {} } ]
-}
-
-═══ EJEMPLOS ═══
-
-Usuario: "Ponme un cuadrito que diga Cobro"
-→ { "user_feedback": "¡Listo! Puse una actividad llamada Cobro.", "commands": [{ "action": "add_node", "nodeType": "activity", "label": "Cobro" }] }
-
-Usuario: "Crea una zona de ventas, mete ahí el cobro y mándalo al fin"
-→ { "user_feedback": "¡Hecho! Creé la zona Ventas, agregué Cobro dentro y lo conecté al Fin.", "commands": [
-  { "action": "add_node", "nodeType": "swimlane", "label": "Ventas", "x": 0, "y": 0, "width": 300, "height": 520 },
-  { "action": "add_node", "nodeType": "activity", "label": "Cobro", "x": 50, "y": 100 },
-  { "action": "add_edge", "sourceId": "Cobro", "targetId": "Fin", "edgeStyle": "solid" }
-] }
-
-Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos Sí a Procesar y No a Rechazo"
-→ { "user_feedback": "¡Perfecto! Puse la decisión ¿Aprobado? con sus dos caminos.", "commands": [
-  { "action": "add_node", "nodeType": "decision", "label": "¿Aprobado?", "x": 400, "y": 200 },
-  { "action": "add_edge", "sourceId": "Revisión", "targetId": "¿Aprobado?", "edgeStyle": "solid" },
-  { "action": "add_edge", "sourceId": "¿Aprobado?", "targetId": "Procesar", "edgeLabel": "[Sí]", "edgeStyle": "solid" },
-  { "action": "add_edge", "sourceId": "¿Aprobado?", "targetId": "Rechazo", "edgeLabel": "[No]", "edgeStyle": "solid" }
-] }`;
+    const systemPrompt = `Eres un motor de EJECUCIÓN de diagramas. Tu única tarea es devolver comandos JSON.
+NO converses. NO expliques. Solo genera la lista de acciones para modificar el diagrama según el usuario.
+ESTADO ACTUAL: Nodos: ${nodesContext}, Bordes: ${edgesContext}, Carriles: [${lanesContext}]
+ACCIONES:
+- add_node (nodeType, label, x, y)
+- delete_node (label)
+- update_node (label, newLabel, x, y, width, height)
+- add_edge (sourceId, targetId, edgeLabel)
+- delete_edge (sourceId, targetId)
+- move_node_to_lane (label, targetLaneName)
+- auto_layout, clear_all, zoom_fit, open_settings, navigate(targetPath)
+FORMATO: { "user_feedback": "Acción realizada", "commands": [{ "action": "...", ... }] }`;
 
     const headers = new HttpHeaders({
       'Content-Type': 'application/json',
@@ -331,13 +150,12 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     });
 
     const body = {
-      model: 'llama-3.3-70b-versatile',
+      model: 'llama-3.1-8b-instant',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
       ],
       temperature: 0,
-      max_tokens: 4096,
       response_format: { type: 'json_object' }
     };
 
@@ -349,12 +167,17 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
         return this.normalizeIaResponse(parsed, userMessage, currentNodes);
       }),
       catchError(err => {
-        console.error('[IA] Error calling Groq API:', err);
+        console.warn('[IA] Cloud path failed, attempting local fallback:', err.message);
         const fallback = this.localFallback(userMessage, currentNodes);
-        if (fallback.commands.length > 0) {
-          return of(fallback);
-        }
-        return throwError(() => new Error('Error communicating with AI: ' + (err.message || 'Unknown error')));
+        
+        let errorHint = '';
+        if (err.status === 401) errorHint = ' (Error 401: Revisa tu API Key de Groq)';
+        else if (err.status === 404) errorHint = ' (Error 404: Modelo no encontrado)';
+        
+        return of({
+          ...fallback,
+          explanation: `[Fallback Local] ${fallback.explanation}${errorHint}`
+        });
       })
     );
   }
@@ -554,22 +377,23 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     if (!cmd || typeof cmd !== 'object') return null;
 
     const actionAlias: Record<string, DiagramCommand['action']> = {
-      create_node: 'add_node',
-      remove_node: 'delete_node',
-      edit_node: 'update_node',
-      connect_nodes: 'add_edge',
-      remove_edge: 'delete_edge',
-      edit_edge: 'update_edge',
-      move_to_lane: 'move_node_to_lane',
-      relink_edge: 'reconnect_edge',
-      reorder_swimlanes: 'reorder_lanes',
-      style_batch: 'batch_update_style',
-      autolayout: 'auto_layout',
-      clear: 'clear_all'
+      create_node: 'add_node', remove_node: 'delete_node', edit_node: 'update_node',
+      connect_nodes: 'add_edge', remove_edge: 'delete_edge', edit_edge: 'update_edge',
+      move_to_lane: 'move_node_to_lane', relink_edge: 'reconnect_edge',
+      reorder_swimlanes: 'reorder_lanes', style_batch: 'batch_update_style',
+      autolayout: 'auto_layout', clear: 'clear_all'
     };
 
     const action = ((cmd.action && actionAlias[cmd.action as string]) || cmd.action) as DiagramCommand['action'];
     const fixed: DiagramCommand = { ...cmd, action };
+
+    // Resolver referencias de nodos para que coincidan EXACTAMENTE con el diagrama (ej. "cumple" -> "cumple?")
+    if (fixed.sourceId) fixed.sourceId = this.resolveNodeLabelFromReference(fixed.sourceId, currentNodes) || fixed.sourceId;
+    if (fixed.targetId) fixed.targetId = this.resolveNodeLabelFromReference(fixed.targetId, currentNodes) || fixed.targetId;
+    if (fixed.nodeId) fixed.nodeId = this.resolveNodeLabelFromReference(fixed.nodeId, currentNodes) || fixed.nodeId;
+    if (fixed.label && fixed.action !== 'add_node') {
+      fixed.label = this.resolveNodeLabelFromReference(fixed.label, currentNodes) || fixed.label;
+    }
 
     if (fixed.action === 'add_node' && fixed.nodeType === 'swimlane') {
       fixed.width = fixed.width || 300;
@@ -680,12 +504,47 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
         };
       }
 
+      if (IaService.VERBS.REORDER.test(normalizedStep)) {
+        // 1. Reordenamiento relativo: "mueve zona X después de zona Y"
+        const reorderMatch = normalizedStep.match(/(?:muev[ae]|desplaz[ae]|posicion[ae])\s+(?:la\s+)?(?:calle|zona|carril|area)\s+(.+?)\s+(?:después|despues|antes|atrás|atras|delante)\s+(?:de\s+)?(?:la\s+)?(?:calle|zona|carril|area)\s+(.+)/i);
+        if (reorderMatch?.[1] && reorderMatch?.[2]) {
+          const targetLane = this.resolveLaneFromReference(reorderMatch[1], currentNodes);
+          const refLane = this.resolveLaneFromReference(reorderMatch[2], currentNodes);
+          
+          if (targetLane && refLane) {
+            const laneNames = currentNodes.filter(n => n.type === 'swimlane').map(l => l.label || '');
+            const targetName = targetLane.label || '';
+            const refName = refLane.label || '';
+            const isAfter = /después|despues|atrás|atras/.test(reorderMatch[0]);
+            
+            const newOrder = laneNames.filter(n => n !== targetName);
+            const insertAt = isAfter ? newOrder.indexOf(refName) + 1 : newOrder.indexOf(refName);
+            newOrder.splice(insertAt, 0, targetName);
+            commands.push({ action: 'reorder_lanes', laneOrder: newOrder });
+            continue;
+          }
+        }
+
+        // 2. Reordenamiento por mención: "ordena las calles vendedor, sistema, cliente"
+        const laneNames = currentNodes.filter(n => n.type === 'swimlane').map(l => l.label || '');
+        const foundOrder = laneNames
+          .map(name => ({ name, idx: normalizedStep.indexOf(this.normalizeForSearch(name)) }))
+          .filter(x => x.idx >= 0)
+          .sort((a, b) => a.idx - b.idx)
+          .map(x => x.name);
+        
+        if (foundOrder.length >= 2) {
+           commands.push({ action: 'reorder_lanes', laneOrder: foundOrder });
+           continue;
+        }
+      }
+
       if (/limpiar|vaciar|borrar\s+todo|clear\s+all/.test(normalizedStep)) {
         commands.push({ action: 'clear_all' });
         continue;
       }
 
-      if (/auto\s*layout|autolayout|ordena|organiza|acomoda|distribuye/.test(normalizedStep)) {
+      if (/auto\s*layout|autolayout|acomoda|distribuye/.test(normalizedStep)) {
         commands.push({ action: 'auto_layout' });
         continue;
       }
@@ -693,6 +552,12 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
       const moveNode = this.tryParseMoveNode(step, simulatedNodes);
       if (moveNode) {
         commands.push(moveNode);
+        continue;
+      }
+
+      const reorderLanes = this.tryParseReorderLanes(step, simulatedNodes);
+      if (reorderLanes) {
+        commands.push(reorderLanes);
         continue;
       }
 
@@ -738,6 +603,12 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
         continue;
       }
 
+      const updateEdge = this.tryParseUpdateEdge(step, currentNodes);
+      if (updateEdge) {
+        commands.push(updateEdge);
+        continue;
+      }
+
       const styling = this.tryParseStyle(step, currentNodes);
       if (styling) {
         if (Array.isArray(styling)) commands.push(...styling);
@@ -758,19 +629,25 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
       }
     }
 
-    if (commands.length > 1) {
+    if (commands.length > 0) {
+      const first = commands[0];
+      let msg = 'Operación interpretada localmente.';
+      if (first.action === 'add_node') msg = `He añadido un componente de tipo ${first.nodeType} llamado "${first.label}".`;
+      if (first.action === 'delete_node') msg = `He eliminado el componente "${first.label}".`;
+      if (first.action === 'update_node') msg = `He actualizado las propiedades de "${first.label || first.nodeId}".`;
+      if (first.action === 'move_node_to_lane') msg = `He movido "${first.label}" a la calle ${first.targetLaneName}.`;
+      if (first.action === 'add_edge') msg = `He conectado "${first.sourceId}" con "${first.targetId}".`;
+
       return {
         commands,
-        explanation: 'Se procesó un lote de instrucciones en orden secuencial.',
+        explanation: commands.length > 1 ? 'Se procesó un lote de instrucciones en orden secuencial.' : msg,
         umlValidation: undefined
       };
     }
 
     return {
       commands,
-      explanation: commands.length > 0
-        ? 'Se aplicó una interpretación local del comando para mantener la operación.'
-        : 'No se pudo interpretar el comando con suficiente precisión.',
+      explanation: 'No se pudo interpretar el comando con suficiente precisión.',
       umlValidation: undefined
     };
   }
@@ -785,7 +662,8 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
       /por\s+favor/gi, /puedes/gi, /me\s+gustaria\s+que/gi, /me\s+gustaría\s+que/gi,
       /quisiera/gi, /haz\s+que/gi, /deberias\s+de/gi, /deberías\s+de/gi,
       /quiero\s+que/gi, /procede\s+a/gi, /favor\s+de/gi, /necesito\s+que/gi,
-      /\bahora\b/gi, /\bbien\b/gi, /\bbueno\b/gi, /\bmira\b/gi, /\boye\b/gi, /\balguna\b/gi
+      /\bahora\b/gi, /\bbien\b/gi, /\bbuen[oa]\b/gi, /\bmira\b/gi, /\boye\b/gi, /\balguna\b/gi,
+      /\bhasta\b/gi, /\bevento\b/gi
     ];
     noise.forEach(r => value = value.replace(r, ''));
     
@@ -829,7 +707,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private splitIntoSteps(message: string): string[] {
     return (message || '')
-      .split(/\s*(?:,|;|\by\b|\bluego\b|\bdespués\b|\bentonces\b|\by\s+luego\b|\bahora\b|\bal\s+tiro\b|\by\s+ahora\b)\s*/i)
+      .split(/\s*(?:,|;|\by\b|\bentonces\b|\bahora\b|\bal\s+tiro\b|\by\s+ahora\b)\s*/i)
       .map(s => s.trim())
       .filter(Boolean);
   }
@@ -853,15 +731,18 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     }
 
     const normStep = this.normalizeForSearch(step);
-    const asksActivity = /(actividad|tarea|task|cuadrit|cajit|bloque|paso)\b/i.test(normStep);
+    const nodeType = this.detectNodeType(step);
+    if (!nodeType) return null;
+
     const activityIdx = normStep.search(/(actividad|tarea|task|cuadrit|cajit|bloque|paso)\b/i);
+    const componentIdx = normStep.search(/(decision|decisión|merge|xor|pregunt|filtro|rombit|paralelo|parallel|fork|join|señal|senal|nota|note|comentario|datastore|inicio|start|fin|final|end)/i);
     const laneIdx = normStep.search(/(calle|carril|swimlane|zona|area|seccion|fila|banda|pasillo|pool|departamento|sector|estrato|nivel|columna)\b/i);
     
-    // Si menciona una calle antes que una actividad (Ej: "crea una calle con una actividad"), es una orden principal de calle.
-    const isPrimaryLane = laneIdx >= 0 && (activityIdx === -1 || laneIdx < activityIdx);
+    // Es una calle primaria SOLO si detectamos tipo swimlane y no hay otros componentes mencionados antes
+    const isPrimaryLane = (nodeType === 'swimlane') && (laneIdx >= 0) && (activityIdx === -1 || laneIdx < activityIdx) && (componentIdx === -1 || laneIdx < componentIdx);
 
-    // Caso prioritario: "agrega actividad/tarea en la calle/carril X"
-    if (asksActivity && !isPrimaryLane) {
+    // Caso prioritario: "agrega componente en la calle/carril X"
+    if (nodeType && nodeType !== 'swimlane') {
       const laneRef = this.parseLaneReference(step);
       if (laneRef) {
         const lane = this.resolveLaneFromReference(laneRef, currentNodes);
@@ -870,8 +751,8 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
           for (let i = 0; i < count; i++) {
              cmds.push({
                action: 'add_node',
-               nodeType: 'activity',
-               label: this.extractLabel(step, ['actividad', 'tarea', 'task']) || this.defaultLabelForNode('activity'),
+               nodeType: nodeType as any,
+               label: this.extractLabel(step, ['actividad', 'tarea', 'task', 'fin', 'inicio', 'decision']) || this.defaultLabelForNode(nodeType),
                x: (lane.x || 0) + 50 + (i * 20),
                y: this.getNextNodeYInLane(lane, currentNodes) + (i * 90)
              });
@@ -880,12 +761,6 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
         }
       }
     }
-
-    let nodeType = this.detectNodeType(step);
-    if (isPrimaryLane) {
-      nodeType = 'swimlane';
-    }
-    if (!nodeType) return null;
 
     if (nodeType === 'swimlane') {
       let label = this.extractLabel(step, ['calle', 'carril', 'swimlane', 'zona', 'area', 'seccion', 'fila', 'banda', 'pasillo', 'pool', 'departamento', 'sector', 'estrato', 'nivel', 'columna']) || 
@@ -954,7 +829,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
         for (let i = 0; i < count; i++) {
           cmds.push({
             action: 'add_node',
-            nodeType,
+            nodeType: nodeType || undefined,
             label: this.capitalize(label),
             x: (lane.x || 0) + 50 + (i * 20),
             y: this.getNextNodeYInLane(lane, currentNodes) + (i * 90)
@@ -968,7 +843,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     for (let i = 0; i < count; i++) {
       cmds.push({
         action: 'add_node',
-        nodeType,
+        nodeType: nodeType || undefined,
         label: this.capitalize(label)
       });
     }
@@ -994,7 +869,8 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private detectNodeType(step: string): string | null {
     const s = this.normalizeForSearch(step);
-    // Priorizar componentes operativos antes de interpretar "calle" como tipo.
+    
+    // 1. Componentes específicos primero
     if (/(actividad|tarea|task|cuadrit|cajit|bloque|paso)/.test(s)) return 'activity';
     if (/(subproceso|subprocess)/.test(s)) return 'subprocess';
     if (/(decision|decisión|merge|xor|pregunt|filtro|rombit|si\/no)/.test(s)) return 'decision';
@@ -1005,12 +881,14 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     if (/(señal|senal).*(recibir|receive)|signal\s*receive/.test(s)) return 'signal_receive';
     if (/(nota|note|comentario|post-?it)/.test(s)) return 'note';
     if (/(datastore|almacen|almacén|base\s*de\s*datos|disco)/.test(s)) return 'datastore';
-
-    if (/(swimlane|calle|carril|zona|area|seccion|bloque\s*horizontal|fila|banda|pista|callejón|callejon|pasillo|pool|departamento|sector|estrato|nivel|columna|contenedor)/.test(s)) return 'swimlane';
     if (/(inicio|start|bolit|comienzo|circulit|verde|comenzar|punto\s+de\s+partida|arranque)/.test(s)) return 'start';
     if (/(fin\s*\(flujo\)|fin\s*flujo|flow\s*final|circulo\s*doble|meta|objetivo)/.test(s)) return 'flow_final';
     if (/(fin\s*\(actividad\)|fin\s*actividad|activity\s*final|bloqueo|cierre)/.test(s)) return 'activity_final';
     if (/(\bfin\b|\bfinal\b|\bend\b|salida|terminar|concluir|rojo|parada)/.test(s)) return 'end';
+
+    // 2. Calles después (para evitar que "en la calle" sea detectado como creación de calle si hay otro componente)
+    if (/(swimlane|calle|carril|zona|area|seccion|bloque\s*horizontal|fila|banda|pista|callejón|callejon|pasillo|pool|departamento|sector|estrato|nivel|columna|contenedor)/.test(s)) return 'swimlane';
+    
     return null;
   }
 
@@ -1082,46 +960,66 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private tryParseMoveNode(step: string, currentNodes: NodeData[]): DiagramCommand | null {
     const s = step.toLowerCase();
-    if (!/\b(muev[aeo]|mover|traslad[aeo]|pas[a|e|o|ar]|llev[a|e|o|ar]|cambi[a|e|o]\s+de\s+(?:calle|zona|carril|area)|acomod[aeo]|ubic[aeo]|situ[aeo]|desplaz[aeo]|reubic[aeo]|empuj[aeo]|mand[aeo]|transfer|transfier|transport|migr[aeo]|movamos|traslademos|pasemos|llevemos|cambiemos|acomodemos|ubiquemos|situemos|desplacemos|posiciona|pon)\b/i.test(s)) return null;
+    const moveVerbs = /\b(muev[aeo]|mover|traslad[aeo]|pas[a|e|o|ar]|llev[a|e|o|ar]|acomod[aeo]|ubic[aeo]|situ[aeo]|desplaz[aeo]|reubic[aeo]|empuj[aeo]|mand[aeo]|transfer|transfier|transport|migr[aeo]|movamos|traslademos|pasemos|llevemos|acomodemos|ubiquemos|situemos|desplacemos|posiciona|pon)\b/i;
+    
+    if (!moveVerbs.test(s)) return null;
 
     const candidates = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label);
     const quoted = step.match(/"([^"]+)"/);
-    const nodeLabel = quoted?.[1]
-      ? this.resolveNodeLabelFromReference(quoted[1], candidates)
-      : this.resolveNodeLabelFromReference(step.replace(/(?:mueve|mover|traslada|trasladar|pasa|pasar|lleva|llevar|manda|mandar|transfiere|reubica|ubica|desplaza|posiciona|pon|a\s+la\s+calle|al\s+carril|a\s+la\s+zona|mas\s+abajo|mas\s+arriba|mas\s+a\s+la\s+derecha|mas\s+a\s+la\s+izquierda|abajo|arriba|derecha|izquierda).*/gi, '').trim(), candidates);
+    
+    let nodeLabel: string | null = null;
+    
+    if (quoted?.[1]) {
+      nodeLabel = this.resolveNodeLabelFromReference(quoted[1], candidates);
+    } else {
+      // Extraer el sujeto eliminando verbos y direcciones relativas sin borrar el resto
+      let subject = step
+        .replace(moveVerbs, '')
+        .replace(/\b(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|el\s+subproceso|un|una|el|la|los|las|al)\s+/gi, '')
+        .replace(/\b(?:mas\s+|más\s+)?(?:abajo|arriba|derecha|izquierda|al\s+fondo|al\s+inicio|hacia\s+abajo|hacia\s+arriba|hacia\s+la\s+derecha|hacia\s+la\s+izquierda)\b.*/gi, '')
+        .replace(/\b(?:de|en|dentro\s+de|del|desde)\b\s+(?:la\s+|el\s+)?(?:calle|carril|swimlane|zona|area|área|seccion|fila|banda|pista|pool|departamento|sector)\s+[\p{L}\d_-]+/iu, '')
+        .trim();
+      
+      nodeLabel = this.resolveNodeLabelFromReference(subject, candidates);
+    }
 
     if (!nodeLabel) return null;
     const node = currentNodes.find(n => n.label === nodeLabel);
 
-    // Caso 1: Movimiento a carril
+    // Caso 1: Movimiento a carril (Ej: "mueve X a la calle Y")
     const laneRef = this.parseLaneReference(step);
     const lane = this.resolveLaneFromReference(laneRef, currentNodes);
-    if (lane) {
+    if (lane && !s.includes('abajo') && !s.includes('arriba') && !s.includes('derecha') && !s.includes('izquierda')) {
       return {
         action: 'move_node_to_lane',
-        label: nodeLabel,
+        label: nodeLabel || undefined,
         targetLaneName: lane.label || undefined
       };
     }
 
-    // Caso 2: Movimiento relativo
+    // Caso 2: Movimiento relativo (Ej: "mueve X más abajo")
     if (node) {
       let nx = node.x;
       let ny = node.y;
       const stepDist = 120;
 
-      if (s.includes('abajo') || s.includes('descend')) ny += stepDist;
-      else if (s.includes('arriba') || s.includes('subir')) ny = Math.max(0, ny - stepDist);
+      const isDown = /\b(abajo|descend|baja|al\s+fondo|hacia\s+abajo)\b/i.test(s);
+      const isUp = /\b(arriba|subi|sube|al\s+inicio|hacia\s+arriba)\b/i.test(s);
+      const isRight = /\b(derecha|hacia\s+la\s+derecha)\b/i.test(s);
+      const isLeft = /\b(izquierda|hacia\s+la\s+izquierda)\b/i.test(s);
+
+      if (isDown) ny += stepDist;
+      else if (isUp) ny = Math.max(0, ny - stepDist);
       
-      if (s.includes('derecha')) nx += stepDist;
-      else if (s.includes('izquierda')) nx = Math.max(0, nx - stepDist);
+      if (isRight) nx += stepDist;
+      else if (isLeft) nx = Math.max(0, nx - stepDist);
 
       if (nx !== node.x || ny !== node.y) {
         return {
           action: 'update_node',
-          label: nodeLabel,
-          x: nx,
-          y: ny
+          label: nodeLabel || undefined,
+          x: Math.round(nx),
+          y: Math.round(ny)
         };
       }
     }
@@ -1129,26 +1027,154 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     return null;
   }
 
+  private tryParseReorderLanes(step: string, currentNodes: NodeData[]): DiagramCommand | null {
+    const s = this.normalizeForSearch(step);
+    const isMoveVerb = /(?:reorden|orden|muev|pas|pon|ubic|situ|posicion|acomod|mand|ponle|ubique|situar|desplazar)/i.test(s);
+    const hasLaneKeyword = /(?:calle|carril|swimlane|zona|area|seccion|fila|banda|pista|pool|departamento|sector)/i.test(s);
+    
+    // Si no tiene palabras clave de "calle", al menos debe tener un verbo de movimiento y mencionar 2 carriles
+    if (!isMoveVerb) return null;
+    if (!hasLaneKeyword) {
+      const mentionedCount = currentNodes.filter(n => n.type === 'swimlane' && n.label && s.includes(this.normalizeForSearch(n.label))).length;
+      if (mentionedCount < 2 && !/\b(primero|ultimo|principio|final|inicio|fondo)\b/i.test(s)) return null;
+    }
+
+    const lanes = currentNodes
+      .filter(n => n.type === 'swimlane')
+      .sort((a, b) => (a.x || 0) - (b.x || 0));
+    
+    if (lanes.length < 2) return null;
+
+    const laneNames = lanes.map(l => l.label || '');
+    
+    // Limpiar el texto de puntuación y artículos comunes para una búsqueda más limpia
+    const cleanS = s.replace(/[.,:;!?]/g, ' ').replace(/\s+/g, ' ');
+
+    // Identificar qué carriles se mencionan y en qué posición del texto
+    const mentions = lanes
+      .map(l => {
+        const label = this.normalizeForSearch(l.label || '');
+        if (!label) return { name: '', index: -1 };
+
+        // Intento 1: Palabra completa con regex
+        const regex = new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        const match = cleanS.match(regex);
+        if (match) return { name: l.label || '', index: match.index! };
+
+        // Intento 2: Búsqueda de subcadena (fallback)
+        const idx = cleanS.indexOf(label);
+        return { name: l.label || '', index: idx };
+      })
+      .filter(m => m.index !== -1)
+      .sort((a, b) => a.index - b.index);
+
+    if (mentions.length === 0) return null;
+
+    // Eliminar duplicados de nombres (si una calle es subcadena de otra)
+    const uniqueMentions: { name: string, index: number }[] = [];
+    for (const m of mentions) {
+      if (!uniqueMentions.some(um => um.name === m.name)) {
+        uniqueMentions.push(m);
+      }
+    }
+
+    // El primer carril mencionado es el que queremos mover (target)
+    const targetLaneName = uniqueMentions[0].name;
+
+    // Identificar la posición, la calle de referencia o un índice numérico
+    const isFirst = /(?:primero|inicio|principio|comienzo|posicion\s+1|pocicion\s+1)/i.test(s);
+    const isLast = /(?:ultimo|final|terminar|fondo)/i.test(s);
+    const isBefore = /(?:antes|detras|precediendo|delante)\s+de/i.test(s);
+    const isAfter = /(?:despues|luego|tras|seguido)\s+de/i.test(s);
+    
+    // Buscar índice numérico (ej: "pocicion 2", "lugar 3")
+    const posMatch = s.match(/\b(?:posicion|pocicion|lugar|puesto)\s+(\d+)\b/i);
+    const targetIndex = posMatch ? parseInt(posMatch[1], 10) - 1 : -1;
+
+    let newOrder = [...laneNames].filter(n => n !== targetLaneName);
+
+    if (targetIndex >= 0) {
+      const safeIndex = Math.min(Math.max(0, targetIndex), laneNames.length - 1);
+      newOrder.splice(safeIndex, 0, targetLaneName);
+    } else if (isFirst) {
+      newOrder.unshift(targetLaneName);
+    } else if (isLast) {
+      newOrder.push(targetLaneName);
+    } else if (isBefore || isAfter || uniqueMentions.length >= 2) {
+      // Si hay 2 menciones y un verbo de movimiento, por defecto es "despues de" si no se especifica
+      if (uniqueMentions.length < 2) return null;
+      const referenceLaneName = uniqueMentions[1].name;
+
+      const refIdx = newOrder.indexOf(referenceLaneName);
+      if (isBefore && !isAfter) {
+        newOrder.splice(refIdx, 0, targetLaneName);
+      } else {
+        // Por defecto "después de" si dice "hasta después de" o solo menciona las dos calles
+        newOrder.splice(refIdx + 1, 0, targetLaneName);
+      }
+    } else {
+      return null;
+    }
+
+    return {
+      action: 'reorder_lanes',
+      laneOrder: newOrder
+    };
+  }
+
   private tryParseStyle(step: string, currentNodes: NodeData[]): DiagramCommand | DiagramCommand[] | null {
     const s = step.toLowerCase();
     
-    // 1. Agrandar texto o achicar
-    if (/(agranda|aumenta|crece|sube|maximiza).*texto|texto.*(grande|mayor)/.test(s)) {
-      return { action: 'batch_update_style', targetType: 'activity', fontSize: 16 };
-    }
-    if (/(achica|reduce|disminuye|baja|minimiza).*texto|texto.*(pequeno|pequeño|menor)/.test(s)) {
-      return { action: 'batch_update_style', targetType: 'activity', fontSize: 10 };
+    // 1. Detección Quirúrgica (Individual) vs Batch (Tipo)
+    // Extraer posible nombre eliminando verbos de estilo y palabras de mando sin borrar el resto
+    const cleanLabel = step.replace(/\b(agranda|aumenta|reduce|achica|mas|más|alto|ancho|largo|texto|fuente|tamaño|tamano|pon|ponle|cambia|setea|ajusta|haz|has|la|el|un|una)\b/gi, '').trim();
+    const targetLabel = this.resolveNodeLabelFromReference(cleanLabel, currentNodes);
+    const targetNode = currentNodes.find(n => n.label === targetLabel);
+
+    // 2. Agrandar/Achicar Texto
+    const isText = /(texto|fuente|letras|tamaño|tamano)/.test(s);
+    if (isText) {
+      const isIncrease = /(agranda|aumenta|crece|sube|maximiza|mas|grande|mayor)/.test(s);
+      const isDecrease = /(achica|reduce|disminuye|baja|minimiza|mas|pequeno|pequeño|menor)/.test(s);
+      
+      if (targetNode && (isIncrease || isDecrease)) {
+        const currentSize = targetNode.fontSize || 12;
+        return { action: 'update_node', label: targetLabel || undefined, fontSize: isIncrease ? currentSize + 4 : Math.max(8, currentSize - 4) };
+      }
+      
+      if (isIncrease) return { action: 'batch_update_style', targetType: 'activity', fontSize: 16 };
+      if (isDecrease) return { action: 'batch_update_style', targetType: 'activity', fontSize: 10 };
     }
 
-    // 2. Anchar calles
-    if (/(ancha|ampli|agranda|engorda|ensancha).*calle|calle.*(ancha|grande)/.test(s)) {
-      return { action: 'batch_update_style', targetType: 'swimlane', width: 450 };
-    }
-    if (/(angosta|estrech|achica|reduce|delgaza).*calle|calle.*(angosta|pequeña|fina)/.test(s)) {
-      return { action: 'batch_update_style', targetType: 'swimlane', width: 200 };
+    // 3. Dimensiones (Ancho / Alto / Largo)
+    const isWidth = /(ancho|ancha|largo|larga|ensancha|estira|engorda|amplia)/.test(s);
+    const isHeight = /(alto|alta|altura|estira|crece|engrosa)/.test(s);
+    
+    if (isWidth || isHeight) {
+      const isIncrease = /(mas|mucho|aumenta|agranda|engorda|ensancha|estira|crece|sube)/.test(s) || !/(reduce|achica|angosta|estrech|delgaza)/.test(s);
+      const isDecrease = /(reduce|achica|angosta|estrech|delgaza|menos)/.test(s);
+      
+      if (targetNode) {
+        const upd: DiagramCommand = { action: 'update_node', label: targetLabel || undefined };
+        if (isWidth) {
+          const currentW = targetNode.width || 120;
+          upd.width = isIncrease ? currentW + 60 : Math.max(60, currentW - 60);
+        }
+        if (isHeight) {
+          const currentH = targetNode.height || 80;
+          upd.height = isIncrease ? currentH + 40 : Math.max(40, currentH - 40);
+        }
+        return upd;
+      }
+
+      // Batch fallback for lanes si menciona una calle
+      const isLaneTarget = /(calle|zona|carril|seccion)/.test(s);
+      if (isLaneTarget) {
+        if (isWidth) return { action: 'batch_update_style', targetType: 'swimlane', width: isIncrease ? 450 : 200 };
+      }
     }
 
-    // 3. Agrosar líneas
+    // 4. Agrosar líneas
     if (/(engrosa|agros(?:a|e)|gruesa|ancha|gord).*linea/i.test(s) || /linea.*(gruesa|gord|ancha)/i.test(s) || /flecha.*(gruesa)/i.test(s)) {
       return { action: 'batch_update_style', targetType: 'edge', edgeThickness: 4 };
     }
@@ -1156,11 +1182,16 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
        return { action: 'batch_update_style', targetType: 'edge', edgeThickness: 1 };
     }
 
-    // 4. Cambiar color a líneas
-    const colorMatch = s.match(/(?:pon|pinta|colorea|cambia|haz).*?(rojo|azul|verde|amarillo|naranja|negro|blanco)/i);
-    if (colorMatch?.[1] && /(linea|línea|flecha|ruta|conexion|conexión|arista|relacion|relación)/i.test(s)) {
+    // 5. Cambiar color
+    const colorMatch = s.match(/(?:pon|pinta|colorea|cambia|haz|has).*?(rojo|azul|verde|amarillo|naranja|negro|blanco)/i);
+    if (colorMatch?.[1]) {
        const colorMap: Record<string, string> = { rojo: '#F44336', azul: '#2196F3', verde: '#4CAF50', amarillo: '#FFEB3B', naranja: '#FF9800', negro: '#455a64', blanco: '#ECEFF1' };
-       return { action: 'batch_update_style', targetType: 'edge', edgeColor: colorMap[colorMatch[1].toLowerCase()] };
+       if (/(linea|línea|flecha|ruta|conexion|conexión|arista|relacion|relación)/i.test(s)) {
+         return { action: 'batch_update_style', targetType: 'edge', edgeColor: colorMap[colorMatch[1].toLowerCase()] };
+       }
+       if (targetNode) {
+         return { action: 'update_node', label: targetLabel || undefined, nodeColor: colorMap[colorMatch[1].toLowerCase()] };
+       }
     }
     
     return null;
@@ -1190,13 +1221,55 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     // Evitar interceptar comandos de eliminar "líneas/edges"
     if (/(linea|línea|arista|conexion|conexión|relacion|relación|edge|flecha|ruta)/.test(s)) return null;
 
-    const candidates = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label);
+    const isLaneAction = /(calle|carril|swimlane|zona|area|seccion|fila|banda|pista|pool|departamento|sector)/i.test(s);
+    const candidates = currentNodes.filter(n => (isLaneAction || n.type !== 'swimlane') && !!n.label);
+    
     const quoted = step.match(/"([^"]+)"/);
     const resolved = quoted?.[1]
       ? this.resolveNodeLabelFromReference(quoted[1], candidates)
       : this.resolveNodeLabelFromReference(step.replace(/(?:elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra|cargate|revienta|mata|funde|tumba|limpia|arrasa|pela|bota|deshaz|borralo)\s*/gi, ''), candidates);
 
-    return resolved ? { action: 'delete_node', label: resolved } : null;
+    return resolved ? { action: 'delete_node', label: resolved || undefined } : null;
+  }
+
+  private tryParseUpdateEdge(step: string, currentNodes: NodeData[]): DiagramCommand | null {
+    const s = step.toLowerCase();
+    
+    // Pattern flexible: Acción + Texto + (Relación/Flecha) + Nodo1 + Conector + Nodo2
+    // Ejemplo: "agrega el texto NO entre la relacion cumple con notificar"
+    const relRegex = /(?:pon|ponle|agrega|añade|cambia|setea|actualiza|etiqueta|ponga).*(?:texto|etiqueta|nombre|diga|sea)?\s+["']?(.+?)["']?\s+.*(?:relacion|flecha|linea|conexion|vinculo).*(?:entre|de|del|al|a|)\s*(?:la\s+|el\s+)?(.+?)\s+(?:y|a|con|al)\s+(?:la\s+|el\s+)?(.+)/i;
+    
+    const match = step.match(relRegex);
+    if (match) {
+      const newLabel = match[1].trim();
+      const node1Ref = match[2].trim();
+      const node2Ref = match[3].trim();
+      
+      const srcLabel = this.resolveNodeLabelFromReference(node1Ref, currentNodes);
+      const tgtLabel = this.resolveNodeLabelFromReference(node2Ref, currentNodes);
+      
+      if (srcLabel && tgtLabel) {
+        return {
+          action: 'update_edge',
+          sourceId: srcLabel,
+          targetId: tgtLabel,
+          edgeLabel: newLabel
+        };
+      }
+    }
+    
+    // Fallback para frases tipo: "que la relacion entre A y B diga X"
+    const match2 = step.match(/(?:relacion|conexion|flecha|linea).*(?:entre|de)\s+(.+?)\s+(?:y|a|con)\s+(.+?)\s+(?:diga|sea|ponga|ponle|nombre|texto|es)\s+["']?(.+?)["']?$/i);
+    if (match2) {
+      const srcLabel = this.resolveNodeLabelFromReference(match2[1], currentNodes);
+      const tgtLabel = this.resolveNodeLabelFromReference(match2[2], currentNodes);
+      const newLabel = match2[3].trim();
+      if (srcLabel && tgtLabel) {
+        return { action: 'update_edge', sourceId: srcLabel, targetId: tgtLabel, edgeLabel: newLabel };
+      }
+    }
+
+    return null;
   }
 
   private tryParseDeleteEdge(step: string, nodes: NodeData[]): DiagramCommand | null {
@@ -1280,7 +1353,8 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     }
     
     if (/(elimina|borrar|borra|quita|remueve|eliminar)/.test(s) && !/(linea|línea|arista|conexion|conexión|relacion|relación|edge|todo|todas|los|las)/.test(s)) {
-       const candidateNodes = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label);
+       const isLaneAction = /(calle|carril|swimlane|zona|area|seccion|fila|banda|pista|pool|departamento|sector)/i.test(s);
+       const candidateNodes = currentNodes.filter(n => (isLaneAction || n.type !== 'swimlane') && !!n.label);
        const quoted = step.match(/"([^"]+)"/);
        let ref = quoted?.[1] || step.replace(/(?:elimina|borrar|borra|quita|remueve|eliminar)\s*/gi, '').trim();
        ref = ref.replace(/^(el|la|los|las|un|una)\s+/i, '').trim();
@@ -1296,7 +1370,30 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
   private tryParseRename(step: string, currentNodes: NodeData[]): DiagramCommand | null {
     const s = this.normalizeForSearch(step);
-    if (!/\b(renombr[ae]|cambi[ae]|modific[ae]|actualiz[ae]|reemplaz[ae]|poner\s+nombre|ponle\s+nombre|llama(?:r|le|la)?|rectifica|ajusta|perfecciona|edita|reforma|altera|bautiza|titula|renombremos|cambiemos|modifiquemos|actualicemos|bauticemos|titulemos)\b/.test(s)) {
+    
+    // 1. Lógica de Anexión (Append): "agrega un signo de interrogación a la decisión cumple"
+    if (IaService.VERBS.APPEND.test(step)) {
+      const appendMatch = step.match(/(?:agrega|añade|pon|ponle|inserta|suma|adiciona|incluye|anexa)\s+(?:un\s+|una\s+)?(.+?)\s+(?:a|al|en|sobre|dentro)\s+(?:el\s+|la\s+)?(.+)/i);
+      if (appendMatch?.[1] && appendMatch?.[2]) {
+        let contentToAdd = appendMatch[1].replace(/^(?:un\s+)?(?:signo\s+de\s+interrogacion|signo\s+de\s+interrogación|interrogacion|interrogación|pregunta)/i, '?').trim();
+        contentToAdd = contentToAdd.replace(/^"|"$/g, ''); // Limpiar comillas
+        const targetRef = appendMatch[2].trim();
+        const candidates = currentNodes.filter(n => !!n.label);
+        const resolved = this.resolveNodeLabelFromReference(targetRef, candidates);
+        if (resolved) {
+          const node = currentNodes.find(n => n.label === resolved);
+          if (node) {
+            return {
+              action: 'update_node',
+              label: resolved || undefined,
+              newLabel: (node.label || '') + contentToAdd
+            };
+          }
+        }
+      }
+    }
+
+    if (!IaService.VERBS.UPDATE.test(s)) {
       return null;
     }
 
@@ -1325,7 +1422,7 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
 
     return {
       action: 'update_node',
-      label: resolved,
+      label: resolved || undefined,
       newLabel
     };
   }
@@ -1401,7 +1498,10 @@ Usuario: "Agrega una decisión '¿Aprobado?' después de Revisión con caminos S
     let cleanRef = (ref || '').replace(/["'.,;:!?()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
     
     // Eliminar prefijos comunes de lenguaje natural que ensucian la búsqueda de etiquetas
-    cleanRef = cleanRef.replace(/^(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|la\s+pregunta|la\s+condicion|el\s+subproceso|un|una|el|la|los|las)\s+/i, '').trim();
+    cleanRef = cleanRef.replace(/^(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|la\s+pregunta|la\s+condicion|el\s+subproceso|calle|carril|zona|area|seccion|un|una|el|la|los|las|al|de\s+entre|entre|de)\s+/i, '').trim();
+
+    // Eliminar sufijos de pertenencia a calles (ej: "X de la calle Y")
+    cleanRef = cleanRef.replace(/\b(?:de|del|en)\b\s+(?:la\s+|el\s+)?(?:calle|carril|swimlane|zona|area|área|seccion|fila|banda|pista|pool|departamento|sector).*/gi, '').trim();
 
     if (!cleanRef) return [];
 

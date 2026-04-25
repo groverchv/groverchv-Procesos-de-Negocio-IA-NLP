@@ -10,10 +10,10 @@ import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
 import { NzTagModule } from 'ng-zorro-antd/tag';
+import { AI_KEYS } from '../../services/ia/keys.config';
 
 export interface ApiKeysConfig {
   groqKey: string;
-  geminiKey: string;
   elevenLabsKey: string;
   elevenLabsVoice: string;
   enableTTS: boolean;
@@ -61,24 +61,6 @@ export interface ApiKeysConfig {
 
               <div class="key-group">
                 <label>
-                  <span class="key-label">Gemini API Key</span>
-                  <nz-tag nzColor="purple">Multimodal Live</nz-tag>
-                </label>
-                <nz-input-group [nzSuffix]="geminiSuffix">
-                  <input nz-input [(ngModel)]="config.geminiKey"
-                         [type]="showGemini ? 'text' : 'password'"
-                         placeholder="AIzaSy..." />
-                </nz-input-group>
-                <ng-template #geminiSuffix>
-                  <span class="toggle-eye" (click)="showGemini = !showGemini">
-                    <span nz-icon [nzType]="showGemini ? 'eye-invisible' : 'eye'" nzTheme="outline"></span>
-                  </span>
-                </ng-template>
-                <span class="key-hint">Asistente conversacional Tonny-AI (voz bidireccional)</span>
-              </div>
-
-              <div class="key-group">
-                <label>
                   <span class="key-label">ElevenLabs API Key</span>
                   <nz-tag nzColor="volcano">TTS Premium</nz-tag>
                 </label>
@@ -92,15 +74,25 @@ export interface ApiKeysConfig {
                     <span nz-icon [nzType]="showEleven ? 'eye-invisible' : 'eye'" nzTheme="outline"></span>
                   </span>
                 </ng-template>
-                <span class="key-hint">Síntesis de voz natural y humanizada para Tonny</span>
+                <span class="key-hint">Síntesis de voz natural y humanizada para tu Guía Personal</span>
               </div>
 
               <div class="key-group">
-                <label><span class="key-label">Voz de Tonny (ElevenLabs)</span></label>
-                <select nz-input [(ngModel)]="config.elevenLabsVoice" style="width:100%; height:36px;">
-                  <option *ngFor="let v of voiceOptions" [value]="v.id">{{v.name}} — {{v.desc}}</option>
-                </select>
-                <span class="key-hint">Todas estas voces son compatibles con español y el plan gratuito</span>
+                <label><span class="key-label">Voz de tu Guía Personal (ElevenLabs)</span></label>
+                <div class="voice-selector-row">
+                  <select nz-input [(ngModel)]="config.elevenLabsVoice" style="flex:1; height:36px;">
+                    <option *ngFor="let v of voiceOptions" [value]="v.id">{{v.name}} — {{v.desc}}</option>
+                  </select>
+                  <button nz-button nzType="primary" nzSize="small" class="preview-btn"
+                          [disabled]="previewingVoice" (click)="playPreview()">
+                    <span nz-icon [nzType]="previewingVoice ? 'loading' : 'play-circle'" nzTheme="outline"></span>
+                  </button>
+                  <button *ngIf="previewingVoice" nz-button nzType="default" nzSize="small" nzDanger class="preview-btn"
+                          (click)="stopPreview()">
+                    <span nz-icon nzType="pause-circle" nzTheme="outline"></span>
+                  </button>
+                </div>
+                <span class="key-hint">Selecciona una voz y presiona ▶ para escucharla</span>
               </div>
             </div>
 
@@ -110,7 +102,7 @@ export interface ApiKeysConfig {
               <div class="pref-row">
                 <div class="pref-info">
                   <span class="pref-label"><span nz-icon nzType="sound" nzTheme="outline" style="margin-right: 6px;"></span>Síntesis de Voz (TTS)</span>
-                  <span class="pref-desc">Tonny responde con audio</span>
+                  <span class="pref-desc">Tu Guía Personal responde con audio</span>
                 </div>
                 <nz-switch [(ngModel)]="config.enableTTS"></nz-switch>
               </div>
@@ -165,6 +157,14 @@ export interface ApiKeysConfig {
     }
     .toggle-eye { cursor: pointer; font-size: 16px; user-select: none; }
 
+    .voice-selector-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .preview-btn {
+      min-width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
     .pref-row {
       display: flex; justify-content: space-between; align-items: center;
       padding: 4px 0;
@@ -186,8 +186,9 @@ export class SettingsModalComponent {
   @Output() configSaved = new EventEmitter<ApiKeysConfig>();
 
   showGroq = false;
-  showGemini = false;
   showEleven = false;
+  previewingVoice = false;
+  private previewAudio: HTMLAudioElement | null = null;
 
   voiceOptions = [
     { id: 'EXAVITQu4vr4xnSDxMaL', name: '🇪🇸 Sarah', desc: 'Femenina suave, joven' },
@@ -211,10 +212,9 @@ export class SettingsModalComponent {
   ];
 
   config: ApiKeysConfig = {
-    groqKey: '',
-    geminiKey: '',
-    elevenLabsKey: '',
-    elevenLabsVoice: 'onwK4e9ZLuTAKqWW03F9',
+    groqKey: AI_KEYS.groq || '',
+    elevenLabsKey: AI_KEYS.elevenlabs || '',
+    elevenLabsVoice: 'cjVigY5qzO86Huf0OWal',
     enableTTS: true,
     enableVoiceInput: true,
     language: 'es-ES'
@@ -228,7 +228,12 @@ export class SettingsModalComponent {
     const saved = localStorage.getItem('bpmnflow_config');
     if (saved) {
       try {
-        this.config = { ...this.config, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        this.config = { ...this.config, ...parsed };
+        
+        // Ensure defaults if localStorage has empty strings
+        if (!this.config.groqKey) this.config.groqKey = AI_KEYS.groq;
+        if (!this.config.elevenLabsKey) this.config.elevenLabsKey = AI_KEYS.elevenlabs;
       } catch {}
     }
   }
@@ -241,7 +246,59 @@ export class SettingsModalComponent {
   }
 
   close() {
+    this.stopPreview();
     this.visible = false;
     this.visibleChange.emit(false);
+  }
+
+  async playPreview() {
+    this.stopPreview();
+    const voiceId = this.config.elevenLabsVoice;
+    // Use key from config (UI) or fallback to system AI_KEYS
+    let apiKey = this.config.elevenLabsKey;
+    if (!apiKey || apiKey.trim().length < 10) {
+      apiKey = AI_KEYS.elevenlabs;
+    }
+    
+    if (!apiKey || apiKey.length < 10) {
+      console.warn('[Settings] No ElevenLabs key found in UI or AI_KEYS');
+      this.message.warning('Ingresa tu ElevenLabs API Key primero');
+      return;
+    }
+    const voiceName = this.voiceOptions.find(v => v.id === voiceId)?.name || 'esta voz';
+    this.previewingVoice = true;
+    try {
+      const selectedVoice = this.voiceOptions.find(v => v.id === voiceId);
+      const cleanName = (selectedVoice?.name || 'Guía Personal').replace(/[^a-zA-Z]/g, '').trim();
+      
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
+        body: JSON.stringify({
+          text: `Hola, soy ${cleanName}, tu asistente virtual de diagramas. ¿En qué te puedo ayudar?`,
+          model_id: 'eleven_flash_v2_5',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        })
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      this.previewAudio = new Audio(url);
+      this.previewAudio.onended = () => { this.previewingVoice = false; URL.revokeObjectURL(url); };
+      this.previewAudio.onerror = () => { this.previewingVoice = false; };
+      await this.previewAudio.play();
+    } catch (e: any) {
+      this.message.error(`No se pudo reproducir: ${e.message}`);
+      this.previewingVoice = false;
+    }
+  }
+
+  stopPreview() {
+    if (this.previewAudio) {
+      this.previewAudio.pause();
+      this.previewAudio.currentTime = 0;
+      this.previewAudio = null;
+    }
+    this.previewingVoice = false;
   }
 }
