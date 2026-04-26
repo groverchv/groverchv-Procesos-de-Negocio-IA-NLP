@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../models/types.dart';
-import 'process_details_screen.dart';
+import 'diagram_viewer_screen.dart';
 
 class ActiveProcessesScreen extends StatefulWidget {
   const ActiveProcessesScreen({Key? key}) : super(key: key);
@@ -17,306 +17,348 @@ class _ActiveProcessesScreenState extends State<ActiveProcessesScreen> {
   @override
   void initState() {
     super.initState();
-    _processesFuture =
-        Provider.of<ApiService>(context, listen: false).getActiveInstances();
+    _loadData();
+  }
+
+  void _loadData() {
+    _processesFuture = Provider.of<ApiService>(context, listen: false).getActiveInstances();
   }
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: () async {
-        setState(() {
-          _processesFuture = Provider.of<ApiService>(context, listen: false)
-              .getActiveInstances();
-        });
-      },
-      child: FutureBuilder<List<ProcessInstance>>(
-        future: _processesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text('Error: ${snapshot.error}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _processesFuture =
-                            Provider.of<ApiService>(context, listen: false)
-                                .getActiveInstances();
-                      });
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Reintentar'),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.play_circle_outline,
-                      size: 48, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No hay procesos activos en este momento'),
-                ],
-              ),
-            );
-          }
-
-          final processes = snapshot.data!;
-          return ListView.builder(
-            padding: const EdgeInsets.all(8),
-            itemCount: processes.length,
-            itemBuilder: (context, index) {
-              return ProcessInstanceCard(process: processes[index]);
-            },
-          );
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8FAFC),
+      ),
+      child: RefreshIndicator(
+        color: const Color(0xFF3B82F6),
+        onRefresh: () async {
+          setState(() {
+            _loadData();
+          });
         },
+        child: FutureBuilder<List<ProcessInstance>>(
+          future: _processesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+            }
+
+            if (snapshot.hasError) {
+              return _buildErrorState(snapshot.error.toString());
+            }
+
+            final processes = snapshot.data ?? [];
+            if (processes.isEmpty) {
+              return _buildEmptyState();
+            }
+
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.all(24),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'MONITOREO',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Instancias Activas',
+                          style: TextStyle(
+                            color: Colors.blueGrey.shade900,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${processes.length} procesos en ejecución actualmente',
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: ProcessInstanceCard(process: processes[index]),
+                      ),
+                      childCount: processes.length,
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.error_outline_rounded, size: 48, color: Colors.red.shade400),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Ocurrió un error',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () => setState(() => _loadData()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('REINTENTAR'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_graph_rounded, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 24),
+          Text(
+            'No hay procesos activos',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Colors.blueGrey.shade300,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Las instancias iniciadas aparecerán aquí',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+        ],
       ),
     );
   }
 }
 
-class ProcessInstanceCard extends StatefulWidget {
+class ProcessInstanceCard extends StatelessWidget {
   final ProcessInstance process;
 
-  const ProcessInstanceCard({Key? key, required this.process})
-      : super(key: key);
-
-  @override
-  State<ProcessInstanceCard> createState() => _ProcessInstanceCardState();
-}
-
-class _ProcessInstanceCardState extends State<ProcessInstanceCard> {
-  late Future<ProcessInstance> _processDetailsFuture;
-  bool _expanded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _processDetailsFuture = Provider.of<ApiService>(context, listen: false)
-        .getProcessInstance(widget.process.id!);
-  }
-
-  String _getProcessStatusLabel(String status) {
-    switch (status.toUpperCase()) {
-      case 'ACTIVE':
-        return 'Activo';
-      case 'COMPLETED':
-        return 'Completado';
-      case 'CANCELED':
-        return 'Cancelado';
-      default:
-        return status;
-    }
-  }
-
-  Color _getProcessStatusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'ACTIVE':
-        return Colors.green;
-      case 'COMPLETED':
-        return Colors.blue;
-      case 'CANCELED':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getActivityStatusLabel(String status) {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-        return 'Pendiente';
-      case 'IN_PROCESS':
-        return 'En Proceso';
-      case 'IN_REVIEW':
-        return 'En Revisión';
-      case 'FINISHED':
-        return 'Finalizado';
-      case 'CANCELED':
-        return 'Cancelado';
-      case 'SKIPPED':
-        return 'Omitido';
-      default:
-        return status;
-    }
-  }
-
-  Color _getActivityStatusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-        return Colors.grey;
-      case 'IN_PROCESS':
-        return Colors.blue;
-      case 'IN_REVIEW':
-        return Colors.orange;
-      case 'FINISHED':
-        return Colors.green;
-      case 'CANCELED':
-        return Colors.red;
-      case 'SKIPPED':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
-  }
+  const ProcessInstanceCard({Key? key, required this.process}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: FutureBuilder<ProcessInstance>(
-        future: _processDetailsFuture,
-        builder: (context, snapshot) {
-          final process = snapshot.data ?? widget.process;
+    final completedSteps = process.activities.where((a) => a.status == 'FINISHED' || a.status == 'COMPLETED').length;
+    final totalSteps = process.activities.length;
+    final progress = totalSteps > 0 ? completedSteps / totalSteps : 0.0;
 
-          return Column(
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DiagramViewerScreen(designId: process.designId),
+          ),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Column(
             children: [
-              ListTile(
-                leading: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: _getProcessStatusColor(process.status),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                title: Text(process.designName),
-                subtitle: Text(
-                  'ID: ${process.id?.substring(0, 8)}... | Iniciado por: ${process.startedBy}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Chip(
-                  label: Text(
-                    _getProcessStatusLabel(process.status),
-                    style: const TextStyle(fontSize: 12, color: Colors.white),
-                  ),
-                  backgroundColor:
-                      _getProcessStatusColor(process.status),
-                  side: BorderSide.none,
-                ),
-                onTap: () {
-                  setState(() {
-                    _expanded = !_expanded;
-                  });
-                },
-              ),
-              if (_expanded && snapshot.hasData)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Divider(),
-                      const Text(
-                        'Estado de Actividades',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(Icons.account_tree_rounded, color: Color(0xFF3B82F6), size: 24),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (process.activities.isEmpty)
-                        const Text('No hay actividades registradas')
-                      else
-                        ...process.activities.map((activity) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(
-                                    color: _getActivityStatusColor(activity.status),
-                                    width: 4,
-                                  ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                process.designName,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF0F172A),
                                 ),
-                                color: _getActivityStatusColor(activity.status)
-                                    .withOpacity(0.05),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          activity.nodeLabel,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: _getActivityStatusColor(
-                                                  activity.status)
-                                              .withOpacity(0.2),
-                                          borderRadius:
-                                              BorderRadius.circular(2),
-                                        ),
-                                        child: Text(
-                                          _getActivityStatusLabel(
-                                              activity.status),
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: _getActivityStatusColor(
-                                                activity.status),
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Tipo: ${activity.nodeType}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  if (activity.assignedTo != null) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Asignado a: ${activity.assignedTo}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                              Text(
+                                'Iniciado por ${process.startedBy}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade500,
+                                ),
                               ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Progreso del flujo',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blueGrey.shade700,
+                          ),
+                        ),
+                        Text(
+                          '${(progress * 100).toInt()}%',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF3B82F6),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Stack(
+                      children: [
+                        Container(
+                          height: 8,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 800),
+                          height: 8,
+                          width: MediaQuery.of(context).size.width * 0.7 * progress,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
                             ),
-                          );
-                        }).toList(),
-                    ],
-                  ),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF3B82F6).withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                color: const Color(0xFFF8FAFC),
+                child: Row(
+                  children: [
+                    _buildMiniStat(Icons.check_circle_outline, '$completedSteps Pasos'),
+                    const SizedBox(width: 16),
+                    _buildMiniStat(Icons.timer_outlined, 'En curso'),
+                    const Spacer(),
+                    const Text(
+                      'VER DETALLES',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF3B82F6),
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: Color(0xFF3B82F6), size: 20),
+                  ],
+                ),
+              ),
             ],
-          );
-        },
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildMiniStat(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: Colors.grey.shade500),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
     );
   }
 }

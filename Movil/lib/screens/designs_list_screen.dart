@@ -24,68 +24,115 @@ class _DesignsListScreenState extends State<DesignsListScreen> {
   @override
   void initState() {
     super.initState();
-    _designsFuture = Provider.of<ApiService>(context, listen: false)
-        .getDesignsByProject(widget.projectId);
+    _loadData();
+  }
+
+  void _loadData() {
+    _designsFuture = Provider.of<ApiService>(context, listen: false).getDesignsByProject(widget.projectId);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(widget.projectName),
+        title: Text(
+          widget.projectName,
+          style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A)),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: RefreshIndicator(
+        color: const Color(0xFF3B82F6),
         onRefresh: () async {
-          setState(() {
-            _designsFuture = Provider.of<ApiService>(context, listen: false)
-                .getDesignsByProject(widget.projectId);
-          });
+          setState(() => _loadData());
         },
         child: FutureBuilder<List<Design>>(
           future: _designsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: CircularProgressIndicator(strokeWidth: 2));
             }
 
             if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline,
-                        size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('Error: ${snapshot.error}'),
-                  ],
-                ),
-              );
+              return _buildErrorState(snapshot.error.toString());
             }
 
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.architecture,
-                        size: 48, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text('No hay diseños en este proyecto'),
-                  ],
-                ),
-              );
+            final designs = snapshot.data ?? [];
+            if (designs.isEmpty) {
+              return _buildEmptyState();
             }
 
-            final designs = snapshot.data!;
-            return ListView.builder(
-              padding: const EdgeInsets.all(8),
-              itemCount: designs.length,
-              itemBuilder: (context, index) {
-                return DesignCard(design: designs[index]);
-              },
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.all(24),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'DISEÑOS',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Flujos de Trabajo',
+                          style: TextStyle(
+                            color: Colors.blueGrey.shade900,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: DesignCard(design: designs[index]),
+                      ),
+                      childCount: designs.length,
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(child: Text('Error: $error'));
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.architecture_rounded, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 24),
+          const Text('No hay diseños disponibles', style: TextStyle(fontWeight: FontWeight.w800)),
+        ],
       ),
     );
   }
@@ -96,70 +143,97 @@ class DesignCard extends StatelessWidget {
 
   const DesignCard({Key? key, required this.design}) : super(key: key);
 
+  @override
+  Widget build(BuildContext context) {
+    final stateColor = _getStateColor(design.estado);
+    
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DiagramViewerScreen(designId: design.id!),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(Icons.account_tree_rounded, color: Color(0xFF3B82F6), size: 24),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    design.nombre,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(color: stateColor, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _getStateLabel(design.estado),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: stateColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 28),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _getStateLabel(String estado) {
     switch (estado.toLowerCase()) {
-      case 'draft':
-        return 'Borrador';
-      case 'active':
-        return 'Activo';
-      case 'archived':
-        return 'Archivado';
-      default:
-        return estado;
+      case 'active': return 'ACTIVO';
+      case 'draft': return 'BORRADOR';
+      default: return estado.toUpperCase();
     }
   }
 
   Color _getStateColor(String estado) {
     switch (estado.toLowerCase()) {
-      case 'draft':
-        return Colors.orange;
-      case 'active':
-        return Colors.green;
-      case 'archived':
-        return Colors.grey;
-      default:
-        return Colors.blue;
+      case 'active': return Colors.green;
+      case 'draft': return Colors.orange;
+      default: return Colors.blue;
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: ListTile(
-        leading: const Icon(Icons.architecture, color: Colors.blue),
-        title: Text(design.nombre),
-        subtitle: Text('ID: ${design.id}'),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _getStateColor(design.estado).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                _getStateLabel(design.estado),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _getStateColor(design.estado),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DiagramViewerScreen(designId: design.id!),
-            ),
-          );
-        },
-      ),
-    );
   }
 }
