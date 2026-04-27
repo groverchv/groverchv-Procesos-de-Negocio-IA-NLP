@@ -4,7 +4,17 @@ import { Injectable } from '@angular/core';
   providedIn: 'root'
 })
 export class ApiGlobalService {
-  readonly apiUrl = 'http://localhost:8080/api';
+  get baseUrl(): string {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:8080';
+    }
+    // En producción, asumimos que el backend está en el mismo dominio o se configura aquí
+    return window.location.origin.replace(':4200', ':8080'); 
+  }
+
+  readonly apiUrl = `${this.baseUrl}/api`;
+  readonly wsUrl = `${this.baseUrl}/ws-bpmn`;
 
   constructor() { }
 

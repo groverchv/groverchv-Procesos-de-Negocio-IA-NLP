@@ -3,6 +3,7 @@ import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { Subject, Observable, BehaviorSubject } from 'rxjs';
 import { Modeling } from '../services/types';
+import { ApiGlobalService } from '../services/api-global.service';
 
 @Injectable({
   providedIn: 'root'
@@ -22,7 +23,7 @@ export class ModelingSocketService {
   private currentDesignId: string | null = null;
   public readonly currentUserId = 'user_' + Math.random().toString(36).substring(2, 7);
 
-  constructor() {}
+  constructor(private apiGlobal: ApiGlobalService) {}
 
   connect(designId: string): Observable<Modeling> {
     this.currentDesignId = designId;
@@ -32,7 +33,7 @@ export class ModelingSocketService {
     }
 
     this.stompClient = new Client({
-      webSocketFactory: () => new SockJS('http://localhost:8080/ws-bpmn'),
+      webSocketFactory: () => new SockJS(this.apiGlobal.wsUrl),
       heartbeatIncoming: 0,
       heartbeatOutgoing: 0,
       reconnectDelay: 2000,
