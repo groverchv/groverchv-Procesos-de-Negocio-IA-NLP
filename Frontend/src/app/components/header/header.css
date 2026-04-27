@@ -1,10 +1,9 @@
 .app-header {
   background: white;
   padding: 0 40px;
-  height: 72px;
-  line-height: 72px;
-  border-bottom: 1px solid #e2e8f0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  height: 64px;
+  line-height: 64px;
+  border-bottom: 1px solid #f1f5f9;
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -22,32 +21,31 @@
 .logo-section {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   cursor: pointer;
 }
 
 .logo-box {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  background: var(--primary-color);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 20px;
-  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3);
+  font-size: 18px;
 }
 
 .logo-text {
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: -0.5px;
-  color: #1a1a1a;
+  color: var(--text-main);
 }
 
 .logo-accent {
-  color: #7c3aed;
+  color: var(--primary-color);
 }
 
 .user-profile {
@@ -55,27 +53,26 @@
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  padding: 4px 12px;
-  border-radius: 20px;
-  transition: all 0.2s;
+  padding: 6px 12px;
+  border-radius: 12px;
+  transition: background 0.2s;
 }
 
 .user-profile:hover {
-  background: #f1f5f9;
+  background: #f8fafc;
 }
 
 .user-name {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 14px;
+  color: var(--text-main);
 }
 
-.action-icon {
-  font-size: 18px;
-  color: #64748b;
-  cursor: pointer;
-  transition: color 0.2s;
+.nav-section button {
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
-.action-icon:hover {
-  color: #7c3aed;
+.nav-section button:hover {
+  color: var(--primary-color);
 }

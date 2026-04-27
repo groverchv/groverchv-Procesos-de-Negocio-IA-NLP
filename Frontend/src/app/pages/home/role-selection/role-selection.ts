@@ -12,14 +12,15 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
   imports: [CommonModule, NzCardModule, NzGridModule, NzTypographyModule, NzIconModule],
   templateUrl: './role-selection.html',
   styles: [`
-    .role-grid { padding: 80px 20px; text-align: center; max-width: 1200px; margin: 0 auto; }
-    .role-card { border-radius: 20px; overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: none; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
-    .role-card:hover { transform: translateY(-10px); box-shadow: 0 15px 30px rgba(124, 58, 237, 0.15); }
-    .icon-container { height: 200px; display: flex; align-items: center; justify-content: center; }
-    .designer-bg { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); }
-    .staff-bg { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
-    .role-icon { font-size: 80px; color: white; }
-    .role-title { font-size: 24px; font-weight: 700; margin-top: 15px; }
+    .role-grid { padding: 100px 20px; text-align: center; max-width: 1000px; margin: 0 auto; }
+    .role-card { border-radius: 24px; overflow: hidden; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid #f1f5f9; box-shadow: 0 4px 12px rgba(0,0,0,0.03); background: white; }
+    .role-card:hover { transform: translateY(-8px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); border-color: var(--primary-color); }
+    .icon-container { height: 180px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+    .designer-bg { background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%); }
+    .staff-bg { background: linear-gradient(135deg, #34d399 0%, #10b981 100%); }
+    .role-icon { font-size: 64px; color: white; }
+    .role-title { font-size: 22px; font-weight: 600; margin-top: 10px; color: var(--text-main); }
+    .role-desc { color: var(--text-muted); font-size: 14px; padding: 0 24px 24px; }
   `]
 })
 export class RoleSelectionComponent {

@@ -1312,6 +1312,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
             if (cmd.fontSize !== undefined) n.fontSize = cmd.fontSize;
             if (cmd.responsible !== undefined) n.responsible = cmd.responsible;
             if (cmd.policy !== undefined) n.policy = cmd.policy;
+            if (cmd.forms !== undefined) {
+              n.forms = cmd.forms.map(f => ({
+                ...f,
+                modelingId: this.modelingId || ''
+              }));
+            }
           }
           break;
         }

@@ -84,10 +84,6 @@
         <button nz-button nzType="text" (click)="speakLastAi()" nz-tooltip nzTooltipTitle="Leer respuesta IA (ElevenLabs)">
           <span nz-icon nzType="sound" nzTheme="fill" style="color: #64748b;"></span>
         </button>
-        <nz-divider nzType="vertical"></nz-divider>
-        <button nz-button nzType="text" (click)="showSettings = true" nz-tooltip nzTooltipTitle="Configuración" class="settings-btn">
-          <span nz-icon nzType="setting" nzTheme="outline"></span>
-        </button>
       </nz-space>
 
     </div>
@@ -142,13 +138,6 @@
           <p>Clic en origen → Clic en destino</p>
         </div>
 
-        <p class="group-label">PLANTILLAS</p>
-        <div class="palette-item" (click)="insertTemplate('aprobacion')">
-          <span nz-icon nzType="file-done"></span> Flujo Aprobación
-        </div>
-        <div class="palette-item" (click)="insertTemplate('pasarela_pago')">
-          <span nz-icon nzType="credit-card"></span> Pasarela de Pago
-        </div>
       </div>
     </nz-sider>
 

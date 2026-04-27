@@ -10,14 +10,11 @@
     <div class="nav-section">
       <nz-space nzSize="middle">
         <button nz-button nzType="text" [routerLink]="isStaff ? '/staff/projects' : '/designer/projects'">Proyectos</button>
-        <button *ngIf="!isStaff" nz-button nzType="text">Plantillas</button>
-        <button *ngIf="!isStaff" nz-button nzType="text">Configuración</button>
       </nz-space>
     </div>
 
     <div class="user-section">
       <nz-space nzSize="large">
-        <span nz-icon nzType="bell" nzTheme="outline" class="action-icon"></span>
         <div class="user-profile">
           <nz-avatar nzIcon="user" [style.backgroundColor]="isStaff ? '#10b981' : '#7c3aed'"></nz-avatar>
           <span class="user-name">{{ isStaff ? 'Funcionario' : 'Administrador' }}</span>

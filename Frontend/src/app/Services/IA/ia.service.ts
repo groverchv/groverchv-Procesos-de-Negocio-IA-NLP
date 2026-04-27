@@ -131,18 +131,23 @@ export class IaService {
 
     const lanes = currentNodes.filter(n => n.type === 'swimlane');
     const lanesContext = lanes.map(l => `"${l.label}" (id=${l.id}, x=${Math.round(l.x)}, w=${l.width}, h=${l.height})`).join(', ');
-    const systemPrompt = `Eres un motor de EJECUCIÓN de diagramas. Tu única tarea es devolver comandos JSON.
-NO converses. NO expliques. Solo genera la lista de acciones para modificar el diagrama según el usuario.
+    const systemPrompt = `Eres un Arquitecto de Software Senior y Experto en BPMN 2.0. Tu única tarea es devolver comandos JSON.
+Si el usuario pide "generar un proceso" (ventas, compras, etc.), debes diseñar un flujo END-TO-END profesional:
+1. IDENTIFICA ACTORES: Crea un carril (swimlane) para cada actor PRIMERO.
+2. POSICIONAMIENTO DE CARRILES: El primer carril en x=0, el segundo en x=300, el tercero en x=600, etc. (Ancho siempre 300).
+3. POSICIONAMIENTO DE NODOS: Coloca cada nodo (start, activity, decision, end) dentro de su carril correspondiente calculando su X.
+4. FORMULARIOS: Si se pide "agregar formularios", añade campos lógicos a cada actividad usando 'forms: [{ label: string, type: string, required: true }]'.
+   IMPORTANTE: Todos los formularios creados deben ser marcados como 'required: true' obligatoriamente.
+   Ejemplo: Para "Validar Pago", añade { label: "Pago verificado", type: "checkbox", required: true }.
+5. GESTIÓN DE FORMS: Para modificar o eliminar formularios, usa 'update_node' enviando la lista COMPLETA y actualizada en la propiedad 'forms'.
+6. ORDEN DE COMANDOS: Primero 'swimlane', luego componentes con sus 'forms', y finalmente 'add_edge'.
 ESTADO ACTUAL: Nodos: ${nodesContext}, Bordes: ${edgesContext}, Carriles: [${lanesContext}]
 ACCIONES:
-- add_node (nodeType, label, x, y)
-- delete_node (label)
-- update_node (label, newLabel, x, y, width, height)
+- add_node (nodeType, label, x, y, width, height, forms)
+- update_node (label, newLabel, forms)
 - add_edge (sourceId, targetId, edgeLabel)
-- delete_edge (sourceId, targetId)
-- move_node_to_lane (label, targetLaneName)
-- auto_layout, clear_all, zoom_fit, open_settings, navigate(targetPath)
-FORMATO: { "user_feedback": "Acción realizada", "commands": [{ "action": "...", ... }] }`;
+- auto_layout, clear_all, zoom_fit
+FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`;
 
     const headers = new HttpHeaders({
       'Content-Type': 'application/json',
@@ -150,12 +155,13 @@ FORMATO: { "user_feedback": "Acción realizada", "commands": [{ "action": "...",
     });
 
     const body = {
-      model: 'llama-3.1-8b-instant',
+      model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
       ],
       temperature: 0,
+      max_tokens: 4096,
       response_format: { type: 'json_object' }
     };
 

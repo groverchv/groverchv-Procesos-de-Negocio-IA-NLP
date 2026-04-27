@@ -2,16 +2,20 @@
 @import "ng-zorro-antd/ng-zorro-antd.css";
 
 :root {
-  --primary-color: #7c3aed;
-  --secondary-color: #64748b;
+  --primary-color: #6366f1; /* Indigo 500 */
+  --secondary-color: #475569; /* Slate 600 */
+  --bg-color: #f8fafc; /* Slate 50 */
+  --text-main: #0f172a; /* Slate 900 */
+  --text-muted: #64748b; /* Slate 500 */
 }
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f5f7fa;
+  background-color: var(--bg-color);
+  color: var(--text-main);
 }
 
 h1, h2, h3, h4, h5, h6 {
