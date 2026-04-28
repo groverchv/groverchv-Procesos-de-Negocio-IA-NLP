@@ -1,0 +1,20 @@
+version: 1
+applications:
+  - frontend:
+      phases:
+        preBuild:
+          commands:
+            - cd Frontend
+            - npm install
+        build:
+          commands:
+            - cd Frontend
+            - npx ng build --configuration production
+      artifacts:
+        baseDirectory: Frontend/dist/frontend/browser
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - Frontend/node_modules/**/*
+    appRoot: .

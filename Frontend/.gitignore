@@ -30,7 +30,7 @@ yarn-error.log
 .history/*
 
 # Miscellaneous
-/src/app/Services/IA/keys.config.ts
+/src/app/services/IA/keys.config.ts
 /.angular/cache
 .sass-cache/
 /connect.lock
