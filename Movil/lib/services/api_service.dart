@@ -12,15 +12,7 @@ class ApiService {
     }
 
     // Web en localhost y Android emulator usan hosts distintos.
-    if (kIsWeb) {
-      return 'http://localhost:8080/api';
-    }
-
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8080/api';
-    }
-
-    return 'http://localhost:8080/api';
+    return 'https://diagramador-de-actividades.up.railway.app/api';
   }
 
   Future<http.Response> _get(String path) async {
