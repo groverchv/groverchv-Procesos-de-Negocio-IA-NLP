@@ -184,11 +184,11 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== DATA LOADING =====
   loadDesignDetails() {
     this.designService.getDesignById(this.designId!).subscribe({
-      next: (design) => {
+      next: (design: any) => {
         this.projectId = design.projectId;
         this.layoutType = design.layoutType || 'vertical';
       },
-      error: (err) => { /* Error handled silently */ }
+      error: (err: any) => { /* Error handled silently */ }
     });
   }
   
@@ -216,7 +216,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
         this.saveHistory();
         setTimeout(() => this.zoomFit(), 100);
       },
-      error: (err) => { /* Error handled silently */ }
+      error: (err: any) => { /* Error handled silently */ }
     });
   }
 
@@ -242,7 +242,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
         
         // ---- HIGH SPEED PULSE PATH (runs OUTSIDE zone for max FPS) ----
         if (m.isDragPulse) {
-          remoteNodes.forEach(rn => {
+          remoteNodes.forEach((rn: any) => {
              if (this.isDragging && this.draggedNode?.id === rn.id) return;
              
              const ln = this.nodes.find(n => n.id === rn.id);
@@ -272,7 +272,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           });
           
           const remoteEdges = m.edges || [];
-          remoteEdges.forEach(re => {
+          remoteEdges.forEach((re: any) => {
              const le = this.edges.find(e => e.id === re.id);
              if (le) {
                Object.assign(le, re);
@@ -307,7 +307,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           const remoteEdges = m.edges || [];
 
           // Actualización atómica de nodos para evitar descalces entre calles y componentes
-          this.nodes = remoteNodes.map(rn => {
+          this.nodes = remoteNodes.map((rn: any) => {
             const local = this.nodes.find(n => n.id === rn.id);
             // Si yo estoy arrastrando este nodo, preservo mi posición local para evitar saltos (jitters)
             if (local && this.isDragging && this.draggedNode?.id === rn.id) {
@@ -316,7 +316,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
             return rn;
           });
 
-          this.edges = remoteEdges.map(re => {
+          this.edges = remoteEdges.map((re: any) => {
             const local = this.edges.find(e => e.id === re.id);
             if (local && this.dragWaypoint && this.dragWaypoint.edgeId === re.id) {
               return { ...re, waypoints: local.waypoints };
@@ -649,7 +649,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       this.draggedWaypoints = [];
       this.edges.forEach(e => {
         if (e.waypoints) {
-          e.waypoints.forEach(wp => {
+          e.waypoints.forEach((wp: any) => {
             if (wp.x >= oldX - 5 && wp.x <= oldX + laneW + 5) {
               this.draggedWaypoints.push(wp);
             }
@@ -784,7 +784,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
         // Mover waypoints de flechas
         this.edges.forEach(e => {
           if (e.waypoints) {
-            e.waypoints.forEach(wp => {
+            e.waypoints.forEach((wp: any) => {
               // CRITICAL: If this waypoint is already being dragged, DON'T touch it
               if (isDragging && this.draggedWaypoints.includes(wp)) {
                 return;
@@ -1187,7 +1187,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.aiLastMessage = ` Procesando: "${cmd}"...`;
 
     this.iaService.processCommand(cmd, this.nodes, this.edges).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.aiLoading = false;
         this.aiLastMessage = ' ' + (response.user_feedback || response.explanation || 'Comando ejecutado exitosamente');
         if (response.umlValidation) {
@@ -1195,7 +1195,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
         }
         this.executeAiCommands(response.commands);
       },
-      error: (err) => {
+      error: (err: any) => {
         this.aiLoading = false;
         this.aiLastMessage = ' Error al procesar el comando. Intenta de nuevo.';
       }
@@ -1262,7 +1262,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
             defaultLabel = this.getNextDefaultNodeName(type, base);
           }
 
-          const newForms = (cmd.forms || []).map(f => ({
+          const newForms = (cmd.forms || []).map((f: any) => ({
             ...f,
             modelingId: this.modelingId || ''
           }));
@@ -1312,7 +1312,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
             if (cmd.responsible !== undefined) n.responsible = cmd.responsible;
             if (cmd.policy !== undefined) n.policy = cmd.policy;
             if (cmd.forms !== undefined) {
-              n.forms = cmd.forms.map(f => ({
+              n.forms = cmd.forms.map((f: any) => ({
                 ...f,
                 modelingId: this.modelingId || ''
               }));
@@ -1429,7 +1429,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
               const wpsInLane: {x: number, y: number}[] = [];
               this.edges.forEach(e => {
                 if (e.waypoints) {
-                  e.waypoints.forEach(wp => {
+                  e.waypoints.forEach((wp: any) => {
                     if (wp.x >= oldX - 5 && wp.x <= oldX + laneW + 5) {
                       wpsInLane.push(wp);
                     }
@@ -1654,7 +1654,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   validateDiagram() {
     if (!this.designId) return;
     this.processInstanceService.validateDiagram(this.designId).subscribe({
-      next: (result) => {
+      next: (result: any) => {
         this.validationResult = result;
         this.showValidation = true;
         if (result.valid) {
@@ -1686,23 +1686,23 @@ export class ModelerComponent implements OnInit, OnDestroy {
       if (!this.assistantStreamsBound) {
         this.assistantStreamsBound = true;
         this.assistantSubscriptions.push(
-          this.geminiLive.messages$.subscribe(msg => {
+          this.geminiLive.messages$.subscribe((msg: any) => {
             this.assistantHistory.push(msg);
             this.assistantThinking = false;
             this.scrollAssistantToBottom();
           })
         );
         this.assistantSubscriptions.push(
-          this.geminiLive.isListening$.subscribe(v => this.assistantListening = v)
+          this.geminiLive.isListening$.subscribe((v: boolean) => this.assistantListening = v)
         );
         this.assistantSubscriptions.push(
-          this.geminiLive.isSpeaking$.subscribe(v => this.assistantSpeaking = v)
+          this.geminiLive.isSpeaking$.subscribe((v: boolean) => this.assistantSpeaking = v)
         );
         this.assistantSubscriptions.push(
-          this.geminiLive.isConnected$.subscribe(v => this.assistantConnected = v)
+          this.geminiLive.isConnected$.subscribe((v: boolean) => this.assistantConnected = v)
         );
         this.assistantSubscriptions.push(
-          this.geminiLive.commands$.subscribe(cmds => {
+          this.geminiLive.commands$.subscribe((cmds: any[]) => {
             this.executeAiCommands(cmds);
           })
         );
@@ -1791,7 +1791,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   loadActiveInstance() {
     if (!this.designId) return;
     this.processInstanceService.getByDesign(this.designId).subscribe({
-      next: (instances) => {
+      next: (instances: any[]) => {
         const active = instances.find((i: any) => i.status === 'ACTIVE');
         if (active) {
           this.processInstance = active;
@@ -1818,7 +1818,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   initFormChecks() {
     this.formChecks = {};
     if (this.selectedNode?.forms) {
-      this.selectedNode.forms.forEach(f => {
+      this.selectedNode.forms.forEach((f: any) => {
         this.formChecks[f.label] = false;
       });
     }
@@ -1833,13 +1833,13 @@ export class ModelerComponent implements OnInit, OnDestroy {
   startActivity() {
     if (!this.designId) return;
     this.processInstanceService.startProcess(this.designId, 'staff-user').subscribe({
-      next: (instance) => {
+      next: (instance: any) => {
         this.processInstance = instance;
         this.isExecuting = true;
         this.syncExecutionState();
         this.message.success('Ejecución iniciada desde el nodo inicial.');
       },
-      error: (err) => {
+      error: (err: any) => {
         this.message.error('Error al iniciar: ' + (err.error?.message || err.message));
       }
     });
@@ -1892,7 +1892,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       formData,
       'staff-user'
     ).subscribe({
-      next: (updated) => {
+      next: (updated: any) => {
         this.processInstance = updated;
         this.syncExecutionState();
         if (updated.status === 'COMPLETED') {
@@ -1902,7 +1902,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           this.message.success('Actividad completada.');
         }
       },
-      error: (err) => {
+      error: (err: any) => {
         this.message.error('Error: ' + (err.error?.message || err.message));
       }
     });
@@ -1921,12 +1921,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
       edge.id,
       'staff-user'
     ).subscribe({
-      next: (updated) => {
+      next: (updated: any) => {
         this.processInstance = updated;
         this.syncExecutionState();
         this.message.info(`Decisión tomada: ${edge.label || 'camino seleccionado'}`);
       },
-      error: (err) => {
+      error: (err: any) => {
         this.message.error('Error: ' + (err.error?.message || err.message));
       }
     });

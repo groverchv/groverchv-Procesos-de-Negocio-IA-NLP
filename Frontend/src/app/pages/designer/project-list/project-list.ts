@@ -59,11 +59,11 @@ export class ProjectListComponent implements OnInit {
   loadProjects() {
     this.loading = true;
     this.projectService.getAllProjects().subscribe({
-      next: (data) => {
+      next: (data: Project[]) => {
         this.projects = data;
         this.loading = false;
       },
-      error: (err) => {
+      error: (err: any) => {
         const currentUrl = this.projectService.getCurrentBaseUrl();
         if (currentUrl.includes('localhost')) {
           this.message.error('Error al conectar con el backend local (localhost:8080).');
@@ -104,7 +104,7 @@ export class ProjectListComponent implements OnInit {
         this.newProject = { nombre: '', descripcion: '' };
         this.loadProjects();
       },
-      error: (err) => {
+      error: (err: any) => {
         this.message.error('Error al crear proyecto');
         this.isConfirmLoading = false;
       }

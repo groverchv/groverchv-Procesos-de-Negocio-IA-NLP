@@ -89,11 +89,11 @@ export class DesignListComponent implements OnInit {
   loadDesigns() {
     this.loading = true;
     this.designService.getDesignsByProject(this.projectId!).subscribe({
-      next: (data) => {
+      next: (data: Design[]) => {
         this.designs = data;
         this.loading = false;
       },
-      error: (err) => {
+      error: (err: any) => {
         this.message.error('Error al cargar diseños');
         this.loading = false;
       }
