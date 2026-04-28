@@ -64,11 +64,21 @@ export class ProjectListComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error('Error loading projects', err);
-        this.message.error('Error al cargar proyectos');
+        const currentUrl = this.projectService.getCurrentBaseUrl();
+        if (currentUrl.includes('localhost')) {
+          this.message.error('Error al conectar con el backend local (localhost:8080).');
+        } else {
+          this.message.error('Error al cargar proyectos del servidor.');
+        }
         this.loading = false;
       }
     });
+  }
+
+  switchToProduction() {
+    localStorage.setItem('BACKEND_URL', 'https://diagramador-de-actividades.up.railway.app');
+    this.message.loading('Cambiando a producción...', { nzDuration: 1000 });
+    setTimeout(() => window.location.reload(), 1000);
   }
 
   showModal(): void {

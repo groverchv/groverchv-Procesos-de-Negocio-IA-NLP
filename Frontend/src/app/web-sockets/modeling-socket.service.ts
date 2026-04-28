@@ -48,7 +48,7 @@ export class ModelingSocketService {
             // ★ FIX: emit the flat object directly — no wrapper check
             this.modelingSubject.next(m);
           } catch (e) {
-            console.error('[WS] parse error', e);
+            // Error silently ignored per user request to clean logs
           }
         }
       });

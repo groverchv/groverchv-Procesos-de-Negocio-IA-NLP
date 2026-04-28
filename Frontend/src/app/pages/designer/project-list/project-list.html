@@ -22,6 +22,16 @@
   </div>
 
   <div nz-row [nzGutter]="[24, 32]">
+    <!-- Mensaje de error / conexión -->
+    <div nz-col [nzSpan]="24" *ngIf="projects.length === 0 && !loading" style="text-align: center; margin-top: 50px;">
+      <span nz-icon nzType="global" style="font-size: 48px; color: #cbd5e1;"></span>
+      <h3 nz-typography style="margin-top: 16px;">No se pudieron cargar proyectos</h3>
+      <p style="color: #64748b;">Asegúrate de que el backend esté funcionando.</p>
+      <button nz-button nzType="default" (click)="switchToProduction()" style="margin-top: 16px; border-radius: 8px;">
+        <span nz-icon nzType="arrow-right"></span> Conectar a Backend de Producción (Railway)
+      </button>
+    </div>
+
     <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="8" [nzLg]="6" *ngFor="let p of projects">
       <nz-card class="project-card" [nzCover]="coverTemplate" (click)="viewProject(p.id!)">
         <button *ngIf="!isReadOnly" nz-button nzDanger nzShape="circle" class="delete-btn" (click)="deleteProject($event, p.id!)">

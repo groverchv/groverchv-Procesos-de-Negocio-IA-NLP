@@ -101,7 +101,6 @@ export class ChatAssistantService {
         return content;
       }),
       catchError(err => {
-        console.error('[ChatAssistant] Error:', err);
         return of(this.localAssistantReply(userMessage));
       })
     );

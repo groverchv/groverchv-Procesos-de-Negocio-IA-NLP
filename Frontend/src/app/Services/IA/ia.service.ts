@@ -173,7 +173,6 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
         return this.normalizeIaResponse(parsed, userMessage, currentNodes);
       }),
       catchError(err => {
-        console.warn('[IA] Cloud path failed, attempting local fallback:', err.message);
         const fallback = this.localFallback(userMessage, currentNodes);
         
         let errorHint = '';

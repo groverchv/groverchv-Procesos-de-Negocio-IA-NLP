@@ -261,7 +261,6 @@ export class SettingsModalComponent {
     }
     
     if (!apiKey || apiKey.length < 10) {
-      console.warn('[Settings] No ElevenLabs key found in UI or AI_KEYS');
       this.message.warning('Ingresa tu ElevenLabs API Key primero');
       return;
     }

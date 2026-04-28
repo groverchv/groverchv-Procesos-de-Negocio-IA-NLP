@@ -188,7 +188,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
         this.projectId = design.projectId;
         this.layoutType = design.layoutType || 'vertical';
       },
-      error: (err) => console.error('Error loading design details', err)
+      error: (err) => { /* Error handled silently */ }
     });
   }
   
@@ -216,7 +216,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
         this.saveHistory();
         setTimeout(() => this.zoomFit(), 100);
       },
-      error: (err) => console.error('Error loading initial modeling data', err)
+      error: (err) => { /* Error handled silently */ }
     });
   }
 
@@ -342,7 +342,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           }
         });
       },
-      error: (err) => console.error('Socket error', err)
+      error: (err) => { /* Error handled silently */ }
     });
 
     this.presenceSubscription = this.socketService.connectedCount$.subscribe(count => {
@@ -1198,7 +1198,6 @@ export class ModelerComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.aiLoading = false;
         this.aiLastMessage = ' Error al procesar el comando. Intenta de nuevo.';
-        console.error('[AI] Error:', err);
       }
     });
   }

@@ -30,4 +30,8 @@ export class ProjectService {
   deleteProject(id: string): Observable<void> {
     return this.http.delete<void>(this.apiGlobal.getEndpointUrl(`${this.endpoint}/${id}`));
   }
+
+  getCurrentBaseUrl(): string {
+    return this.apiGlobal.baseUrl;
+  }
 }

@@ -94,7 +94,6 @@ export class DesignListComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error('Error loading designs', err);
         this.message.error('Error al cargar diseños');
         this.loading = false;
       }

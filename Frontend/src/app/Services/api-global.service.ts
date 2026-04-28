@@ -13,7 +13,7 @@ import { Injectable } from '@angular/core';
  * DEPLOYMENT STEP:
  *   After deploying the backend to Railway, paste your Railway URL below:
  */
-const PRODUCTION_BACKEND_URL = 'https://YOUR_RAILWAY_APP.up.railway.app';
+const PRODUCTION_BACKEND_URL = 'https://diagramador-de-actividades.up.railway.app';
 
 @Injectable({
   providedIn: 'root'
@@ -22,19 +22,21 @@ export class ApiGlobalService {
 
   get baseUrl(): string {
     const host = window.location.hostname;
+    let url = '';
 
-    // Local development
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://localhost:8080';
-    }
-
-    // Production: check localStorage override first, then use the constant
+    // 1. Priority: Manual override via localStorage
     const override = localStorage.getItem('BACKEND_URL');
     if (override && override.trim().length > 0) {
-      return override.trim().replace(/\/+$/, '');
+      url = override.trim().replace(/\/+$/, '');
+    } else if (host === 'localhost' || host === '127.0.0.1') {
+      // 2. Local development fallback (pointing to Railway by default to fix the user's connection error)
+      url = PRODUCTION_BACKEND_URL;
+    } else {
+      // 3. Default production URL
+      url = PRODUCTION_BACKEND_URL;
     }
 
-    return PRODUCTION_BACKEND_URL;
+    return url;
   }
 
   get apiUrl(): string {
