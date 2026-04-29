@@ -170,6 +170,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       if (this.isReadOnly) {
         this.loadActiveInstance();
       }
+      this.setupVoiceRecognition();
     }
   }
 
@@ -1637,6 +1638,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   // ===== VOICE =====
 
   setupVoiceRecognition() {
+    if (this.recognition) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
@@ -1653,7 +1655,13 @@ export class ModelerComponent implements OnInit, OnDestroy {
       this.recognition.onend = () => { 
         this.isListening = false; 
       };
-      this.recognition.onerror = () => { this.isListening = false; };
+      this.recognition.onerror = (event: any) => { 
+        this.isListening = false; 
+        console.error('Speech recognition error', event.error);
+        if (event.error === 'not-allowed') {
+          this.message.error('Permiso de micrófono denegado');
+        }
+      };
     }
   }
 

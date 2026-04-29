@@ -211,7 +211,7 @@ REGLAS:
 
   async startVoiceInput(): Promise<void> {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) throw new Error('Speech recognition not supported');
     const recognition = new SR(); recognition.lang = this.VOICE_LANG;
     recognition.continuous = false; recognition.interimResults = true;
     this.zone.run(() => this.isListening$.next(true));
