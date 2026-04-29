@@ -107,7 +107,8 @@ export class IaService {
     CONNECT: /\b(conecta(?:r|le|la|los|las|mos|dos)?|relaciona(?:r|le|la|los|las|mos|dos)?|une(?:r|le|la|los|las|mos|dos)?|vincula(?:r|le|la|los|las|mos|dos)?|enlaza(?:r|le|la|los|las|mos|dos)?|asocia(?:r|le|la|los|las|mos|dos)?|liga(?:r|le|la|los|las|mos|dos)?|junta(?:r|le|la|los|las|mos|dos)?|tira(?:le|la|mos)?|pasa(?:lo|la|le|mos)?|manda(?:lo|la|le|mos)?|manda\s+a|pasa\s+a|tira.*linea|tira.*línea|apunta(?:le)?\s+a|dirige|encadena|amarra|conforma|concatena|engancha|conectemos|relacionemos|unamos|vinculemos|enlacemos|asociemos|liguemos|juntemos)\b/i,
     REORDER: /\b(ordena|reordena|organiza|acomoda|distribuye|reorganiza|alinea|nivela|estratifica|jerarquiza|desplaza|posiciona|mueve|pon|pasa)\b/i,
     STYLE: /\b(agranda|aumenta|crece|sube|maximiza|achica|reduce|disminuye|baja|minimiza|ancha|ampli|engorda|ensancha|angosta|estrech|delgaza|engrosa|agros(?:a|e)|gruesa|pinta|colorea|pon|cambia|haz|ponle|redimensiona|ajusta|setea)\b/i,
-    APPEND: /\b(agrega|añade|pon|ponle|inserta|suma|adiciona|incluye|anexa|completa)\s+.*(texto|caracter|signo|letra|palabra|frase|contenido|interrogacion|interrogación|pregunta)\b/i
+    APPEND: /\b(agrega|añade|pon|ponle|inserta|suma|adiciona|incluye|anexa|completa)\s+.*(texto|caracter|signo|letra|palabra|frase|contenido|interrogacion|interrogación|pregunta)\b/i,
+    POLICY: /\b(politica|regla|norma|restriccion|restricción|validación|validacion|regla\s+de\s+negocio)\b/i
   };
 
   private static readonly CONFIRM_WORDS = /\b(si|sí|dale|procesa|hazlo|aplicar|aplícalo|ejecuta)\b/i;
@@ -116,7 +117,7 @@ export class IaService {
 
   constructor(private http: HttpClient) {}
 
-  processCommand(userMessage: string, currentNodes: NodeData[], currentEdges: EdgeData[]): Observable<IaResponse> {
+  processCommand(userMessage: string, currentNodes: NodeData[], currentEdges: EdgeData[], selectedNodeId?: string): Observable<IaResponse> {
 
     // Always attempt cloud processing first, the error handler will handle missing keys
     const nodesContext = JSON.stringify(currentNodes.map(n => ({
@@ -131,20 +132,20 @@ export class IaService {
 
     const lanes = currentNodes.filter(n => n.type === 'swimlane');
     const lanesContext = lanes.map(l => `"${l.label}" (id=${l.id}, x=${Math.round(l.x)}, w=${l.width}, h=${l.height})`).join(', ');
-    const systemPrompt = `Eres un Arquitecto de Software Senior y Experto en BPMN 2.0. Tu única tarea es devolver comandos JSON.
+    const systemPrompt = `Eres un Arquitecto de Software Senior y Experto en BPMN 2.0 y Diagramas de Actividad UML. Tu única tarea es devolver comandos JSON.
 Si el usuario pide "generar un proceso" (ventas, compras, etc.), debes diseñar un flujo END-TO-END profesional:
 1. IDENTIFICA ACTORES: Crea un carril (swimlane) para cada actor PRIMERO.
 2. POSICIONAMIENTO DE CARRILES: El primer carril en x=0, el segundo en x=300, el tercero en x=600, etc. (Ancho siempre 300).
-3. POSICIONAMIENTO DE NODOS: Coloca cada nodo (start, activity, decision, end) dentro de su carril correspondiente calculando su X.
-4. FORMULARIOS: Si se pide "agregar formularios", añade campos lógicos a cada actividad usando 'forms: [{ label: string, type: string, required: true }]'.
-   IMPORTANTE: Todos los formularios creados deben ser marcados como 'required: true' obligatoriamente.
-   Ejemplo: Para "Validar Pago", añade { label: "Pago verificado", type: "checkbox", required: true }.
-5. GESTIÓN DE FORMS: Para modificar o eliminar formularios, usa 'update_node' enviando la lista COMPLETA y actualizada en la propiedad 'forms'.
-6. ORDEN DE COMANDOS: Primero 'swimlane', luego componentes con sus 'forms', y finalmente 'add_edge'.
-ESTADO ACTUAL: Nodos: ${nodesContext}, Bordes: ${edgesContext}, Carriles: [${lanesContext}]
+3. POSICIONAMIENTO DE NODOS: Coloca cada nodo dentro de su carril correspondiente calculando su X.
+4. FORMULARIOS: Si se pide "agregar campos", "pedir datos" o "formulario", usa 'forms: [{ label: string, type: string, required: true }]'.
+5. REGLAS / POLÍTICAS (CRÍTICO): Si el usuario menciona "política", "regla" o "restricción" (ej. "agrega la política de no ser menor de edad"), usa ÚNICAMENTE el campo 'policy: "texto exacto de la regla"'. ESTÁ ESTRICTAMENTE PROHIBIDO generar 'forms' para una política. NO inventes campos de formulario.
+6. GESTIÓN: Para modificar, usa 'update_node'. Para eliminar formularios usa 'forms: []'. Para eliminar políticas usa 'policy: ""'.
+7. SELECCIÓN: Si no hay nombre de nodo pero ID: ${selectedNodeId || 'ninguno'} está presente, úsalo.
+ESTADO: Nodos: ${nodesContext}, Bordes: ${edgesContext}, Carriles: [${lanesContext}]
+TIPOS DE NODO (nodeType): activity, action, subprocess, decision, merge, parallel, fork, join, signal_send, signal_receive, note, datastore, start, end, activity_final, flow_final, swimlane
 ACCIONES:
-- add_node (nodeType, label, x, y, width, height, forms)
-- update_node (label, newLabel, forms)
+- add_node (nodeType, label, x, y, width, height, forms, policy)
+- update_node (label, newLabel, forms, policy)
 - add_edge (sourceId, targetId, edgeLabel)
 - auto_layout, clear_all, zoom_fit
 FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`;
@@ -170,10 +171,10 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
         const content = response.choices[0]?.message?.content;
         if (!content) throw new Error('No response from AI');
         const parsed = JSON.parse(content);
-        return this.normalizeIaResponse(parsed, userMessage, currentNodes);
+        return this.normalizeIaResponse(parsed, userMessage, currentNodes, selectedNodeId);
       }),
       catchError(err => {
-        const fallback = this.localFallback(userMessage, currentNodes);
+        const fallback = this.localFallback(userMessage, currentNodes, selectedNodeId);
         
         let errorHint = '';
         if (err.status === 401) errorHint = ' (Error 401: Revisa tu API Key de Groq)';
@@ -187,7 +188,7 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     );
   }
 
-  private normalizeIaResponse(raw: any, userMessage: string, currentNodes: NodeData[]): IaResponse {
+  private normalizeIaResponse(raw: any, userMessage: string, currentNodes: NodeData[], selectedNodeId?: string): IaResponse {
     const normalizedMessage = this.resolveLatestIntent(userMessage);
 
     if (this.requiresConfirmation(normalizedMessage) && !this.isConfirmed(normalizedMessage)) {
@@ -453,7 +454,7 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     return IaService.CONFIRM_WORDS.test(message);
   }
 
-  private localFallback(userMessage: string, currentNodes: NodeData[]): IaResponse {
+  private localFallback(userMessage: string, currentNodes: NodeData[], selectedNodeId?: string): IaResponse {
     const latestMessage = this.resolveLatestIntent(userMessage || '');
     const canonical = this.canonicalizeText(latestMessage);
     const text = canonical.toLowerCase();
@@ -566,6 +567,18 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
         continue;
       }
 
+      const policyUpd = this.tryParsePolicy(step, currentNodes, selectedNodeId);
+      if (policyUpd) {
+        commands.push(policyUpd);
+        continue;
+      }
+
+      const formsDel = this.tryParseDeleteForms(step, currentNodes, selectedNodeId);
+      if (formsDel) {
+        commands.push(formsDel);
+        continue;
+      }
+
       const addNodes = this.tryParseAddNode(step, simulatedNodes);
       if (addNodes) {
         const arr = Array.isArray(addNodes) ? addNodes : [addNodes];
@@ -581,12 +594,6 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
             height: addNode.height || 80
           });
         }
-        continue;
-      }
-
-      const renameNode = this.tryParseRename(step, currentNodes);
-      if (renameNode) {
-        commands.push(renameNode);
         continue;
       }
 
@@ -698,6 +705,15 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
       [/\bsalida?s?\b/gi, 'fin'],
       [/\bpost-?its?\b/gi, 'nota'],
       [/\bdiscos?\b/gi, 'datastore'],
+      // New UML Activity aliases
+      [/\baccion(?:es)?\b/gi, 'action'],
+      [/\btenedor(?:es)?\b/gi, 'fork'],
+      [/\bbarra(?:s)?\s*(?:de\s*)?(?:separacion|division)\b/gi, 'fork'],
+      [/\bfusion(?:es)?\b/gi, 'merge'],
+      [/\bunion(?:es)?\b/gi, 'join'],
+      [/\bseñal(?:es)?\b/gi, 'señal'],
+      [/\benvio\s*(?:de\s*)?señal\b/gi, 'signal_send'],
+      [/\brecepcion\s*(?:de\s*)?señal\b/gi, 'signal_receive'],
       // Connect aliases
       [/\btiral[ea]\b/gi, 'conectar'],
       [/\bjuntal[oa]s?\b/gi, 'conectar'],
@@ -740,7 +756,7 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     if (!nodeType) return null;
 
     const activityIdx = normStep.search(/(actividad|tarea|task|cuadrit|cajit|bloque|paso)\b/i);
-    const componentIdx = normStep.search(/(decision|decisión|merge|xor|pregunt|filtro|rombit|paralelo|parallel|fork|join|señal|senal|nota|note|comentario|datastore|inicio|start|fin|final|end)/i);
+    const componentIdx = normStep.search(/(decision|decisión|merge|xor|pregunt|filtro|rombit|paralelo|parallel|fork|join|señal|senal|signal|nota|note|comentario|datastore|inicio|start|fin|final|end|action|accion|tenedor|fusion|union|barra)/i);
     const laneIdx = normStep.search(/(calle|carril|swimlane|zona|area|seccion|fila|banda|pasillo|pool|departamento|sector|estrato|nivel|columna)\b/i);
     
     // Es una calle primaria SOLO si detectamos tipo swimlane y no hay otros componentes mencionados antes
@@ -876,19 +892,21 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     const s = this.normalizeForSearch(step);
     
     // 1. Componentes específicos primero
+    if (/(\baction\b|\baccion\b)/.test(s)) return 'action';
     if (/(actividad|tarea|task|cuadrit|cajit|bloque|paso)/.test(s)) return 'activity';
     if (/(subproceso|subprocess)/.test(s)) return 'subprocess';
-    if (/(decision|decisión|merge|xor|pregunt|filtro|rombit|si\/no)/.test(s)) return 'decision';
+    if (/(\bmerge\b|\bfusion\b|fusión)/.test(s)) return 'merge';
+    if (/(decision|decisión|xor|pregunt|filtro|rombit|si\/no|condicion|condición)/.test(s)) return 'decision';
     if (/(parallel|paralelo|and\s*gate|compuerta\s*paralela)/.test(s)) return 'parallel';
-    if (/(\bfork\b)/.test(s)) return 'fork';
-    if (/(\bjoin\b)/.test(s)) return 'join';
-    if (/(señal|senal).*(enviar|send)|signal\s*send/.test(s)) return 'signal_send';
-    if (/(señal|senal).*(recibir|receive)|signal\s*receive/.test(s)) return 'signal_receive';
+    if (/(\bfork\b|\btenedor\b|barra\s*(?:de\s*)?(?:separacion|division))/.test(s)) return 'fork';
+    if (/(\bjoin\b|\bunion\b|barra\s*(?:de\s*)?(?:union|sincronizacion))/.test(s)) return 'join';
+    if (/(señal|senal).*(enviar|envio|send)|signal\s*send|envio\s*(?:de\s*)?señal/.test(s)) return 'signal_send';
+    if (/(señal|senal).*(recibir|recepcion|receive)|signal\s*receive|recepcion\s*(?:de\s*)?señal/.test(s)) return 'signal_receive';
     if (/(nota|note|comentario|post-?it)/.test(s)) return 'note';
     if (/(datastore|almacen|almacén|base\s*de\s*datos|disco)/.test(s)) return 'datastore';
     if (/(inicio|start|bolit|comienzo|circulit|verde|comenzar|punto\s+de\s+partida|arranque)/.test(s)) return 'start';
-    if (/(fin\s*\(flujo\)|fin\s*flujo|flow\s*final|circulo\s*doble|meta|objetivo)/.test(s)) return 'flow_final';
-    if (/(fin\s*\(actividad\)|fin\s*actividad|activity\s*final|bloqueo|cierre)/.test(s)) return 'activity_final';
+    if (/(fin\s*\(flujo\)|fin\s*flujo|flow\s*final|fin\s*de\s*flujo|circulo\s*doble|meta|objetivo)/.test(s)) return 'flow_final';
+    if (/(fin\s*\(actividad\)|fin\s*actividad|activity\s*final|fin\s*de\s*actividad|bloqueo|cierre)/.test(s)) return 'activity_final';
     if (/(\bfin\b|\bfinal\b|\bend\b|salida|terminar|concluir|rojo|parada)/.test(s)) return 'end';
 
     // 2. Calles después (para evitar que "en la calle" sea detectado como creación de calle si hay otro componente)
@@ -897,37 +915,73 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     return null;
   }
 
-  private tryParseGeneralUpdate(step: string, nodes: NodeData[]): DiagramCommand | null {
-    const s = step.toLowerCase();
+  private tryParseGeneralUpdate(step: string, currentNodes: NodeData[]): DiagramCommand | null {
+    const s = this.normalizeForSearch(step);
     
     // 1. Detección de actualización por Responsable
     const respMatch = step.match(/(?:responsable|encargado|dueno|dueño|quien\s+hace|lo\s+hace|quien\s+lo\s+hace|persona)\s+(?:es|sea|de|a)?\s*"?([\p{L}\d_ -]+)"?/iu);
     if (respMatch?.[1]) {
-       const target = this.resolveNodeLabelFromReference(step.replace(respMatch[0], ''), nodes);
+       const candidates = currentNodes.filter(n => n.type !== 'swimlane' && !!n.label);
+       const target = this.resolveNodeLabelFromReference(step.replace(respMatch[0], ''), candidates);
        if (target) {
          return { action: 'update_node', label: target, responsible: respMatch[1].trim() };
        }
     }
 
-    // 2. Detección de Normatividad/Política
-    const polMatch = step.match(/(?:politica|política|norma|regla|procedimiento)\s+(?:es|sea|de|a)?\s*"?([\p{L}\d_\s.,-]{3,})"?/iu);
-    if (polMatch?.[1]) {
-       const target = this.resolveNodeLabelFromReference(step.replace(polMatch[0], ''), nodes);
-       if (target) {
-         return { action: 'update_node', label: target, policy: polMatch[1].trim() };
-       }
+    // 2. Lógica de Anexión (Append): "agrega un signo de interrogación a la decisión cumple"
+    if (IaService.VERBS.APPEND.test(step)) {
+      const appendMatch = step.match(/(?:agrega|añade|pon|ponle|inserta|suma|adiciona|incluye|anexa)\s+(?:un\s+|una\s+)?(.+?)\s+(?:a|al|en|sobre|dentro)\s+(?:el\s+|la\s+)?(.+)/i);
+      if (appendMatch?.[1] && appendMatch?.[2]) {
+        let contentToAdd = appendMatch[1].replace(/^(?:un\s+)?(?:signo\s+de\s+interrogacion|signo\s+de\s+interrogación|interrogacion|interrogación|pregunta)/i, '?').trim();
+        contentToAdd = contentToAdd.replace(/^"|"$/g, ''); // Limpiar comillas
+        const targetRef = appendMatch[2].trim();
+        const candidates = currentNodes.filter(n => !!n.label);
+        const resolved = this.resolveNodeLabelFromReference(targetRef, candidates);
+        if (resolved) {
+          const node = currentNodes.find(n => n.label === resolved);
+          if (node) {
+            return {
+              action: 'update_node',
+              label: resolved || undefined,
+              newLabel: (node.label || '') + contentToAdd
+            };
+          }
+        }
+      }
     }
 
-    // 3. Detección de Colores de Nodo (Si no fue detectado por style batch)
-    const colorMatch = s.match(/(?:pinta|colorea|pon|cambia|haz).*?(rojo|azul|verde|amarillo|naranja|negro|blanco)/i);
-    if (colorMatch?.[1] && !/(linea|arista|conexion|relacion|edge)/i.test(s)) {
-      const colorMap: Record<string, string> = { rojo: '#F44336', azul: '#2196F3', verde: '#4CAF50', amarillo: '#FFEB3B', naranja: '#FF9800', negro: '#455a64', blanco: '#ECEFF1' };
-      const target = this.resolveNodeLabelFromReference(step.replace(colorMatch[0], ''), nodes);
-      // Nota: modeler.ts necesita ser actualizado para soportar nodeColor en update_node si se desea, 
-      // pero por ahora lo dejamos como extensión de metadata o fallback.
+    if (!IaService.VERBS.UPDATE.test(s)) {
+      return null;
     }
 
-    return null;
+    const parts = this.extractRenameParts(step);
+    if (!parts) return null;
+
+    const { targetRef, newLabel, isLane } = parts;
+    if (!newLabel) return null;
+
+    if (isLane) {
+      const laneRef = this.parseLaneReference(targetRef) || targetRef;
+      const lane = this.resolveLaneFromReference(laneRef, currentNodes);
+      if (lane?.id) {
+        return {
+          action: 'update_node',
+          nodeId: lane.id,
+          newLabel
+        };
+      }
+      return null;
+    }
+
+    const candidates = currentNodes.filter(n => !!n.label);
+    const resolved = this.resolveNodeLabelFromReference(targetRef, candidates);
+    if (!resolved) return null;
+
+    return {
+      action: 'update_node',
+      label: resolved || undefined,
+      newLabel
+    };
   }
 
   private extractLabel(step: string, keywords: string[]): string | null {
@@ -947,7 +1001,9 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
   private defaultLabelForNode(nodeType: string): string {
     const map: Record<string, string> = {
       activity: 'Actividad',
+      action: 'Acción',
       decision: 'Condición',
+      merge: 'Fusión',
       subprocess: 'Subproceso',
       start: 'Inicio',
       end: 'Fin',
@@ -958,7 +1014,8 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
       signal_send: 'Enviar Señal',
       signal_receive: 'Recibir Señal',
       parallel: 'Paralelo',
-      fork: 'Fork/Join'
+      fork: 'Fork',
+      join: 'Join'
     };
     return map[nodeType] || 'Nodo';
   }
@@ -1373,64 +1430,78 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     return null;
   }
 
-  private tryParseRename(step: string, currentNodes: NodeData[]): DiagramCommand | null {
-    const s = this.normalizeForSearch(step);
-    
-    // 1. Lógica de Anexión (Append): "agrega un signo de interrogación a la decisión cumple"
-    if (IaService.VERBS.APPEND.test(step)) {
-      const appendMatch = step.match(/(?:agrega|añade|pon|ponle|inserta|suma|adiciona|incluye|anexa)\s+(?:un\s+|una\s+)?(.+?)\s+(?:a|al|en|sobre|dentro)\s+(?:el\s+|la\s+)?(.+)/i);
-      if (appendMatch?.[1] && appendMatch?.[2]) {
-        let contentToAdd = appendMatch[1].replace(/^(?:un\s+)?(?:signo\s+de\s+interrogacion|signo\s+de\s+interrogación|interrogacion|interrogación|pregunta)/i, '?').trim();
-        contentToAdd = contentToAdd.replace(/^"|"$/g, ''); // Limpiar comillas
-        const targetRef = appendMatch[2].trim();
+  private tryParsePolicy(step: string, currentNodes: NodeData[], selectedNodeId?: string): DiagramCommand | null {
+    const s = step.toLowerCase();
+    if (!IaService.VERBS.POLICY.test(s)) return null;
+
+    // Caso ELIMINAR politica: "elimina la politica"
+    const deleteMatch = step.match(/(?:elimina|borra|quita|remueve|limpia)\s+(?:la\s+)?(?:politica|regla|norma|restriccion|restricción|validación|validacion|regla\s+de\s+negocio)(?:\s+(?:de\s+|en\s+|del\s+|para\s+)?(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso)?\s+(?:"([^"]+)"|(.+)))?/i);
+    if (deleteMatch) {
+      const targetRef = deleteMatch[1] || deleteMatch[2];
+      if (!targetRef && selectedNodeId) {
+        return { action: 'update_node', nodeId: selectedNodeId, policy: '' };
+      }
+      if (targetRef) {
         const candidates = currentNodes.filter(n => !!n.label);
-        const resolved = this.resolveNodeLabelFromReference(targetRef, candidates);
-        if (resolved) {
-          const node = currentNodes.find(n => n.label === resolved);
-          if (node) {
-            return {
-              action: 'update_node',
-              label: resolved || undefined,
-              newLabel: (node.label || '') + contentToAdd
-            };
-          }
-        }
+        const resolved = this.resolveNodeLabelFromReference(targetRef.trim(), candidates);
+        if (resolved) return { action: 'update_node', label: resolved, policy: '' };
       }
     }
 
-    if (!IaService.VERBS.UPDATE.test(s)) {
-      return null;
-    }
+    // Patrón 1A: agrega la politica "X" a la actividad "Y"
+    const p1A = step.match(/(?:agrega|pon|añade|inserta|asigna|actualiza|modifica|cambia)\s+(?:la\s+)?(?:politica|regla|norma|restriccion|restricción|validación|validacion|regla\s+de\s+negocio)\s+(?:de\s+)?(?:"([^"]+)"|(.+?))\s+(?:a|en|para)\s+(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|el\s+componente)?\s+(?:"([^"]+)"|([\p{L}\d_\-\s]+))/iu);
+    
+    // Patrón 1B: agrega la politica "X" (sin objetivo explícito)
+    const p1B = step.match(/(?:agrega|pon|añade|inserta|asigna|actualiza|modifica|cambia)\s+(?:la\s+)?(?:politica|regla|norma|restriccion|restricción|validación|validacion|regla\s+de\s+negocio)\s+(?:de\s+)?(?:"([^"]+)"|(.+))/iu);
 
-    const parts = this.extractRenameParts(step);
-    if (!parts) return null;
+    // Patrón 2: en la actividad "Y" agrega la politica "X"
+    const p2 = step.match(/(?:en|para)\s+(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|el\s+componente)?\s+(?:"([^"]+)"|([\p{L}\d_\-\s]+))\s+(?:agrega|pon|añade|inserta|asigna|actualiza|modifica|cambia)\s+(?:la\s+)?(?:politica|regla|norma|restriccion|restricción|validación|validacion|regla\s+de\s+negocio)\s+(?:de\s+)?(?:"([^"]+)"|(.+))/iu);
 
-    const { targetRef, newLabel, isLane } = parts;
-    if (!newLabel) return null;
-
-    if (isLane) {
-      const laneRef = this.parseLaneReference(targetRef) || targetRef;
-      const lane = this.resolveLaneFromReference(laneRef, currentNodes);
-      if (lane?.id) {
-        return {
-          action: 'update_node',
-          nodeId: lane.id,
-          newLabel
-        };
+    if (p1A) {
+      const policyText = (p1A[1] || p1A[2]).trim();
+      const targetRef = p1A[3] || p1A[4];
+      if (targetRef) {
+        const candidates = currentNodes.filter(n => !!n.label);
+        const resolved = this.resolveNodeLabelFromReference(targetRef.trim(), candidates);
+        if (resolved) return { action: 'update_node', label: resolved, policy: policyText };
       }
-      return null;
+    } else if (p1B) {
+      const policyText = (p1B[1] || p1B[2]).trim();
+      if (selectedNodeId) {
+        return { action: 'update_node', nodeId: selectedNodeId, policy: policyText };
+      }
     }
 
-    const candidates = currentNodes.filter(n => !!n.label);
-    const resolved = this.resolveNodeLabelFromReference(targetRef, candidates);
-    if (!resolved) return null;
+    if (p2) {
+      const targetRef = (p2[1] || p2[2]).trim();
+      const policyText = (p2[3] || p2[4]).trim();
+      const candidates = currentNodes.filter(n => !!n.label);
+      const resolved = this.resolveNodeLabelFromReference(targetRef, candidates);
+      if (resolved) return { action: 'update_node', label: resolved, policy: policyText };
+    }
 
-    return {
-      action: 'update_node',
-      label: resolved || undefined,
-      newLabel
-    };
+    return null;
   }
+
+  private tryParseDeleteForms(step: string, currentNodes: NodeData[], selectedNodeId?: string): DiagramCommand | null {
+    const s = step.toLowerCase();
+    if (!/(?:elimina|borra|quita|remueve|limpia)\s+(?:los\s+)?(?:formularios|campos|inputs)/i.test(s)) return null;
+
+    const match = step.match(/(?:elimina|borra|quita|remueve|limpia)\s+(?:los\s+)?(?:formularios|campos|inputs)(?:\s+(?:de\s+|en\s+|del\s+|para\s+)?(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso)?\s+(?:"([^"]+)"|(.+)))?/i);
+    if (match) {
+      const targetRef = match[1] || match[2];
+      if (!targetRef && selectedNodeId) {
+        return { action: 'update_node', nodeId: selectedNodeId, forms: [] };
+      }
+      if (targetRef) {
+        const candidates = currentNodes.filter(n => !!n.label);
+        const resolved = this.resolveNodeLabelFromReference(targetRef.trim(), candidates);
+        if (resolved) return { action: 'update_node', label: resolved, forms: [] };
+      }
+    }
+    return null;
+  }
+
 
   private extractRenameParts(step: string): { targetRef: string; newLabel: string; isLane: boolean } | null {
     const trimmed = step.trim();

@@ -207,9 +207,14 @@ public class WorkflowEngineService {
                 targetActivity.setCompletedAt(LocalDateTime.now());
             }
             // Regular activity: mark as IN_PROCESS (ready for the Official)
-            else if ("PENDING".equals(targetActivity.getStatus())) {
-                targetActivity.setStatus("IN_PROCESS");
-                targetActivity.setStartedAt(LocalDateTime.now());
+            else {
+                if ("FINISHED".equals(targetActivity.getStatus()) || "SKIPPED".equals(targetActivity.getStatus()) || "CANCELED".equals(targetActivity.getStatus())) {
+                    resetDownstreamNodes(instance, modeling, targetId);
+                }
+                if ("PENDING".equals(targetActivity.getStatus())) {
+                    targetActivity.setStatus("IN_PROCESS");
+                    targetActivity.setStartedAt(LocalDateTime.now());
+                }
             }
         }
     }
@@ -243,6 +248,10 @@ public class WorkflowEngineService {
             if (targetAct == null) continue;
 
             if (edge.getId().equals(chosenEdgeId)) {
+                if ("FINISHED".equals(targetAct.getStatus()) || "SKIPPED".equals(targetAct.getStatus()) || "CANCELED".equals(targetAct.getStatus())) {
+                    resetDownstreamNodes(instance, modeling, edge.getTarget());
+                }
+
                 if ("PENDING".equals(targetAct.getStatus()) || "IN_REVIEW".equals(targetAct.getStatus())) {
                     targetAct.setStatus("IN_PROCESS");
                     targetAct.setStartedAt(LocalDateTime.now());
@@ -306,6 +315,31 @@ public class WorkflowEngineService {
     }
 
     // ═══ HELPERS ═══
+    private void resetDownstreamNodes(ProcessInstance instance, Modeling modeling, String startNodeId) {
+        Set<String> visited = new HashSet<>();
+        Queue<String> queue = new LinkedList<>();
+        queue.add(startNodeId);
+
+        while (!queue.isEmpty()) {
+            String curr = queue.poll();
+            if (!visited.add(curr)) continue;
+
+            // Reset this node
+            instance.getActivities().stream()
+                .filter(a -> a.getNodeId().equals(curr))
+                .forEach(a -> {
+                    a.setStatus("PENDING");
+                    a.setStartedAt(null);
+                    a.setCompletedAt(null);
+                });
+
+            // Add all targets of outgoing edges
+            modeling.getEdges().stream()
+                .filter(e -> e.getSource().equals(curr))
+                .forEach(e -> queue.add(e.getTarget()));
+        }
+    }
+
     private void unlockDesign(String designId) {
         designRepository.findById(designId).ifPresent(d -> {
             d.setLocked(false);

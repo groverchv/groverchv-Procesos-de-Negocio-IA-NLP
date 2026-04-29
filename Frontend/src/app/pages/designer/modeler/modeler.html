@@ -132,7 +132,34 @@
           <span nz-icon nzType="database"></span> Almacén de Datos
         </div>
 
-        
+        <p class="group-label">EXTRAS UML - ACTIVITY</p>
+        <div class="palette-item" (click)="addNode('action')">
+          <div class="icon-rect" style="border-radius: 4px;"></div> Acción
+        </div>
+        <div class="palette-item" (click)="addNode('activity_final')">
+          <div class="icon-circle" style="border: 2px solid #1e293b; display: flex; align-items: center; justify-content: center;"><div style="width: 10px; height: 10px; background: #1e293b; border-radius: 50%;"></div></div> Actividad Final
+        </div>
+        <div class="palette-item" (click)="addNode('flow_final')">
+          <div class="icon-circle" style="border: 2px solid #1e293b; display: flex; align-items: center; justify-content: center;"><span nz-icon nzType="close" style="font-size: 14px; color: #1e293b;"></span></div> Fin de Flujo
+        </div>
+        <div class="palette-item" (click)="addNode('fork')">
+          <div style="width: 4px; height: 16px; background: #1e293b; margin: 0 10px;"></div> Tenedor (Fork)
+        </div>
+        <div class="palette-item" (click)="addNode('merge')">
+          <div class="icon-diamond" style="border-radius: 2px;"></div> Fusión (Merge)
+        </div>
+        <div class="palette-item" (click)="addNode('join')">
+          <div style="width: 4px; height: 16px; background: #1e293b; margin: 0 10px;"></div> Fusión (Join)
+        </div>
+        <div class="palette-item" (click)="addNode('signal_send')">
+          <span nz-icon nzType="caret-right"></span> Envío de Señal
+        </div>
+        <div class="palette-item" (click)="addNode('signal_receive')">
+          <span nz-icon nzType="step-forward"></span> Recepción Señal
+        </div>
+        <div class="palette-item" (click)="addNode('note')">
+          <span nz-icon nzType="file-text"></span> Nota / Comentario
+        </div>
 
         <div class="palette-tip" *ngIf="isConnectingMode">
           <p>Clic en origen → Clic en destino</p>
@@ -225,8 +252,8 @@
            [class.exec-in-review]="getNodeStatus(node.id) === 'IN_REVIEW'"
            [class.exec-current]="currentExecutionNodeId === node.id"
            style="cursor: move; vector-effect: non-scaling-stroke; will-change: transform;">
-          <!-- DECISION / PARALLEL DIAMOND -->
-          <ng-container *ngIf="['decision','parallel'].includes(node.type)">
+          <!-- DECISION / PARALLEL / MERGE DIAMOND -->
+          <ng-container *ngIf="['decision','parallel','merge'].includes(node.type)">
             <polygon
               [attr.points]="
                 ((node.width||120)/2) + ',0 ' +
@@ -258,7 +285,7 @@
               fill="rgba(99, 102, 241, 0.08)" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="6,3"
               style="pointer-events: none;" />
                     <!-- ALL OTHER NODES -->
-          <ng-container *ngIf="!['swimlane','decision','parallel'].includes(node.type)">
+          <ng-container *ngIf="!['swimlane','decision','parallel','merge'].includes(node.type)">
 
             <!-- CIRCULAR NODES (Start, End, Activity Final, Flow Final) -->
             <g *ngIf="['start','end','activity_final','flow_final'].includes(node.type)">
@@ -282,8 +309,8 @@
                   x="0" y="0" [attr.width]="node.width||10" [attr.height]="node.height||100"
                   class="uml-bar" />
 
-            <!-- ACTIVITY / SUBPROCESS RECT -->
-            <rect *ngIf="['activity','subprocess'].includes(node.type)"
+            <!-- ACTIVITY / ACTION / SUBPROCESS RECT -->
+            <rect *ngIf="['activity','action','subprocess'].includes(node.type)"
                   x="0" y="0" [attr.width]="node.width||160" [attr.height]="node.height||80"
                   rx="12" ry="12" class="activity-node" [class.selected]="selectedNode?.id === node.id" />
 
@@ -319,7 +346,7 @@
               class="node-fo" style="pointer-events: none;">
               <div class="node-wrapper" [class.selected]="selectedNode?.id === node.id" [class]="node.type">
 
-                <div *ngIf="['activity','subprocess','signal_send','signal_receive','note'].includes(node.type)" class="activity-body">
+                <div *ngIf="['activity','action','subprocess','signal_send','signal_receive','note'].includes(node.type)" class="activity-body">
                   <div class="node-label" [style.fontSize.px]="node.fontSize || 12">{{node.label}}</div>
                   <div *ngIf="node.type === 'subprocess'" class="sub-marker">+</div>
                 </div>

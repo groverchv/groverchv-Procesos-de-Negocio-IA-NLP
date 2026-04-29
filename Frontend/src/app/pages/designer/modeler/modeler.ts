@@ -323,6 +323,14 @@ export class ModelerComponent implements OnInit, OnDestroy {
             }
             return re;
           });
+
+          // Re-sync selection to new object references to maintain binding in properties panel
+          if (this.selectedNode) {
+            this.selectedNode = this.nodes.find(n => n.id === this.selectedNode?.id) || null;
+          }
+          if (this.selectedEdge) {
+            this.selectedEdge = this.edges.find(e => e.id === this.selectedEdge?.id) || null;
+          }
           
           // Forzar sincronización de atributos DOM después de un cambio de estado masivo
           if (!m.isDragPulse) {
@@ -866,8 +874,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
     const dims: Record<string, [number, number]> = {
       swimlane: [300, 520],  // Carril vertical con encabezado arriba y cuerpo hacia abajo
-      decision: [120, 100], parallel: [120, 100],
-      start: [40, 40], end: [40, 40]
+      decision: [120, 100], parallel: [120, 100], merge: [120, 100],
+      start: [40, 40], end: [40, 40],
+      activity_final: [40, 40], flow_final: [40, 40],
+      fork: [10, 100], join: [10, 100],
+      signal_send: [160, 60], signal_receive: [160, 60],
+      note: [140, 80], action: [160, 80]
     };
     const [defaultW, defaultH] = dims[type] || [160, 80];
 
@@ -875,6 +887,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
     let label: string;
     if (type === 'swimlane') {
       label = this.getNextLaneName();
+    } else if (['fork', 'join'].includes(type)) {
+      label = '';
     } else {
       const baseLabel = type === 'decision' ? 'Condición?' : undefined;
       label = this.getNextDefaultNodeName(type, baseLabel);
@@ -910,11 +924,18 @@ export class ModelerComponent implements OnInit, OnDestroy {
   private getNextDefaultNodeName(type: string, baseLabel?: string): string {
     const basenames: Record<string, string> = {
       decision: 'Decisión',
+      merge: 'Fusión',
       subprocess: 'Subproceso',
       start: 'Inicio',
       end: 'Fin',
       activity: 'Actividad',
-      datastore: 'Datos'
+      datastore: 'Datos',
+      action: 'Acción',
+      activity_final: 'Fin Actividad',
+      flow_final: 'Fin Flujo',
+      signal_send: 'Enviar Señal',
+      signal_receive: 'Recibir Señal',
+      note: 'Nota'
     };
 
     let prefix = baseLabel?.trim();
@@ -1186,7 +1207,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     this.aiLoading = true;
     this.aiLastMessage = ` Procesando: "${cmd}"...`;
 
-    this.iaService.processCommand(cmd, this.nodes, this.edges).subscribe({
+    this.iaService.processCommand(cmd, this.nodes, this.edges, this.selectedNode?.id).subscribe({
       next: (response: any) => {
         this.aiLoading = false;
         this.aiLastMessage = ' ' + (response.user_feedback || response.explanation || 'Comando ejecutado exitosamente');
@@ -1194,6 +1215,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
           this.message.warning(` UML: ${response.umlValidation}`);
         }
         this.executeAiCommands(response.commands);
+        this.broadcastUpdate();
       },
       error: (err: any) => {
         this.aiLoading = false;
@@ -1274,7 +1296,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
             width: cmd.width || w, height: cmd.height || h,
             fontSize: cmd.fontSize || 12,
             responsible: cmd.responsible,
-            forms: newForms
+            forms: newForms,
+            policy: cmd.policy
           });
           break;
         }
