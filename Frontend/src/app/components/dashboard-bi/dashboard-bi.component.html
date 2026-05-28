@@ -1,0 +1,21 @@
+<div class="bi-container">
+  <h2>Dashboard de Análisis y Reportes (BI)</h2>
+
+  <div class="charts-area">
+    <!-- Aquí irán gráficos integrados con eCharts o ChartJS posteriormente -->
+    <div class="chart-placeholder">Gráfico Tiempos de Ejecución vs Anomalías</div>
+    <div class="chart-placeholder">Gráfico Riesgos por Departamento</div>
+  </div>
+
+  <div class="actions">
+    <button (click)="generarReporteIA()">Generar Reporte Inteligente (IA)</button>
+  </div>
+
+  <div class="insights-panel" *ngIf="reporteGenerado && !reporteGenerado.cargando">
+    <h3>Resultados del Análisis IA:</h3>
+    <a [href]="reporteGenerado.reporte_url" target="_blank" class="download-link">⬇️ Descargar Reporte (PDF) desde S3</a>
+    <ul>
+      <li *ngFor="let insight of reporteGenerado.insights">{{insight}}</li>
+    </ul>
+  </div>
+</div>

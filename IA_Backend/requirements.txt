@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic
+langchain
+python-multipart
+httpx
+python-dotenv
+# Deep Learning & ML
+tensorflow
+numpy
+pandas
+scikit-learn
+joblib

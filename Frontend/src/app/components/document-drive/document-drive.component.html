@@ -1,0 +1,32 @@
+<div class="drive-container">
+  <div class="drive-header">
+    <h2>Módulo de Gestión Documental (S3)</h2>
+    <div class="actions">
+      <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)">
+      <label for="file-upload" class="upload-btn">+ Nuevo Documento</label>
+    </div>
+  </div>
+
+  <div class="drive-body">
+    <table class="files-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Tamaño</th>
+          <th>Fecha de Modificación</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let file of files">
+          <td>{{ file.name }}</td>
+          <td>{{ file.size }}</td>
+          <td>{{ file.date | date:'short' }}</td>
+          <td>
+            <button class="action-btn" (click)="downloadFile(file.name)">⬇️</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -10,7 +10,6 @@ import com.example.Procesos.model.Modeling;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Controller
 @RequiredArgsConstructor
@@ -20,8 +19,7 @@ public class ModelingSocketController {
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
 
-    // Cache para evitar lecturas constantes a DB
-    private final Map<String, Long> lastSaveTime = new ConcurrentHashMap<>();
+
 
     @MessageMapping("/modeler/{designId}")
     public void handleModelingUpdate(@DestinationVariable String designId, Map<String, Object> payload) {

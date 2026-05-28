@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { NodeData, EdgeData } from '../types';
+import { API_GLOBAL } from '../api.global';
 
 export interface DiagramCommand {
   action:
@@ -87,18 +88,8 @@ interface StrictCrudOperation {
   providedIn: 'root'
 })
 export class IaService {
-  private readonly GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-  private get API_KEY(): string {
-    try {
-      const config = JSON.parse(localStorage.getItem('bpmnflow_config') || '{}');
-      // Usando la clave proporcionada por el usuario para activación inmediata
-      return config.groqKey || '';
-    } catch { return ''; }
-  }
-  private get hasValidApiKey(): boolean {
-    const key = this.API_KEY.trim();
-    return key.length > 8 && !/^YOUR_/i.test(key);
-  }
+  private readonly GROQ_API_URL = API_GLOBAL.ia.comandoDiagrama;
+  private get hasValidApiKey(): boolean { return true; }
   private static readonly VERBS = {
     CREATE: /\b(agrega|añade|crea|inserta|pon|ponme|coloca|genera|haz|mete|dame|plantea|proyecta|instala|dibuja|traza|abre|dispone|sitúa|situa|arm[ao]|construy|fabric[ao]|diseñ[ao]|desarroll[ao]|fund[ao]|mont[ao]|establec|inicia|form[ao]|forj[ao]|origin[ao]|invent[ao]|agreguemos|añadamos|creemos|insertemos|pongamos|metamos|dibujemos|diseñemos|montemos)\b/i,
     DELETE: /\b(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra|cargate|revienta|mata|funde|tumba|limpia|arrasa|pela|bota|deshaz|borralo|eliminemos|borremos|quitemos|removamos|matemos|limpiemos)\b/i,
@@ -151,26 +142,20 @@ ACCIONES:
 FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`;
 
     const headers = new HttpHeaders({
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.API_KEY}`
+      'Content-Type': 'application/json'
     });
 
     const body = {
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0,
-      max_tokens: 4096,
-      response_format: { type: 'json_object' }
+      user_message: userMessage,
+      nodes_context: nodesContext,
+      edges_context: edgesContext,
+      lanes_context: lanesContext
     };
 
     return this.http.post<any>(this.GROQ_API_URL, body, { headers }).pipe(
       map(response => {
-        const content = response.choices[0]?.message?.content;
-        if (!content) throw new Error('No response from AI');
-        const parsed = JSON.parse(content);
+        // La respuesta del backend de Python es directamente el JSON
+        const parsed = JSON.parse(response);
         return this.normalizeIaResponse(parsed, userMessage, currentNodes, selectedNodeId);
       }),
       catchError(err => {

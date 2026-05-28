@@ -23,7 +23,7 @@ import { ModelingSocketService } from '../../../web-sockets/modeling-socket.serv
 import { NodeData, EdgeData, Modeling, Form, ValidationResult } from '../../../services/types';
 import { IaService, DiagramCommand } from '../../../services/ia/ia.service';
 import { ProcessInstanceService } from '../../../services/process-instance.service';
-import { GeminiLiveService } from '../../../services/ia/groq-live.service';
+import { VoiceAssistantService } from '../../../services/ia/voice-assistant.service';
 import { SettingsModalComponent } from '../../../components/settings-modal/settings-modal';
 
 @Component({
@@ -153,7 +153,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
     private iaService: IaService,
     private message: NzMessageService,
     private processInstanceService: ProcessInstanceService,
-    private geminiLive: GeminiLiveService,
+    private geminiLive: VoiceAssistantService,
     private ngZone: NgZone
   ) {
     this.designId = this.route.snapshot.paramMap.get('designId');

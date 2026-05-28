@@ -1,0 +1,22 @@
+<div class="chat-container">
+  <div class="chat-header">
+    <h3>Asistente IA (NLP)</h3>
+  </div>
+
+  <div class="chat-messages">
+    <div *ngFor="let msg of messages"
+         [ngClass]="{'msg-user': msg.sender === 'user', 'msg-ia': msg.sender === 'ia'}">
+      <div class="bubble">
+        {{ msg.text }}
+      </div>
+    </div>
+  </div>
+
+  <div class="chat-input-area">
+    <input type="text"
+           [(ngModel)]="userInput"
+           (keyup.enter)="sendMessage()"
+           placeholder="Escribe o dicta tu proceso en lenguaje natural...">
+    <button (click)="sendMessage()">Enviar</button>
+  </div>
+</div>
