@@ -35,10 +35,37 @@ class _DesignsListScreenState extends State<DesignsListScreen> {
     final api = Provider.of<ApiService>(context, listen: false);
     final user = ApiService.currentUser;
 
-    final designs = await api.getDesignsByProject(widget.projectId);
+    print('DEBUG: _loadAllData user: $user');
+    if (user != null) {
+      print('DEBUG: _loadAllData user.id: ${user.id}, email: ${user.email}, rol: ${user.rol}');
+    }
+    print('DEBUG: _loadAllData projectId: ${widget.projectId}');
+
+    List<Design> designs = [];
     List<Map<String, dynamic>> assignments = [];
-    if (user != null && user.id != null) {
-      assignments = await api.getAsignacionesPorProyecto(user.id!, widget.projectId);
+
+    try {
+      designs = await api.getDesignsByProject(widget.projectId);
+      print('DEBUG: _loadAllData designs fetched: ${designs.length}');
+      for (var d in designs) {
+        print('  - Design id: ${d.id}, name: ${d.nombre}');
+      }
+    } catch (e) {
+      print('DEBUG: _loadAllData Error fetching designs: $e');
+    }
+
+    try {
+      if (user != null && user.id != null) {
+        assignments = await api.getAsignacionesPorProyecto(user.id!, widget.projectId);
+        print('DEBUG: _loadAllData assignments fetched: ${assignments.length}');
+        for (var a in assignments) {
+          print('  - Assignment designId: ${a['designId']}, habilitado: ${a['habilitado']}, solicitado: ${a['solicitado']}');
+        }
+      } else {
+        print('DEBUG: _loadAllData skipped assignments fetch because user or user.id is null');
+      }
+    } catch (e) {
+      print('DEBUG: _loadAllData Error fetching assignments: $e');
     }
 
     return {
@@ -289,7 +316,7 @@ class DesignFolderCard extends StatelessWidget {
     return GestureDetector(
       onTap: () async {
         if (isHabilitado) {
-          Navigator.push(
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => DesignProcessesScreen(
@@ -299,6 +326,8 @@ class DesignFolderCard extends StatelessWidget {
               ),
             ),
           );
+          // Refresh when coming back so assignment state is up to date
+          onRefresh();
         } else if (isSolicitado) {
           _showPendingDialog(context);
         } else {

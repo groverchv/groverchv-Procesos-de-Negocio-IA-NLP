@@ -20,4 +20,5 @@ public class Usuario {
     private String password;
     private String rol; // ej. "CLIENTE", "DISENADOR", "FUNCIONARIO"
     private String tenantId; // cada cliente tiene su propio repositorio/tenant
+    private String fcmToken; // Token FCM del dispositivo móvil
 }

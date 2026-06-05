@@ -43,6 +43,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   // ---- Core State ----
   designId: string | null = null;
+  clienteId: string | null = null;
   projectId: string | null = null;
   modelingId: string | null = null;
   layoutType: string = 'vertical';
@@ -115,6 +116,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   executionHistory: string[] = [];
   processInstance: any = null;
   formChecks: Record<string, boolean> = {};
+  instanceId: string | null = null;
 
   // ---- Multi-Selection (Plan §3: Macro-Operaciones) ----
   selectedNodes: NodeData[] = [];
@@ -157,6 +159,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
     private ngZone: NgZone
   ) {
     this.designId = this.route.snapshot.paramMap.get('designId');
+    this.instanceId = this.route.snapshot.paramMap.get('instanceId');
+    this.clienteId = this.route.snapshot.queryParams['clienteId'] || null;
   }
 
   // ===== LIFECYCLE =====
@@ -195,6 +199,10 @@ export class ModelerComponent implements OnInit, OnDestroy {
   
   goBackToDesigns() {
     const parent = this.isReadOnly ? 'staff' : 'designer';
+    if (this.clienteId && this.isReadOnly) {
+      this.router.navigate(['/funcionario']);
+      return;
+    }
     if (this.projectId) {
       this.router.navigate([`/${parent}/projects`, this.projectId, 'designs']);
     } else {
@@ -1849,16 +1857,29 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   loadActiveInstance() {
     if (!this.designId) return;
-    this.processInstanceService.getByDesign(this.designId).subscribe({
-      next: (instances: any[]) => {
-        const active = instances.find((i: any) => i.status === 'ACTIVE');
-        if (active) {
-          this.processInstance = active;
-          this.isExecuting = true;
+    if (this.instanceId) {
+      this.processInstanceService.getInstance(this.instanceId).subscribe({
+        next: (instance: any) => {
+          this.processInstance = instance;
+          this.isExecuting = instance.status === 'ACTIVE';
           this.syncExecutionState();
+        },
+        error: () => {
+          this.message.error('No se pudo cargar la instancia especificada.');
         }
-      }
-    });
+      });
+    } else {
+      this.processInstanceService.getByDesign(this.designId).subscribe({
+        next: (instances: any[]) => {
+          const active = instances.find((i: any) => i.status === 'ACTIVE');
+          if (active) {
+            this.processInstance = active;
+            this.isExecuting = true;
+            this.syncExecutionState();
+          }
+        }
+      });
+    }
   }
 
   syncExecutionState() {
@@ -1891,7 +1912,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   startActivity() {
     if (!this.designId) return;
-    this.processInstanceService.startProcess(this.designId, 'staff-user').subscribe({
+    const executionUserId = this.clienteId || 'staff-user';
+    this.processInstanceService.startProcess(this.designId, executionUserId).subscribe({
       next: (instance: any) => {
         this.processInstance = instance;
         this.isExecuting = true;
@@ -1944,12 +1966,13 @@ export class ModelerComponent implements OnInit, OnDestroy {
       formData[key] = val;
     });
 
+    const executionUserId = this.clienteId || 'staff-user';
     this.processInstanceService.advanceActivity(
       this.processInstance.id,
       this.currentExecutionNodeId,
       'FINISHED',
       formData,
-      'staff-user'
+      executionUserId
     ).subscribe({
       next: (updated: any) => {
         this.processInstance = updated;
@@ -1974,11 +1997,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
     // If forms not checked and this is the "No" path, allow
     // If forms checked and this is the "Yes" path, allow
+    const executionUserId = this.clienteId || 'staff-user';
     this.processInstanceService.resolveDecision(
       this.processInstance.id,
       this.currentExecutionNodeId,
       edge.id,
-      'staff-user'
+      executionUserId
     ).subscribe({
       next: (updated: any) => {
         this.processInstance = updated;
@@ -1993,7 +2017,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   stopExecution() {
     if (!this.processInstance) return;
-    this.processInstanceService.cancelProcess(this.processInstance.id, 'staff-user').subscribe({
+    const executionUserId = this.clienteId || 'staff-user';
+    this.processInstanceService.cancelProcess(this.processInstance.id, executionUserId).subscribe({
       next: () => {
         this.isExecuting = false;
         this.processInstance = null;

@@ -25,6 +25,7 @@ export const routes: Routes = [
   { path: 'staff/projects', component: ProjectListComponent },
   { path: 'staff/projects/:projectId/designs', component: DesignListComponent },
   { path: 'staff/designs/:designId', component: ModelerComponent },
+  { path: 'staff/designs/:designId/instances/:instanceId', component: ModelerComponent },
   { path: 'staff/kpis', component: DashboardBiComponent },
   { path: 'staff/documentos', component: DocumentDriveComponent },
 

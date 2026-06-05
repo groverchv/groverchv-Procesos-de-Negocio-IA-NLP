@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/push/notificaciones_push_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({Key? key}) : super(key: key);
@@ -65,7 +67,17 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         _loginPasswordController.text,
       );
       ApiService.currentUser = user;
+      debugPrint('LOGIN OK → id=${user.id}, email=${user.email}, rol=${user.rol}');
       
+      // Inicializar notificaciones push y enviar el token al backend
+      try {
+        if (user.id != null) {
+          await NotificacionesPushService.inicializar(user.id!, apiService);
+        }
+      } catch (e) {
+        debugPrint('Error al inicializar notificaciones push: $e');
+      }
+
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
@@ -90,6 +102,15 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         _regPasswordController.text,
       );
       ApiService.currentUser = user;
+
+      // Inicializar notificaciones push y enviar el token al backend
+      try {
+        if (user.id != null) {
+          await NotificacionesPushService.inicializar(user.id!, apiService);
+        }
+      } catch (e) {
+        debugPrint('Error al inicializar notificaciones push: $e');
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -96,6 +96,14 @@ public class UsuarioController {
                 .orElse(ResponseEntity.status(401).body(Map.of("message", "Usuario no encontrado")));
     }
 
+    @PutMapping("/{id}/fcm-token")
+    public ResponseEntity<Usuario> updateFcmToken(@PathVariable String id, @RequestBody Map<String, String> body) {
+        String token = body.get("fcmToken");
+        return usuarioService.updateFcmToken(id, token)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         usuarioService.deleteUsuario(id);

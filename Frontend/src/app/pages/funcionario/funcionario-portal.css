@@ -244,12 +244,29 @@
 .fp-assign-table { border-top: 1px solid #f1f5f9; }
 .fp-assign-row {
   display: grid;
-  grid-template-columns: 1fr 160px 280px;
+  grid-template-columns: 1.2fr 140px 1.5fr 280px;
   align-items: center;
   padding: 16px 32px;
   border-bottom: 1px solid #f8fafc;
   transition: background 0.15s;
   gap: 16px;
+}
+.fp-instances-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.fp-instance-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
 }
 .fp-assign-header {
   background: #f8fafc;

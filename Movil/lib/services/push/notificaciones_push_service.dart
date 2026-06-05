@@ -1,45 +1,67 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
+import '../api_service.dart';
 
 // Controlador Global Background para Mensajes de Firebase
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  print("Mensaje Push recibido en background: ${message.messageId}");
+  try {
+    await Firebase.initializeApp();
+    debugPrint("Mensaje Push recibido en background: ${message.messageId}");
+  } catch (e) {
+    debugPrint("Error en background handler: $e");
+  }
 }
 
 class NotificacionesPushService {
   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
-  static Future<void> inicializar() async {
-    // 1. Inicializar Core de Firebase
-    await Firebase.initializeApp();
-    
-    // 2. Pedir permisos al Cliente (iOS/Android)
-    await _firebaseMessaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+  static Future<void> inicializar(String userId, ApiService apiService) async {
+    try {
+      // 1. Inicializar Core de Firebase (si no está inicializado)
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+      
+      // En la web o plataformas no soportadas por ciertos métodos de firebase messaging,
+      // evitamos que lance excepciones fatales.
+      if (kIsWeb) {
+        debugPrint('Notificaciones push no soportadas/configuradas en Web aún.');
+        return;
+      }
 
-    // 3. Inicializar Notificaciones Locales (para cuando la app está abierta)
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-    await _localNotifications.initialize(initializationSettings);
+      // 2. Pedir permisos al Cliente (iOS/Android)
+      await _firebaseMessaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    // 4. Configurar handlers (Background y Foreground)
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      // 3. Inicializar Notificaciones Locales (para cuando la app está abierta)
+      const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+      await _localNotifications.initialize(initializationSettings);
 
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Mensaje Push recibido en primer plano: ${message.notification?.title}');
-      _mostrarNotificacionLocal(message);
-    });
+      // 4. Configurar handlers (Background y Foreground)
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 5. Obtener Token del dispositivo (Este token se debe enviar a Spring Boot)
-    String? token = await _firebaseMessaging.getToken();
-    print('Token FCM Dispositivo: $token');
-    // TODO: Enviar token al Backend (Spring Boot) para vincularlo al Cliente/Tenant
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('Mensaje Push recibido en primer plano: ${message.notification?.title}');
+        _mostrarNotificacionLocal(message);
+      });
+
+      // 5. Obtener Token del dispositivo y enviarlo al Backend
+      String? token = await _firebaseMessaging.getToken();
+      debugPrint('Token FCM Dispositivo: $token');
+      
+      if (token != null) {
+        await apiService.updateFcmToken(userId, token);
+      }
+    } catch (e) {
+      debugPrint('Error al inicializar NotificacionesPushService: $e');
+    }
   }
 
   static void _mostrarNotificacionLocal(RemoteMessage message) {

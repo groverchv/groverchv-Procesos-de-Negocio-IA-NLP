@@ -9,7 +9,15 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
+import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { Usuario, Project, Design, AsignacionProceso } from '../../services/types';
+
+interface InstanciaResumen {
+  id: string;
+  status: string;
+  startedBy: string;
+  startedAt: string;
+}
 
 @Component({
   selector: 'app-funcionario-portal',
@@ -17,7 +25,7 @@ import { Usuario, Project, Design, AsignacionProceso } from '../../services/type
   imports: [
     CommonModule, FormsModule, RouterLink,
     NzIconModule, NzButtonModule, NzTagModule,
-    NzSwitchModule, NzTooltipModule
+    NzSwitchModule, NzTooltipModule, NzSpinModule
   ],
   templateUrl: './funcionario-portal.html',
   styleUrls: ['./funcionario-portal.css']
@@ -32,6 +40,7 @@ export class FuncionarioPortalComponent implements OnInit {
   proyectos: Project[] = [];
   disenos: Design[] = [];
   asignaciones: AsignacionProceso[] = [];
+  instanciasMap: Map<string, InstanciaResumen[]> = new Map();
 
   // ─── Selections ─────────────────────────────────────────────────────────────
   clienteSeleccionado: Usuario | null = null;
@@ -56,6 +65,38 @@ export class FuncionarioPortalComponent implements OnInit {
   ngOnInit() {
     this.cargarClientes();
     this.cargarProyectos();
+    this.restaurarEstado();
+  }
+
+  // ─── Persistencia de estado en sessionStorage ────────────────────────────────
+  private restaurarEstado() {
+    try {
+      const raw = sessionStorage.getItem('fp_state');
+      if (!raw) return;
+      const state = JSON.parse(raw);
+      if (state.clienteSeleccionado) this.clienteSeleccionado = state.clienteSeleccionado;
+      if (state.proyectoSeleccionado) this.proyectoSeleccionado = state.proyectoSeleccionado;
+      if (state.disenoSeleccionado) this.disenoSeleccionado = state.disenoSeleccionado;
+      if (state.currentStep) {
+        this.currentStep = state.currentStep;
+        // Reload data for the current step
+        if (this.currentStep >= 2 && this.proyectoSeleccionado) {
+          this.cargarDisenos(this.proyectoSeleccionado.id!);
+        }
+        if (this.currentStep >= 3) {
+          this.cargarAsignacionesProyecto();
+        }
+      }
+    } catch (e) {}
+  }
+
+  private guardarEstado() {
+    sessionStorage.setItem('fp_state', JSON.stringify({
+      currentStep: this.currentStep,
+      clienteSeleccionado: this.clienteSeleccionado,
+      proyectoSeleccionado: this.proyectoSeleccionado,
+      disenoSeleccionado: this.disenoSeleccionado,
+    }));
   }
 
   // ─── Step 1 ─────────────────────────────────────────────────────────────────
@@ -73,6 +114,7 @@ export class FuncionarioPortalComponent implements OnInit {
     this.proyectoSeleccionado = null;
     this.disenoSeleccionado = null;
     this.asignaciones = [];
+    this.guardarEstado();
   }
 
   // ─── Step 2 ─────────────────────────────────────────────────────────────────
@@ -89,6 +131,7 @@ export class FuncionarioPortalComponent implements OnInit {
     this.currentStep = 2;
     this.disenoSeleccionado = null;
     this.cargarDisenos(p.id!);
+    this.guardarEstado();
   }
 
   // ─── Step 3 ─────────────────────────────────────────────────────────────────
@@ -104,6 +147,7 @@ export class FuncionarioPortalComponent implements OnInit {
     this.disenoSeleccionado = d;
     this.currentStep = 3;
     this.cargarAsignacionesProyecto();
+    this.guardarEstado();
   }
 
   // ─── Step 4 ─────────────────────────────────────────────────────────────────
@@ -115,9 +159,9 @@ export class FuncionarioPortalComponent implements OnInit {
       `${this.BASE}/asignaciones/cliente/${this.clienteSeleccionado.id}/proyecto/${this.proyectoSeleccionado.id}`
     ).subscribe({
       next: data => {
-        // Merge: add entries for designs that have no assignment yet (defaulting to disabled)
         const asignacionMap = new Map(data.map(a => [a.designId, a]));
-        this.asignaciones = this.disenos.map(d => {
+        const filteredDisenos = this.disenoSeleccionado ? [this.disenoSeleccionado] : this.disenos;
+        this.asignaciones = filteredDisenos.map(d => {
           return asignacionMap.get(d.id!) ?? {
             clienteId: this.clienteSeleccionado!.id!,
             designId: d.id!,
@@ -129,10 +173,13 @@ export class FuncionarioPortalComponent implements OnInit {
           } as AsignacionProceso;
         });
         this.cargandoAsignaciones = false;
+
+        // Cargar instancias del cliente para cada diseño
+        this.cargarInstanciasCliente();
       },
       error: () => {
-        // Si no hay asignaciones, crear entradas vacías para todos los diseños
-        this.asignaciones = this.disenos.map(d => ({
+        const filteredDisenos = this.disenoSeleccionado ? [this.disenoSeleccionado] : this.disenos;
+        this.asignaciones = filteredDisenos.map(d => ({
           clienteId: this.clienteSeleccionado!.id!,
           designId: d.id!,
           designNombre: d.nombre,
@@ -144,6 +191,40 @@ export class FuncionarioPortalComponent implements OnInit {
         this.cargandoAsignaciones = false;
       }
     });
+  }
+
+  /** Carga las instancias de proceso iniciadas por el cliente para ver el seguimiento */
+  cargarInstanciasCliente() {
+    if (!this.clienteSeleccionado?.id) return;
+    this.http.get<any[]>(`${this.BASE}/instances/user/${this.clienteSeleccionado.id}`).subscribe({
+      next: instancias => {
+        this.instanciasMap.clear();
+        for (const inst of instancias) {
+          const did = inst.designId;
+          if (!this.instanciasMap.has(did)) this.instanciasMap.set(did, []);
+          this.instanciasMap.get(did)!.push({
+            id: inst.id,
+            status: inst.status,
+            startedBy: inst.startedBy,
+            startedAt: inst.startedAt
+          });
+        }
+      },
+      error: () => {}
+    });
+  }
+
+  getInstanciasDeDiseno(designId: string): InstanciaResumen[] {
+    return this.instanciasMap.get(designId) ?? [];
+  }
+
+  /** Navega al diseño para ver el flujo del cliente en el frontend del diseñador */
+  verFlujo(designId: string, instanceId?: string) {
+    if (instanceId) {
+      this.router.navigate(['/staff/designs', designId, 'instances', instanceId]);
+    } else {
+      this.router.navigate(['/staff/designs', designId]);
+    }
   }
 
   toggleAsignacion(asignacion: AsignacionProceso) {
@@ -165,8 +246,9 @@ export class FuncionarioPortalComponent implements OnInit {
         asignacion.habilitado = true;
         asignacion.solicitado = false;
         asignacion.id = saved.id;
-        this.message.success(`Solicitud aprobada: "${saved.designNombre}" ahora está habilitado`);
+        this.message.success(`✅ Solicitud aprobada: "${saved.designNombre}" habilitado`);
         this.guardando = false;
+        this.cargarInstanciasCliente();
       },
       error: () => {
         this.message.error('Error al aprobar la solicitud');
@@ -187,14 +269,15 @@ export class FuncionarioPortalComponent implements OnInit {
       next: saved => {
         // Update local id if newly created
         asignacion.id = saved.id;
-        const accion = saved.habilitado ? 'habilitado' : 'deshabilitado';
+        asignacion.habilitado = saved.habilitado;
+        const accion = saved.habilitado ? '✅ habilitado' : '🔒 deshabilitado';
         this.message.success(`Proceso "${saved.designNombre}" ${accion} para ${this.clienteSeleccionado?.nombre}`);
         this.guardando = false;
       },
       error: () => {
         // Revert optimistic update on error
         asignacion.habilitado = !asignacion.habilitado;
-        this.message.error('Error al guardar la asignación');
+        this.message.error('Error al guardar la asignación. Verifica la conexión al backend.');
         this.guardando = false;
       }
     });
@@ -212,6 +295,7 @@ export class FuncionarioPortalComponent implements OnInit {
   irAPaso(paso: number) {
     if (paso < this.currentStep) {
       this.currentStep = paso;
+      this.guardarEstado();
     }
   }
 
@@ -223,11 +307,8 @@ export class FuncionarioPortalComponent implements OnInit {
     return this.asignaciones.filter(a => a.solicitado && !a.habilitado).length;
   }
 
-  get disenoParaAsignacion(): Design | null {
-    return this.disenos.find(d => d.id === this.disenoSeleccionado?.id) ?? null;
-  }
-
   volverAlInicio() {
+    sessionStorage.removeItem('fp_state');
     this.router.navigate(['/']);
   }
 
@@ -240,5 +321,23 @@ export class FuncionarioPortalComponent implements OnInit {
     let hash = 0;
     for (let i = 0; i < id.length; i++) hash += id.charCodeAt(i);
     return colors[hash % colors.length];
+  }
+
+  getStatusColor(status: string): string {
+    switch (status?.toUpperCase()) {
+      case 'ACTIVE': return 'processing';
+      case 'COMPLETED': return 'success';
+      case 'CANCELED': return 'error';
+      default: return 'default';
+    }
+  }
+
+  getStatusLabel(status: string): string {
+    switch (status?.toUpperCase()) {
+      case 'ACTIVE': return 'En curso';
+      case 'COMPLETED': return 'Terminado';
+      case 'CANCELED': return 'Cancelado';
+      default: return status;
+    }
   }
 }

@@ -22,6 +22,8 @@ class DesignProcessesScreen extends StatefulWidget {
 
 class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
   late Future<List<ProcessInstance>> _instancesFuture;
+  Map<String, dynamic>? _assignment;
+  bool _loadingAssignment = true;
 
   @override
   void initState() {
@@ -32,6 +34,39 @@ class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
   void _loadData() {
     _instancesFuture = Provider.of<ApiService>(context, listen: false)
         .getInstancesPorDiseno(widget.designId);
+    _loadAssignment();
+  }
+
+  Future<void> _loadAssignment() async {
+    final api = Provider.of<ApiService>(context, listen: false);
+    final user = ApiService.currentUser;
+    if (user != null && user.id != null) {
+      try {
+        final asignaciones = await api.getAllAsignacionesCliente(user.id!);
+        final match = asignaciones.firstWhere(
+          (a) => a['designId'] == widget.designId,
+          orElse: () => <String, dynamic>{},
+        );
+        if (mounted) {
+          setState(() {
+            _assignment = match.isEmpty ? null : match;
+            _loadingAssignment = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _loadingAssignment = false;
+          });
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _loadingAssignment = false;
+        });
+      }
+    }
   }
 
   Future<void> _startNewProcess() async {
@@ -104,9 +139,10 @@ class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
       // Reset the assignment so re-request is needed for next run
       await api.deshabilitarAccesoDiseno(widget.designId, user.id ?? '');
 
+      if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
 
-      // Show success + navigate to diagram viewer, then pop designs list
+      // Navigate to diagram viewer to see the running process
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -117,13 +153,12 @@ class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
         ),
       );
 
-      // After returning from the diagram, go back to designs list
-      // (access is now revoked, so designs list will show BLOQUEADO)
+      // When coming back from diagram, refresh this list so the new instance appears
       if (mounted) {
-        Navigator.pop(context); // pop back to designs list
+        setState(() => _loadData());
       }
     } catch (e) {
-      Navigator.pop(context); // Close loading dialog
+      if (mounted) Navigator.pop(context); // Close loading dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al iniciar proceso: $e'),
@@ -133,8 +168,103 @@ class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
     }
   }
 
+  Future<void> _solicitarAcceso() async {
+    final api = Provider.of<ApiService>(context, listen: false);
+    final user = ApiService.currentUser;
+    if (user == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final design = await api.getDesignById(widget.designId);
+
+      await api.solicitarAccesoDiseno(
+        widget.designId,
+        widget.designNombre,
+        design.projectId,
+        widget.projectNombre ?? 'Proyecto',
+        user.id!,
+      );
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Solicitud enviada correctamente'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al solicitar acceso: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isHabilitado = _assignment != null && _assignment!['habilitado'] == true;
+    final bool isSolicitado = _assignment != null && _assignment!['solicitado'] == true;
+
+    Color btnColor1 = const Color(0xFF3B82F6);
+    Color btnColor2 = const Color(0xFF2563EB);
+    IconData btnIcon = Icons.play_circle_filled_rounded;
+    String btnText = 'INICIAR NUEVO PROCESO';
+    VoidCallback? btnAction = _startNewProcess;
+
+    if (_loadingAssignment) {
+      btnText = 'CARGANDO ACCESO...';
+      btnAction = null;
+      btnColor1 = Colors.grey.shade400;
+      btnColor2 = Colors.grey.shade500;
+    } else if (isSolicitado) {
+      btnText = 'SOLICITUD PENDIENTE';
+      btnIcon = Icons.schedule_rounded;
+      btnAction = () {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                Icon(Icons.schedule_rounded, color: Colors.amber.shade600),
+                const SizedBox(width: 8),
+                const Text('Solicitud Pendiente', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: const Text(
+                'Tu solicitud está pendiente de aprobación por el funcionario. '
+                'Recibirás acceso una vez que sea habilitada.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              )
+            ],
+          ),
+        );
+      };
+      btnColor1 = const Color(0xFFF59E0B);
+      btnColor2 = const Color(0xFFD97706);
+    } else if (!isHabilitado) {
+      btnText = 'SOLICITAR DE NUEVO';
+      btnIcon = Icons.send_rounded;
+      btnAction = _solicitarAcceso;
+      btnColor1 = const Color(0xFF64748B);
+      btnColor2 = const Color(0xFF475569);
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
@@ -259,7 +389,7 @@ class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '${instances.length} instancia${instances.length != 1 ? "s" : ""} registrada${instances.length != 1 ? "s" : ""}',
+                           '${instances.length} instancia${instances.length != 1 ? "s" : ""} registrada${instances.length != 1 ? "s" : ""}',
                           style: TextStyle(
                             color: Colors.grey.shade500,
                             fontSize: 13,
@@ -311,25 +441,25 @@ class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+            gradient: LinearGradient(
+              colors: [btnColor1, btnColor2],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF3B82F6).withOpacity(0.4),
+                color: btnColor1.withOpacity(0.4),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
             ],
           ),
           child: ElevatedButton.icon(
-            onPressed: _startNewProcess,
-            icon: const Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 24),
-            label: const Text(
-              'INICIAR NUEVO PROCESO',
-              style: TextStyle(
+            onPressed: btnAction,
+            icon: Icon(btnIcon, color: Colors.white, size: 24),
+            label: Text(
+              btnText,
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 1.2,

@@ -34,6 +34,11 @@ public class ProcessInstanceController {
         return workflowEngine.getActiveInstances();
     }
 
+    @GetMapping("/user/{userId}")
+    public List<ProcessInstance> getByStartedBy(@PathVariable String userId) {
+        return workflowEngine.getInstancesByStartedBy(userId);
+    }
+
     @GetMapping("/project/{projectId}")
     public List<ProcessInstance> getByProject(@PathVariable String projectId) {
         return workflowEngine.getInstancesByProject(projectId);

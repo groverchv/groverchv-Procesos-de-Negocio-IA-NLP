@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../models/types.dart';
 
@@ -144,6 +145,36 @@ class ApiService {
     }
   }
 
+  Future<List<ProcessInstance>> getAllInstances() async {
+    try {
+      final response = await _get('/instances');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = jsonDecode(response.body);
+        return jsonList.map((json) => ProcessInstance.fromJson(json)).toList();
+      } else {
+        throw Exception('Error cargando todas las instancias: ${response.statusCode}');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<List<ProcessInstance>> getInstancesByStartedBy(String userId) async {
+    try {
+      final response = await _get('/instances/user/$userId');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = jsonDecode(response.body);
+        return jsonList.map((json) => ProcessInstance.fromJson(json)).toList();
+      } else {
+        throw Exception('Error cargando instancias del usuario: ${response.statusCode}');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Obtiene los diseños habilitados para un cliente por el Funcionario.
   /// Retorna la lista de AsignacionProceso con habilitado=true.
   Future<List<Map<String, dynamic>>> getDesignosHabilitados(String clienteId) async {
@@ -151,7 +182,7 @@ class ApiService {
       final response = await _get('/asignaciones/cliente/$clienteId/habilitados');
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = jsonDecode(response.body);
-        return jsonList.cast<Map<String, dynamic>>();
+        return jsonList.map((x) => Map<String, dynamic>.from(x)).toList();
       } else {
         return [];
       }
@@ -214,8 +245,40 @@ class ApiService {
     }
   }
 
+  /// Chat móvil con contexto de procesos del usuario — usa /api/v1/nlp/chat-movil
+  /// que tiene un system prompt especializado de call-center / asesor de procesos.
+  Future<String> nlpChatMovil({
+    required List<Map<String, String>> messages,
+    String? procesoContext,
+  }) async {
+    final String iaUrl = kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
+    try {
+      final response = await http.post(
+        Uri.parse('$iaUrl/api/v1/nlp/chat-movil'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'messages': messages,
+          if (procesoContext != null) 'proceso_context': procesoContext,
+        }),
+      ).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return (data['reply'] as String?) ?? 'Sin respuesta del asistente.';
+      } else {
+        throw Exception('Error en IA Móvil: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('nlpChatMovil error: $e');
+      // Fallback offline
+      return 'En este momento no tengo conexión con el servidor de IA. '
+          'Por favor, verifica que el backend de IA esté activo en el puerto 8000 '
+          'e intenta nuevamente.';
+    }
+  }
+
   /// Genera audio usando ElevenLabs a través del microservicio de IA
-  Future<String> ttsGenerarVoz(String texto) async {
+  Future<Uint8List?> ttsGenerarVoz(String texto) async {
     final String iaUrl = kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
     try {
       final response = await http.post(
@@ -227,14 +290,13 @@ class ApiService {
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        return data['audio_base64'] ?? '';
+        return response.bodyBytes;
       } else {
         throw Exception('Error en ElevenLabs TTS: ${response.statusCode}');
       }
     } catch (e) {
       print('ElevenLabs Offline/Error fallback: $e');
-      return '';
+      return null;
     }
   }
 
@@ -368,7 +430,7 @@ class ApiService {
       final response = await _get('/asignaciones/cliente/$clienteId/proyecto/$projectId');
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = jsonDecode(response.body);
-        return jsonList.cast<Map<String, dynamic>>();
+        return jsonList.map((x) => Map<String, dynamic>.from(x)).toList();
       } else {
         return [];
       }
@@ -379,6 +441,41 @@ class ApiService {
 
   Future<List<Map<String, dynamic>>> getAsignacionesPorProyecto(String clienteId, String projectId) async {
     return getAssignmentsForProject(clienteId, projectId);
+  }
+
+  /// Obtiene TODAS las asignaciones del cliente (habilitadas, pendientes y deshabilitadas)
+  /// para mostrar en la pantalla de actividad/solicitudes.
+  Future<List<Map<String, dynamic>>> getAllAsignacionesCliente(String clienteId) async {
+    try {
+      final response = await _get('/asignaciones/cliente/$clienteId');
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = jsonDecode(response.body);
+        return jsonList.map((x) => Map<String, dynamic>.from(x)).toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Error getAllAsignacionesCliente: $e');
+      return [];
+    }
+  }
+
+  Future<void> updateFcmToken(String userId, String token) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/usuarios/$userId/fcm-token'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'fcmToken': token}),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        debugPrint('FCM Token actualizado en el backend con éxito');
+      } else {
+        debugPrint('Error actualizando FCM Token: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error de red al actualizar FCM Token: $e');
+    }
   }
 }
 

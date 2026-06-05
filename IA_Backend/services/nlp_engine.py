@@ -213,5 +213,66 @@ Tu respuesta debe ser estrictamente en formato JSON con los siguientes campos ex
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
+    async def chat_movil(self, messages: list, proceso_context: str = None):
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Falta la API Key de Groq en la variable de entorno GROQ_API_KEY")
+
+        context_section = proceso_context or "No se proporcionó contexto de procesos del usuario."
+
+        system_prompt = f"""Eres BPMN Asesor, el asistente virtual inteligente integrado en la aplicación móvil de BPMNFlow.
+Tu función es actuar como un agente de atención al cliente y asesor de procesos, respondiendo preguntas de los usuarios
+sobre los trámites disponibles, cómo iniciarlos, cuál es la opción más rápida, el estado de sus solicitudes,
+y también funcionas como manual interactivo de la aplicación.
+
+=== CONTEXTO DE DATOS DEL USUARIO (actualizado en tiempo real) ===
+{context_section}
+
+=== INFORMACIÓN DEL SISTEMA BPMNFLOW ===
+BPMNFlow es una plataforma de gestión de procesos de negocio. Los usuarios (clientes) pueden:
+1. Ver proyectos y sus diseños (procesos).
+2. Solicitar acceso a un proceso específico tocando la carpeta y presionando "Solicitar Acceso".
+3. Una vez habilitado por un Funcionario, pueden iniciar el proceso.
+4. El proceso avanza por actividades (PENDING → IN_PROCESS → FINISHED).
+5. El estado de sus trámites se puede ver en la pestaña "Activos" de la app.
+
+=== TIPOS DE PROCESOS COMUNES ===
+- Solicitud de Licencia/Vacaciones: Muy rápido (~1.2 horas), tasa de éxito 99.8%
+- Solicitud de Crédito/Aprobaciones: Complejo (~24 horas), requiere múltiples aprobaciones
+- Onboarding de Personal: Duración media (~12 horas)
+- Soporte Técnico: Rápido (~3.4 horas), bien procedimentado
+- Compras Corporativas: Lento (~72 horas), depende de proveedores externos
+
+- Las respuestas DEBEN ser extremadamente cortas, sintéticas y muy fáciles de entender (máximo 20 frases simples y directas).
+- Recuerda que la respuesta se leerá en voz alta: evita viñetas, listas o explicaciones largas. Ve al grano inmediatamente.
+- Si no sabes algo, responde brevemente sugiriendo qué sí puedes hacer.
+- NUNCA respondas con código o JSON, solo texto conversacional corto.
+"""
+
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        body = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": full_messages,
+            "temperature": 0.7,
+            "max_tokens": 800
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=30.0)
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"Error de Groq: {e.response.text}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
 motor_nlp = MotorNLP()
 

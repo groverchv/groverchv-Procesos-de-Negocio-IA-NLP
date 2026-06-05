@@ -235,6 +235,7 @@
         <div class="fp-assign-row fp-assign-header">
           <span>Proceso / Diseño</span>
           <span>Estado del Diseño</span>
+          <span>Flujo del Cliente</span>
           <span>Acceso del Cliente</span>
         </div>
 
@@ -260,15 +261,26 @@
             </nz-tag>
           </div>
 
-          <div class="fp-assign-toggle">
-            <!-- Botón Proceso: permite iniciar o dar seguimiento -->
-            <ng-container *ngIf="a.habilitado">
-              <button nz-button nzType="primary" nzSize="default" style="background-color: #10b981; border-color: #10b981; border-radius: 8px; font-weight: 600;"
-                      [routerLink]="['/staff/designs', a.designId]">
-                <span nz-icon nzType="rocket" nzTheme="outline"></span> Proceso
-              </button>
+          <!-- Instancias de proceso del cliente -->
+          <div class="fp-instances-col">
+            <ng-container *ngIf="getInstanciasDeDiseno(a.designId).length > 0; else noInstancias">
+              <div *ngFor="let inst of getInstanciasDeDiseno(a.designId)" class="fp-instance-row">
+                <nz-tag [nzColor]="getStatusColor(inst.status)" style="font-size: 10px;">
+                  {{ getStatusLabel(inst.status) }}
+                </nz-tag>
+                <button nz-button nzType="default" nzSize="small"
+                        style="border-radius: 6px; font-size: 11px; font-weight: 600;"
+                        (click)="verFlujo(a.designId, inst.id)">
+                  <span nz-icon nzType="eye" nzTheme="outline"></span> Ver flujo
+                </button>
+              </div>
             </ng-container>
+            <ng-template #noInstancias>
+              <span style="color: #94a3b8; font-size: 12px;">Sin procesos</span>
+            </ng-template>
+          </div>
 
+          <div class="fp-assign-toggle">
             <button *ngIf="a.solicitado && !a.habilitado" nz-button nzType="primary" nzSize="default" class="fp-approve-btn" (click)="aprobarSolicitud(a)" [nzLoading]="guardando">
               <span nz-icon nzType="check-circle" nzTheme="outline"></span> Aprobar
             </button>
@@ -307,3 +319,4 @@
 
   </div>
 </div>
+

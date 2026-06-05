@@ -70,4 +70,11 @@ public class UsuarioService {
     public void deleteUsuario(String id) {
         usuarioRepository.deleteById(id);
     }
+
+    public Optional<Usuario> updateFcmToken(String id, String fcmToken) {
+        return usuarioRepository.findById(id).map(user -> {
+            user.setFcmToken(fcmToken);
+            return usuarioRepository.save(user);
+        });
+    }
 }

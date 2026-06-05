@@ -47,8 +47,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200", "http://127.0.0.1:4200"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -145,6 +145,26 @@ async def chat_asesor(
         lanes_context=requerimiento.lanes_context
     )
     return {"reply": respuesta}
+
+
+class NLPMovilRequest(BaseModel):
+    messages: list
+    proceso_context: Optional[str] = None
+
+
+@app.post("/api/v1/nlp/chat-movil")
+async def chat_movil(requerimiento: NLPMovilRequest):
+    """
+    Chat IA para la aplicación móvil Flutter.
+    Incluye contexto de procesos del usuario (proyectos, instancias, asignaciones)
+    enviados directamente desde el dispositivo.
+    """
+    respuesta = await motor_nlp.chat_movil(
+        messages=requerimiento.messages,
+        proceso_context=requerimiento.proceso_context,
+    )
+    return {"reply": respuesta}
+
 
 # ------------------------------------------------------------------
 # TTS: Text to Speech (ElevenLabs)

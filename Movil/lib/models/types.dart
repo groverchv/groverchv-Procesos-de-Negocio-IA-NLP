@@ -289,8 +289,10 @@ class Usuario {
   });
 
   factory Usuario.fromJson(Map<String, dynamic> json) {
+    // MongoDB can return either 'id' or '_id' depending on Spring configuration
+    final idValue = json['id'] ?? json['_id'];
     return Usuario(
-      id: json['id'],
+      id: idValue?.toString(),
       nombre: json['nombre'] ?? '',
       email: json['email'] ?? '',
       password: json['password'],

@@ -16,6 +16,7 @@ import com.example.Procesos.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import com.example.Procesos.service.push.FirebasePushService;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +36,7 @@ public class WorkflowEngineService {
     private final ProjectRepository projectRepository;
     private final S3DocumentService s3DocumentService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final FirebasePushService firebasePushService;
 
     // ═══ INSTANTIATE PROCESS ═══
     public ProcessInstance startProcess(String designId, String userId) {
@@ -349,6 +351,10 @@ public class WorkflowEngineService {
         return instanceRepository.findById(instanceId);
     }
 
+    public List<ProcessInstance> getInstancesByStartedBy(String userId) {
+        return instanceRepository.findByStartedBy(userId);
+    }
+
     public List<ProcessInstance> getAllInstances() {
         return instanceRepository.findAll();
     }
@@ -403,6 +409,22 @@ public class WorkflowEngineService {
                 .build();
         notificationRepository.save(notification);
         messagingTemplate.convertAndSend("/topic/notifications/" + userId, notification);
+
+        // Envío de Notificación Push a dispositivo móvil si tiene token registrado
+        try {
+            Optional<Usuario> userOpt = usuarioRepository.findById(userId);
+            if (!userOpt.isPresent()) {
+                userOpt = usuarioRepository.findByEmail(userId);
+            }
+            if (userOpt.isPresent()) {
+                Usuario user = userOpt.get();
+                if (user.getFcmToken() != null && !user.getFcmToken().isBlank()) {
+                    firebasePushService.enviarNotificacionACliente(user.getFcmToken(), title, message);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Advertencia al enviar notificación push: " + e.getMessage());
+        }
     }
 
     // ═══ VALIDATION (RF-9) ═══
