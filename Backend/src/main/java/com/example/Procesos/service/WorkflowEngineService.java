@@ -5,14 +5,20 @@ import com.example.Procesos.model.Modeling;
 import com.example.Procesos.model.Notification;
 import com.example.Procesos.model.ProcessInstance;
 import com.example.Procesos.model.ProcessInstance.ActivityInstance;
+import com.example.Procesos.model.Usuario;
+import com.example.Procesos.model.Project;
 import com.example.Procesos.repository.DesignRepository;
 import com.example.Procesos.repository.ModelingRepository;
 import com.example.Procesos.repository.NotificationRepository;
 import com.example.Procesos.repository.ProcessInstanceRepository;
+import com.example.Procesos.repository.UsuarioRepository;
+import com.example.Procesos.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,6 +31,9 @@ public class WorkflowEngineService {
     private final DesignRepository designRepository;
     private final ModelingRepository modelingRepository;
     private final NotificationRepository notificationRepository;
+    private final UsuarioRepository usuarioRepository;
+    private final ProjectRepository projectRepository;
+    private final S3DocumentService s3DocumentService;
     private final SimpMessagingTemplate messagingTemplate;
 
     // ═══ INSTANTIATE PROCESS ═══
@@ -39,6 +48,16 @@ public class WorkflowEngineService {
         design.setLocked(true);
         design.setLockedBy(userId);
         designRepository.save(design);
+
+        // Buscar el inquilino (tenant) del usuario para aislamiento en S3
+        String tenantId = "tenant_default";
+        Optional<Usuario> userOpt = usuarioRepository.findById(userId);
+        if (!userOpt.isPresent()) {
+            userOpt = usuarioRepository.findByEmail(userId);
+        }
+        if (userOpt.isPresent()) {
+            tenantId = userOpt.get().getTenantId();
+        }
 
         // Build activity instances from modeling nodes
         List<ActivityInstance> activities = new ArrayList<>();
@@ -74,6 +93,26 @@ public class WorkflowEngineService {
                 .build();
 
         instance = instanceRepository.save(instance);
+
+        // Crear una carpeta/objeto para el proceso en S3 (tenantId/projectName/designName/instanceId/process_info.txt)
+        try {
+            String projectName = "proyecto_desconocido";
+            if (design.getProjectId() != null) {
+                projectName = projectRepository.findById(design.getProjectId())
+                        .map(Project::getNombre)
+                        .orElse("proyecto_desconocido");
+            }
+            String sanitizedProjectName = projectName.replaceAll("[^a-zA-Z0-9_.-]", "_");
+            String sanitizedDesignName = design.getNombre().replaceAll("[^a-zA-Z0-9_.-]", "_");
+            String instanceId = instance.getId();
+            String path = sanitizedProjectName + "/" + sanitizedDesignName + "/" + instanceId + "/process_info.txt";
+
+            byte[] infoBytes = ("Detalle del Proceso: " + design.getNombre() + "\nID Instancia: " + instanceId + "\nIniciado por: " + userId + "\nFecha: " + LocalDateTime.now()).getBytes(StandardCharsets.UTF_8);
+            ByteArrayInputStream inputStream = new ByteArrayInputStream(infoBytes);
+            s3DocumentService.uploadDocument(tenantId, path, inputStream, infoBytes.length, "text/plain");
+        } catch (Exception e) {
+            System.err.println("Advertencia S3 al registrar proceso: " + e.getMessage());
+        }
 
         // Auto-advance from start node
         ActivityInstance startActivity = activities.stream()

@@ -7,8 +7,9 @@ import '../models/types.dart' as types;
 
 class DiagramViewerScreen extends StatefulWidget {
   final String designId;
+  final String? processInstanceId;
 
-  const DiagramViewerScreen({super.key, required this.designId});
+  const DiagramViewerScreen({super.key, required this.designId, this.processInstanceId});
 
   @override
   State<DiagramViewerScreen> createState() => _DiagramViewerScreenState();
@@ -46,15 +47,22 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
       setState(() {
         _currentModeling = modeling;
         if (processes.isNotEmpty) {
+          if (widget.processInstanceId != null) {
+            try {
+              _selectedProcess = processes.firstWhere((p) => p.id == widget.processInstanceId);
+            } catch (_) {
+              _selectedProcess = processes.first;
+            }
+          } else {
             // Ordenar por fecha de inicio descendente (la más nueva primero)
             processes.sort((a, b) {
               final dateA = DateTime.tryParse(a.startedAt ?? '') ?? DateTime(2000);
               final dateB = DateTime.tryParse(b.startedAt ?? '') ?? DateTime(2000);
               return dateB.compareTo(dateA);
             });
-            
             _selectedProcess = processes.first;
-            print('DEBUG: Encontradas ${processes.length} instancias. Seleccionada la más nueva: ${_selectedProcess?.id}');
+          }
+          print('DEBUG: Encontradas ${processes.length} instancias. Seleccionada: ${_selectedProcess?.id}');
         }
         _isLoading = false;
       });

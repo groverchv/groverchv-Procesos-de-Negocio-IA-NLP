@@ -15,9 +15,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class Usuario {
     @Id
     private String id;
-    private String username;
     private String nombre;
     private String email;
+    private String password;
     private String rol; // ej. "CLIENTE", "DISENADOR", "FUNCIONARIO"
     private String tenantId; // cada cliente tiene su propio repositorio/tenant
 }

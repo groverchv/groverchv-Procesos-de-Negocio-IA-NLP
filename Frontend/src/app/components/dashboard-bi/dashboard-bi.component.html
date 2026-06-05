@@ -1,21 +1,298 @@
-<div class="bi-container">
-  <h2>Dashboard de Análisis y Reportes (BI)</h2>
-
-  <div class="charts-area">
-    <!-- Aquí irán gráficos integrados con eCharts o ChartJS posteriormente -->
-    <div class="chart-placeholder">Gráfico Tiempos de Ejecución vs Anomalías</div>
-    <div class="chart-placeholder">Gráfico Riesgos por Departamento</div>
+<div class="admin-container">
+  <!-- ======================== SIDEBAR IZQUIERDA ======================== -->
+  <div class="admin-sidebar">
+    <div class="sidebar-logo">
+      <span nz-icon nzType="setting" nzTheme="outline" class="logo-icon"></span>
+      <h2>Administración</h2>
+    </div>
+    
+    <div class="sidebar-menu">
+      <button class="menu-item" [class.active]="activeTab === 'kpis'" (click)="cambiarTab('kpis')">
+        <span nz-icon nzType="dashboard" nzTheme="outline"></span>
+        <span>Dashboard & KPIs</span>
+      </button>
+      <button class="menu-item" [class.active]="activeTab === 'usuarios'" (click)="cambiarTab('usuarios')">
+        <span nz-icon nzType="team" nzTheme="outline"></span>
+        <span>Gestión de Usuarios</span>
+      </button>
+      <button class="menu-item" [class.active]="activeTab === 'ia-reports'" (click)="cambiarTab('ia-reports')">
+        <span nz-icon nzType="file-text" nzTheme="outline"></span>
+        <span>Reportes IA</span>
+      </button>
+    </div>
   </div>
 
-  <div class="actions">
-    <button (click)="generarReporteIA()">Generar Reporte Inteligente (IA)</button>
-  </div>
+  <!-- ======================== CONTENIDO PRINCIPAL ======================== -->
+  <div class="admin-main-content">
+    <div class="admin-view-header">
+      <div class="title-area">
+        <h1>Panel Administrativo</h1>
+        <p>Supervisa la telemetría del sistema, gestiona usuarios y genera reportes dinámicos asistidos por IA.</p>
+      </div>
+    </div>
 
-  <div class="insights-panel" *ngIf="reporteGenerado && !reporteGenerado.cargando">
-    <h3>Resultados del Análisis IA:</h3>
-    <a [href]="reporteGenerado.reporte_url" target="_blank" class="download-link">⬇️ Descargar Reporte (PDF) desde S3</a>
-    <ul>
-      <li *ngFor="let insight of reporteGenerado.insights">{{insight}}</li>
-    </ul>
+    <!-- CONTENIDOS DE LAS PESTAÑAS -->
+
+    <!-- 1. KPIs Y TELEMETRÍA GENERAL -->
+    <div *ngIf="activeTab === 'kpis'" class="tab-content">
+      <!-- Grid de Métricas Principales -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon-box icon-green">
+            <span nz-icon nzType="check-circle" nzTheme="outline"></span>
+          </div>
+          <div class="kpi-info">
+            <h4>Eficiencia General</h4>
+            <p class="kpi-value">{{ kpisLocales.eficienciaGeneral }}</p>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon-box icon-red">
+            <span nz-icon nzType="warning" nzTheme="outline"></span>
+          </div>
+          <div class="kpi-info">
+            <h4>Tasa de Anomalías</h4>
+            <p class="kpi-value">{{ kpisLocales.anomaliasPromedio }}</p>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon-box icon-blue">
+            <span nz-icon nzType="clock-circle" nzTheme="outline"></span>
+          </div>
+          <div class="kpi-info">
+            <h4>Tiempo de Ciclo</h4>
+            <p class="kpi-value">{{ kpisLocales.tiempoPromedioEjecucion }}</p>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon-box icon-purple">
+            <span nz-icon nzType="usergroup-add" nzTheme="outline"></span>
+          </div>
+          <div class="kpi-info">
+            <h4>Clientes Activos</h4>
+            <p class="kpi-value">{{ kpisLocales.totalUsuariosActivos }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráficos de Análisis de Ejecución -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Tiempos de Ejecución vs Anomalías</h3>
+          <div class="local-chart">
+            <div *ngFor="let item of tiemposEjecucion" class="chart-row">
+              <div class="chart-row-header">
+                <span>{{ item.nombre }}</span>
+                <span>{{ item.duracion }} ({{ item.anomalias }} anomalías)</span>
+              </div>
+              <div class="chart-bar-bg">
+                <div class="chart-bar-fill bg-purple" [style.width.%]="item.porcentajeBarra"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <h3>Índice de Éxito de Flujos BPM</h3>
+          <div class="local-chart">
+            <div *ngFor="let item of exitoFlujos" class="chart-row">
+              <div class="chart-row-header">
+                <span>{{ item.nombre }}</span>
+                <span>{{ item.porcentajeExito }}</span>
+              </div>
+              <div class="chart-bar-bg">
+                <div class="chart-bar-fill bg-green" [style.width.%]="item.porcentajeBarra"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. GESTIÓN DE USUARIOS Y REPOSITORIOS -->
+    <div *ngIf="activeTab === 'usuarios'" class="tab-content">
+      <div class="users-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700;">Usuarios Registrados y Conexiones S3</h3>
+          <button class="btn-download" (click)="cargarUsuarios()">
+            <span nz-icon nzType="reload" nzTheme="outline"></span> Recargar Usuarios
+          </button>
+        </div>
+
+        <div *ngIf="cargandoUsuarios" class="loading-box">
+          <div class="spinner"></div>
+          <p>Sincronizando con base de datos de usuarios local...</p>
+        </div>
+
+        <div *ngIf="!cargandoUsuarios" class="table-responsive">
+          <table class="premium-table">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Nombre Completo</th>
+                <th>Email</th>
+                <th>Rol / Privilegio</th>
+                <th>Repositorio Compartido (Tenant ID)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let u of usuarios">
+                <td style="font-weight: 700;">{{ u.username }}</td>
+                <td>{{ u.nombre }}</td>
+                <td>{{ u.email }}</td>
+                <td>
+                  <span class="user-badge" [class.badge-admin]="u.rol === 'DISENADOR'" [class.badge-clerk]="u.rol === 'FUNCIONARIO'" [class.badge-client]="u.rol === 'CLIENTE'">
+                    {{ u.rol }}
+                  </span>
+                </td>
+                <td>
+                  <span style="color: #64748b; font-family: monospace;">s3://bpm-documentos/{{ u.tenantId }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. REPORTES INTELIGENTES DINÁMICOS CON IA -->
+    <div *ngIf="activeTab === 'ia-reports'" class="tab-content">
+      <!-- Barra de Consulta Inteligente de IA -->
+      <div class="ai-bar-section" style="margin-bottom: 24px;">
+        <h3>
+          <span nz-icon nzType="experiment" nzTheme="outline" class="ai-sparkle"></span> 
+          ¿Qué análisis de telemetría o procesos deseas solicitar hoy?
+        </h3>
+        <div class="search-box">
+          <input 
+            type="text" 
+            [(ngModel)]="promptQuery" 
+            (keyup.enter)="generarReporteIA()" 
+            placeholder="Ej. 'procesos más fáciles de terminar' o 'cuál es el uso de repositorios S3'..." 
+          />
+          <button class="ai-submit-btn" (click)="generarReporteIA()">Generar Reporte Dinámico</button>
+        </div>
+        
+        <!-- Chips de Sugerencias -->
+        <div class="suggestion-chips">
+          <span *ngFor="let sug of sugerencias" class="chip" (click)="aplicarSugerencia(sug)">
+            {{ sug }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Estado de Carga -->
+      <div *ngIf="cargandoReporte" class="loading-box" style="background: white; border-radius: 24px; padding: 60px; box-shadow: var(--shadow-premium);">
+        <div class="spinner"></div>
+        <p style="font-weight: 600; font-size: 1.1rem; color: #4f46e5;">La IA está compilando los datos de telemetría y redactando el reporte...</p>
+      </div>
+
+      <!-- Mensaje de Error -->
+      <div *ngIf="errorReporte" class="error-card">
+        {{ errorReporte }}
+      </div>
+
+      <!-- Reporte Generado Exitosamente -->
+      <div *ngIf="reporteGenerado && !cargandoReporte" class="report-view">
+        <div class="report-headline">
+          <div>
+            <h2>{{ reporteGenerado.titulo }}</h2>
+            <p style="color: #64748b; margin: 4px 0 0 0; font-weight: 550;">
+              Generado Dinámicamente por IA Llama-3 en Local • {{ promptQuery }}
+            </p>
+          </div>
+          
+          <!-- Descarga en formatos dinámicos -->
+          <div class="download-toolbar">
+            <button class="btn-download" (click)="exportarTXT()">
+              <span nz-icon nzType="file-text" nzTheme="outline"></span> Descargar TXT
+            </button>
+            <button class="btn-download" (click)="exportarExcel()">
+              <span nz-icon nzType="file-excel" nzTheme="outline"></span> Descargar Excel
+            </button>
+            <button class="btn-download" (click)="exportarPDF()">
+              <span nz-icon nzType="printer" nzTheme="outline"></span> Imprimir / Guardar PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Resumen Ejecutivo -->
+        <div class="resumen-card">
+          <h4 style="margin: 0 0 10px 0; color: #4f46e5; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.05em;">Resumen Ejecutivo</h4>
+          <p>{{ reporteGenerado.resumen }}</p>
+        </div>
+
+        <!-- Insights Clave -->
+        <div *ngIf="reporteGenerado.insights && reporteGenerado.insights.length > 0">
+          <h4 style="margin: 0 0 16px 0; font-weight: 700;">Insights y Recomendaciones de la IA</h4>
+          <div class="insights-list">
+            <div *ngFor="let insight of reporteGenerado.insights" class="insight-item">
+              <span nz-icon nzType="bulb" nzTheme="outline" style="color: #7c3aed; font-size: 1.2rem;"></span>
+              <span>{{ insight }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Métricas KPIs de este Reporte -->
+        <div *ngIf="reporteGenerado.metas && reporteGenerado.metas.length > 0" class="kpi-grid" style="margin-bottom: 28px;">
+          <div *ngFor="let m of reporteGenerado.metas" class="kpi-card" style="padding: 16px 20px;">
+            <div class="kpi-info">
+              <h4 style="font-size: 0.8rem;">{{ m.label }}</h4>
+              <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 4px;">
+                <span class="kpi-value" style="font-size: 1.45rem;">{{ m.value }}</span>
+                <span [style.color]="m.trend?.startsWith('+') ? '#059669' : '#dc2626'" style="font-size: 0.8rem; font-weight: 700;">
+                  {{ m.trend }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de Datos Dinámica -->
+        <div *ngIf="reporteGenerado.tabla && reporteGenerado.tabla.length > 0" class="users-panel" style="padding: 16px; margin-bottom: 28px;">
+          <h4 style="margin: 0 0 16px 0; font-weight: 700;">Datos Analizados</h4>
+          <div class="table-responsive">
+            <table class="premium-table">
+              <thead>
+                <tr>
+                  <th>Proceso Analizado</th>
+                  <th>Métrica Clave</th>
+                  <th>Duración de Ciclo</th>
+                  <th>Estado del Flujo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of reporteGenerado.tabla">
+                  <td style="font-weight: 700;">{{ row.proceso }}</td>
+                  <td style="color: #4f46e5; font-weight: 600;">{{ row.valor_clave }}</td>
+                  <td>{{ row.duracion }}</td>
+                  <td>
+                    <span class="user-badge" [class.badge-clerk]="row.estado === 'Eficiente'" [class.badge-client]="row.estado === 'Estable'" [class.badge-admin]="row.estado === 'Crítico'">
+                      {{ row.estado }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Visualizador de Gráfico Generado Dinámicamente -->
+        <div *ngIf="reporteGenerado.grafico && reporteGenerado.grafico.labels && reporteGenerado.grafico.labels.length > 0" class="chart-card">
+          <h3 style="margin: 0 0 16px 0; font-size: 1rem;">Visualización de Distribución Dinámica (Gráfico de {{ reporteGenerado.grafico.tipo | uppercase }})</h3>
+          <div class="local-chart">
+            <div *ngFor="let label of reporteGenerado.grafico.labels; let i = index" class="chart-row">
+              <div class="chart-row-header">
+                <span>{{ label }}</span>
+                <span>{{ reporteGenerado.grafico.valores[i] }}%</span>
+              </div>
+              <div class="chart-bar-bg">
+                <div class="chart-bar-fill bg-purple" [style.width.%]="reporteGenerado.grafico.valores[i]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

@@ -18,25 +18,25 @@ public class UsuarioService {
     public void seedUsuarios() {
         if (usuarioRepository.count() == 0) {
             usuarioRepository.save(Usuario.builder()
-                    .username("juan_disenador")
                     .nombre("Juan Diseñador")
                     .email("juan@bpmflow.com")
+                    .password("password")
                     .rol("DISENADOR")
                     .tenantId("tenant_default")
                     .build());
 
             usuarioRepository.save(Usuario.builder()
-                    .username("maria_funcionario")
                     .nombre("Maria Funcionario")
                     .email("maria@bpmflow.com")
+                    .password("password")
                     .rol("FUNCIONARIO")
                     .tenantId("tenant_default")
                     .build());
 
             usuarioRepository.save(Usuario.builder()
-                    .username("carlos_cliente")
                     .nombre("Carlos Cliente (Acme Corp)")
                     .email("carlos@acme.com")
+                    .password("password")
                     .rol("CLIENTE")
                     .tenantId("tenant_acme")
                     .build());
@@ -51,8 +51,8 @@ public class UsuarioService {
         return usuarioRepository.findById(id);
     }
 
-    public Optional<Usuario> getUsuarioByUsername(String username) {
-        return usuarioRepository.findByUsername(username);
+    public Optional<Usuario> getUsuarioByEmail(String email) {
+        return usuarioRepository.findByEmail(email);
     }
 
     public List<Usuario> getUsuariosByRol(String rol) {

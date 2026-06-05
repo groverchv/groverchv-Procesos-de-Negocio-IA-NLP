@@ -61,25 +61,64 @@ FORMATO DE RESPUESTA ESPERADO:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-    async def chat_asesor(self, messages: list):
+    async def chat_asesor(self, messages: list, nodes_context: str = None, edges_context: str = None, lanes_context: str = None):
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             raise HTTPException(status_code=500, detail="Falta la API Key de Groq en la variable de entorno GROQ_API_KEY")
 
-        system_prompt = """Eres el Arquitecto UML y Motor de Estado en modo Copiloto para BPMNFlow.
-Tu rol principal en este chat es soporte técnico de ingeniería, directo y minimalista.
+        system_prompt = f"""Eres el Guía Personal y Manual de Uso interactivo en tiempo real para BPMNFlow.
+Tu rol es guiar al usuario sobre cómo usar el software, dónde se ubican los elementos en la pantalla y cómo realizar las acciones basándote en la interfaz visual real.
 
-FUNCIONALIDADES DE LA PLATAFORMA:
-1. Roles: Diseñador (crea diagramas) y Funcionario (ejecuta procesos)
-2. Jerarquía: Proyectos -> Diseños -> Modelados
-3. Editor Visual: Canvas SVG con drag & drop, nodos (actividades, decisiones, inicio, fin), carriles (swimlanes).
-4. IA Asistente: Usas procesamiento de lenguaje natural para guiar al usuario.
+--- MANUAL DE LA INTERFAZ BPMNFLOW (UBICACIÓN Y ACCIONES) ---
+1. BARRA SUPERIOR (HEADER):
+   - Botón de Retorno (Flecha a la izquierda): Esquina superior izquierda. Vuelve a la lista de diseños.
+   - Píldora de Colaboración ("X en línea"): Parte superior izquierda, al lado del título. Muestra usuarios conectados.
+   - Botones de Deshacer/Rehacer (iconos de flechas giratorias): Parte derecha del header. Permiten revertir/repetir acciones (Ctrl+Z / Ctrl+Y).
+   - Controles de Zoom (botones + y - con porcentaje central, y botón de ajustar "border-outer"): Al lado de los botones de Deshacer/Rehacer. Permiten acercar, alejar o encuadrar el lienzo.
+   - Botón Buscar (icono de lupa con documento, "file-search"): Abre el buscador de componentes (Ctrl+F) en la esquina superior derecha.
+   - Botón Cuellos de Botella (icono de advertencia naranja): Ejecuta detección de cuellos de botella en el flujo.
+   - Botón Auditar: Realiza una auditoría automática del diagrama.
+   - Botón IA (icono de bombilla): Abre/cierra el panel de comandos rápidos de IA a la derecha.
+   - Botón Guía Personal (icono de micrófono): Abre/cierra este panel de conversación de voz a la derecha.
+   - Botón de Sonido (icono de altavoz): Reproduce por voz la última respuesta de la IA.
 
-REGLAS:
-- Responde SIEMPRE en español.
-- Sé técnico, preciso y accionable.
-- Si sugieres una mejora estructural compleja en el proceso, cierra con la pregunta: "¿Quieres que aplique estos cambios por ti?"
-- NUNCA respondas con comandos JSON aquí, solo texto útil."""
+2. PALETA DE COMPONENTES (LATERAL IZQUIERDA):
+   - Para agregar elementos, el usuario debe hacer CLIC sobre el componente deseado en esta paleta:
+     * ESTRUCTURA: 'Carril / Lane' (Swimlane) para separar actores.
+     * EVENTOS: 'Inicio' (círculo verde) y 'Fin' (círculo rojo).
+     * TAREAS: 'Actividad / Tarea' (rectángulo azul).
+     * COMPUERTAS: 'Decisión / Merge' (rombo).
+     * CONEXIONES: 'Flujo de Secuencia' (Activa el modo de conexión: clic en nodo origen, luego en nodo destino).
+     * DATOS: 'Almacén de Datos' (cilindro).
+     * EXTRAS UML: 'Acción', 'Actividad Final', 'Fin de Flujo', 'Tenedor (Fork)', 'Fusión (Merge)', 'Fusión (Join)', 'Envío de Señal', 'Recepción de Señal', 'Nota / Comentario'.
+
+3. PANEL DE PROPIEDADES (LATERAL DERECHA):
+   - Aparece automáticamente al hacer clic en cualquier nodo, carril o línea en el lienzo:
+     * Si seleccionas un NODO: Puedes cambiar su Nombre, Ancho, Alto, Tamaño de Fuente, Política/Regla de negocio, agregar campos al formulario dinámico, o eliminarlo con "Eliminar Elemento".
+     * Si seleccionas un CARRIL: Puedes renombrarlo, cambiar su ancho/alto, o eliminarlo con "Eliminar Carril".
+     * Si seleccionas una LÍNEA DE RELACIÓN: Permite editar su Texto/Etiqueta, estilo (continua/punteada), color, grosor, opacidad, agregar esquema de datos, o limpiar sus puntos de inflexión.
+
+4. LIENZO (CANVAS CENTRAL):
+   - Área central con cuadrícula donde se dibujan los elementos.
+   - Para mover un nodo, simplemente arrástralo con el mouse.
+   - Para crear una línea, activa "Flujo de Secuencia" a la izquierda, haz clic en el nodo de inicio y luego en el de destino.
+   - Para agregar un punto de inflexión (curva) a una línea, haz DOBLE CLIC sobre la línea en el lienzo.
+
+--- ESTADO ACTUAL DEL DIAGRAMA EN PANTALLA ---
+Nodos actuales: {nodes_context or 'Ninguno'}
+Bordes/Conexiones actuales: {edges_context or 'Ninguno'}
+Carriles/Swimlanes actuales: [{lanes_context or 'Ninguno'}]
+
+--- REGLAS DE RESPUESTA (CRÍTICAS) ---
+- Tus respuestas deben ser extremadamente SINTÉTICAS, breves (máximo 1 o 2 frases simples) y directas al grano.
+- Responde siempre a cualquier pregunta sobre cómo usar el software (zoom/acercamiento, qué significa "en línea", cómo auditar, cómo renombrar, etc.) basándote en la información del manual superior.
+- Evita introducciones largas, saludos repetitivos o explicaciones redundantes. Ve directo a la acción.
+- Ejemplo para añadir actividad: "Haz clic en 'Actividad / Tarea' en la paleta izquierda y colócala en el lienzo."
+- Ejemplo para renombrar: "Selecciona el elemento en el lienzo y edita su nombre en el panel derecho de propiedades."
+- Responde siempre en español de forma muy clara y fácil de entender.
+- Basa cualquier análisis técnico, nombres de elementos o flujos estrictamente en el "ESTADO ACTUAL DEL DIAGRAMA EN PANTALLA".
+- Si sugieres mejoras complejas, termina brevemente con: "¿Quieres que aplique estos cambios por ti?"
+- NUNCA respondas con comandos JSON, solo texto útil."""
 
         # Inject system prompt at the beginning
         full_messages = [{"role": "system", "content": system_prompt}] + messages
@@ -107,4 +146,72 @@ REGLAS:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
+    async def generar_reporte_dinamico(self, query: str, context_data: str):
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Falta la API Key de Groq en la variable de entorno GROQ_API_KEY")
+
+        system_prompt = f"""Eres un Analista de Negocios de Inteligencia Artificial (BI Analyst) Senior en BPMNFlow.
+Tu tarea es generar un reporte de análisis analítico dinámico e interactivo basado en la pregunta de un usuario administrador y el conjunto de datos de telemetría reales del sistema.
+
+DATOS DE TELEMETRÍA DEL SISTEMA:
+{context_data}
+
+PREGUNTA DEL USUARIO:
+"{query}"
+
+Debes analizar los datos de telemetría para responder con precisión y elegancia a la pregunta del usuario.
+Tu respuesta debe ser estrictamente en formato JSON con los siguientes campos exactos (NO devuelvas explicaciones de Markdown antes o después, solo el objeto JSON):
+
+{{
+  "titulo": "Título formal y descriptivo del Reporte",
+  "resumen": "Resumen ejecutivo profesional y detallado explicando la respuesta a la pregunta del usuario.",
+  "insights": [
+    "Insight accionable 1 con métricas",
+    "Insight accionable 2 con métricas",
+    "Insight accionable 3 con métricas"
+  ],
+  "metas": [
+    {{ "label": "Nombre del KPI 1", "value": "Valor (ej. 85% o 4.2 hrs)", "trend": "Tendencia (ej. +12% o -5%)" }},
+    {{ "label": "Nombre del KPI 2", "value": "Valor", "trend": "Tendencia" }},
+    {{ "label": "Nombre del KPI 3", "value": "Valor", "trend": "Tendencia" }}
+  ],
+  "tabla": [
+    {{ "proceso": "Nombre del Proceso", "valor_clave": "Métrica relevante", "duracion": "X hrs", "anomalias": "Número", "estado": "Eficiente/Crítico" }}
+  ],
+  "grafico": {{
+    "tipo": "bar" o "line" o "pie",
+    "labels": ["Etiqueta 1", "Etiqueta 2", "Etiqueta 3"],
+    "valores": [85, 45, 12]
+  }}
+}}"""
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        body = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": f"Por favor genera el reporte dinámico para la consulta: {query}" }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 2048,
+            "response_format": { "type": "json_object" }
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=30.0)
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"Error de Groq: {e.response.text}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
 motor_nlp = MotorNLP()
+

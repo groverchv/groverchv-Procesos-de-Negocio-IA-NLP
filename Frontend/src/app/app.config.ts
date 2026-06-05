@@ -53,7 +53,31 @@ import {
   FileDoneOutline,
   CreditCardOutline,
   ZoomInOutline,
-  ZoomOutOutline
+  ZoomOutOutline,
+  // Funcionario Portal icons
+  TeamOutline,
+  SafetyOutline,
+  SafetyCertificateOutline,
+  LockOutline,
+  UnlockOutline,
+  CheckOutline,
+  CloseCircleOutline,
+  CheckCircleOutline as CheckCircleO,
+  InboxOutline,
+  FolderFill,
+  FolderOutline,
+  ApartmentOutline,
+  RightOutline,
+  SyncOutline,
+  LeftOutline,
+  FolderAddOutline,
+  FileAddOutline,
+  UploadOutline,
+  DownloadOutline,
+  FileTextOutline,
+  MoreOutline,
+  ExperimentOutline,
+  LoadingOutline
 } from '@ant-design/icons-angular/icons';
 
 import { routes } from './app.routes';
@@ -72,7 +96,14 @@ const icons = [
   SaveOutline, DashboardOutline, RocketOutline, BranchesOutline,
   WarningOutline, CheckCircleOutline, CheckCircleFill,
   BorderOuterOutline, FileSearchOutline, FileDoneOutline,
-  CreditCardOutline, ZoomInOutline, ZoomOutOutline
+  CreditCardOutline, ZoomInOutline, ZoomOutOutline,
+  // Funcionario Portal
+  TeamOutline, SafetyOutline, SafetyCertificateOutline,
+  LockOutline, UnlockOutline, CheckOutline, CloseCircleOutline,
+  InboxOutline, FolderFill, FolderOutline, ApartmentOutline,
+  RightOutline, SyncOutline, LeftOutline,
+  FolderAddOutline, FileAddOutline, UploadOutline, DownloadOutline,
+  FileTextOutline, MoreOutline, ExperimentOutline, LoadingOutline
 ];
 
 export const appConfig: ApplicationConfig = {

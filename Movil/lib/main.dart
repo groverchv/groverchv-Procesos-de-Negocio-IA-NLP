@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
-import 'screens/diagram_viewer_screen.dart';
 import 'screens/process_details_screen.dart';
+import 'screens/auth_screen.dart';
 import 'services/api_service.dart';
 import 'services/websocket_service.dart';
 
@@ -36,8 +36,9 @@ class MyApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const HomeScreen(),
+      home: const AuthScreen(),
       routes: {
+        '/auth': (context) => const AuthScreen(),
         '/home': (context) => const HomeScreen(),
         '/process-details': (context) => const ProcessDetailsScreen(),
       },

@@ -16,14 +16,14 @@ dependencies:
   http: ^1.1.0
   web_socket_channel: ^2.4.0
   stomp_dart_client: ^3.0.1
-  json_serializable: ^6.9.0
+  json_annotation: ^4.8.1
   provider: ^6.0.0
   intl: ^0.18.1
   
   # Offline-First
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  path_provider: ^2.1.2
+  path_provider: ^2.1.5
   connectivity_plus: ^5.0.2
 
   # Audios y NLP para el Asistente IA
@@ -41,6 +41,8 @@ dev_dependencies:
 
   flutter_lints: ^3.0.0
   build_runner: ^2.4.8
+  json_serializable: ^6.8.0
+  hive_generator: ^2.0.1
 
 flutter:
   uses-material-design: true

@@ -81,6 +81,12 @@ export class ProjectListComponent implements OnInit {
     setTimeout(() => window.location.reload(), 1000);
   }
 
+  switchToLocal() {
+    localStorage.removeItem('BACKEND_URL');
+    this.message.loading('Cambiando a local...', { nzDuration: 1000 });
+    setTimeout(() => window.location.reload(), 1000);
+  }
+
   showModal(): void {
     this.isVisible = true;
   }

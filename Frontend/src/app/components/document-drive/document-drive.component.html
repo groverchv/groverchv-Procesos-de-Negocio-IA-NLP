@@ -1,32 +1,218 @@
-<div class="drive-container">
+<div class="drive-container" *ngIf="!isEditing">
+  <!-- Navegador y Breadcrumbs de Google Drive -->
+  <div class="navigation-toolbar">
+    <!-- Botones Atrás / Adelante (Navegación Libre) -->
+    <div class="nav-history-buttons">
+      <button 
+        class="btn-history-nav" 
+        [disabled]="!canGoBack()" 
+        (click)="goBack()"
+        title="Atrás"
+      >
+        <span nz-icon nzType="left" nzTheme="outline"></span>
+      </button>
+      <button 
+        class="btn-history-nav" 
+        [disabled]="!canGoForward()" 
+        (click)="goForward()"
+        title="Adelante"
+      >
+        <span nz-icon nzType="right" nzTheme="outline"></span>
+      </button>
+    </div>
+
+    <!-- Breadcrumbs -->
+    <div class="breadcrumbs-bar">
+      <span *ngFor="let crumb of pathStack; let i = index" class="breadcrumb-item-wrap">
+        <span class="breadcrumb-link" (click)="navegarA(i)">{{ crumb.name }}</span>
+        <span *ngIf="i < pathStack.length - 1" class="breadcrumb-separator">
+          <span nz-icon nzType="right" nzTheme="outline"></span>
+        </span>
+      </span>
+    </div>
+  </div>
+
   <div class="drive-header">
-    <h2>Módulo de Gestión Documental (S3)</h2>
+    <div class="title-area">
+      <h2>Repositorio Colaborativo de Documentos</h2>
+      <p>
+        Estructura real del almacenamiento: <strong>Tenant → Proyecto → Diseño → Instancia de Proceso</strong>. Refleja el repositorio S3 en tiempo real.
+      </p>
+    </div>
+    
+    <!-- Toolbar de Operaciones de Carpeta -->
     <div class="actions">
+      <button class="btn-action-outline" (click)="cargarRepositorioDinamico()" [disabled]="cargandoUsuarios" title="Sincronizar con el backend">
+        <span nz-icon [nzType]="cargandoUsuarios ? 'loading' : 'sync'" nzTheme="outline"></span>
+        {{ cargandoUsuarios ? 'Cargando...' : 'Sincronizar' }}
+      </button>
+      <button class="btn-action-outline" (click)="abrirModalCreacion('folder')">
+        <span nz-icon nzType="folder-add" nzTheme="outline"></span> Nueva Carpeta
+      </button>
+      <button class="btn-action-outline" (click)="abrirModalCreacion('file')">
+        <span nz-icon nzType="file-add" nzTheme="outline"></span> Nuevo Formato
+      </button>
+      
       <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)">
-      <label for="file-upload" class="upload-btn">+ Nuevo Documento</label>
+      <label for="file-upload" class="upload-btn">
+        <span nz-icon nzType="upload" nzTheme="outline"></span> Subir Documento
+      </label>
     </div>
   </div>
 
   <div class="drive-body">
-    <table class="files-table">
-      <thead>
-        <tr>
-          <th>Nombre</th>
-          <th>Tamaño</th>
-          <th>Fecha de Modificación</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let file of files">
-          <td>{{ file.name }}</td>
-          <td>{{ file.size }}</td>
-          <td>{{ file.date | date:'short' }}</td>
-          <td>
-            <button class="action-btn" (click)="downloadFile(file.name)">⬇️</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- Estado Vacío -->
+    <div *ngIf="visibleItems.length === 0" class="empty-state">
+      <span nz-icon nzType="folder-open" nzTheme="outline" style="font-size: 52px; color: #cbd5e1;"></span>
+      <p style="margin-top: 16px; color: #64748b; font-weight: 550;">Esta carpeta se encuentra vacía.</p>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- 1. GRID DE CARPETAS ESTILO GOOGLE DRIVE -->
+    <!-- ==================================================================== -->
+    <div class="drive-section" *ngIf="visibleItems.length > 0 && folders.length > 0">
+      <h4 class="section-title">Carpetas</h4>
+      <div class="folders-grid">
+        <div 
+          *ngFor="let item of folders" 
+          (click)="abrirElemento(item)" 
+          class="folder-card-drive"
+        >
+          <div class="folder-card-left">
+            <span nz-icon [nzType]="item.name.startsWith('Proceso') ? 'folder-open' : 'folder'" nzTheme="fill" class="folder-card-icon"></span>
+            <div class="folder-card-info">
+              <span class="folder-card-name">{{ item.name }}</span>
+            </div>
+          </div>
+          <span nz-icon nzType="more" nzTheme="outline" class="folder-card-dots"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- 2. TABLA DE ARCHIVOS ESTILO GOOGLE DRIVE -->
+    <!-- ==================================================================== -->
+    <div class="drive-section" style="margin-top: 32px;" *ngIf="visibleItems.length > 0 && files.length > 0">
+      <h4 class="section-title">Archivos</h4>
+      <table class="files-table">
+        <thead>
+          <tr>
+            <th>Nombre del Archivo</th>
+            <th>Tamaño</th>
+            <th>Última Modificación</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of files" (dblclick)="abrirElemento(item)" class="drive-row">
+            <td>
+              <div class="file-name-cell">
+                <span nz-icon nzType="file-text" nzTheme="outline" class="file-icon-lead"></span>
+                <span class="file-name-text" (click)="abrirElemento(item)">{{ item.name }}</span>
+              </div>
+            </td>
+            <td>{{ item.size }}</td>
+            <td>{{ item.date | date:'short' }}</td>
+            <td>
+              <nz-space nzSize="small">
+                <button class="action-btn-download" (click)="abrirEditor(item)">
+                  <span nz-icon nzType="edit" nzTheme="outline"></span> Editar
+                </button>
+                <button class="action-btn-download" (click)="downloadFile(item.name)">
+                  <span nz-icon nzType="download" nzTheme="outline"></span> Descargar
+                </button>
+              </nz-space>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- EDITOR COLABORATIVO TIPO GOOGLE DOCS (INLINE Y EDITABLE CON IA) -->
+<!-- ==================================================================== -->
+<div class="editor-overlay" *ngIf="isEditing && editingFile">
+  <div class="editor-container">
+    <div class="editor-header">
+      <div class="editor-title-area">
+        <span nz-icon nzType="file-text" nzTheme="outline" class="editor-icon"></span>
+        <div>
+          <h3>{{ editingFile.name }}</h3>
+          <p>Editor de Documentación BPM Colaborativa</p>
+        </div>
+      </div>
+
+      <!-- Presencia de Usuarios en Línea en Tiempo Real (Co-edición) -->
+      <div class="editor-colabs-badge" *ngIf="colaboradoresActivos.length > 0">
+        <div class="avatars-group">
+          <div 
+            *ngFor="let colab of colaboradoresActivos" 
+            class="user-colab-avatar"
+            [style.background]="colab.color"
+            [title]="colab.nombre + ' (' + colab.rol + ')'"
+          >
+            {{ colab.iniciales }}
+            <span class="status-dot"></span>
+          </div>
+        </div>
+        <span class="colabs-pill-text">{{ colaboradoresActivos.length }} colaborando ahora</span>
+      </div>
+      
+      <!-- Controles del Editor -->
+      <div class="editor-controls">
+        <button class="btn-ia-action" (click)="autocompletarConIA()" [disabled]="cargandoIA">
+          <span nz-icon [nzType]="cargandoIA ? 'loading' : 'edit'" nzTheme="outline"></span> 
+          {{ cargandoIA ? 'Redactando...' : 'Mejorar Redacción' }}
+        </button>
+        <button class="btn-save" (click)="guardarDocumento()">
+          <span nz-icon nzType="save" nzTheme="outline"></span> Guardar
+        </button>
+        <button class="btn-close" (click)="cerrarEditor()">
+          <span nz-icon nzType="close" nzTheme="outline"></span> Cerrar
+        </button>
+      </div>
+    </div>
+
+    <!-- Área de Papel de Redacción -->
+    <div class="editor-body">
+      <div class="document-paper">
+        <textarea 
+          [(ngModel)]="fileContent" 
+          placeholder="Escribe el contenido de tu documento o solicita ayuda a la IA de redacción..."
+          class="paper-textarea"
+        ></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- MODAL DE CREACIÓN PREMIUM (REEMPLAZA ALERTS/PROMPTS DEL SISTEMA) -->
+<!-- ==================================================================== -->
+<div class="custom-modal-overlay" *ngIf="isCreateModalVisible">
+  <div class="custom-modal-card">
+    <div class="custom-modal-header">
+      <span nz-icon [nzType]="createModalType === 'folder' ? 'folder-add' : 'file-add'" nzTheme="outline" class="modal-header-icon"></span>
+      <h3>{{ createModalType === 'folder' ? 'Nueva Carpeta' : 'Nuevo Archivo' }}</h3>
+    </div>
+    
+    <div class="custom-modal-body">
+      <label class="modal-field-label">Nombre del nuevo elemento:</label>
+      <input 
+        type="text" 
+        [(ngModel)]="newItemName" 
+        [placeholder]="createModalType === 'folder' ? 'Ej. Documentos Administrativos' : 'Ej. Formulario_Inscripcion'" 
+        class="modal-text-input" 
+        (keyup.enter)="confirmarCreacion()"
+        autofocus
+      />
+    </div>
+
+    <div class="custom-modal-footer">
+      <button class="btn-modal-cancel" (click)="cerrarModalCreacion()">Cancelar</button>
+      <button class="btn-modal-confirm" (click)="confirmarCreacion()" [disabled]="!newItemName.trim()">Crear</button>
+    </div>
   </div>
 </div>

@@ -32,4 +32,7 @@ public class Project {
 
     @Builder.Default
     private List<String> designIds = new ArrayList<>();
+
+    private String tenantId;
+    private String creadoPor;
 }

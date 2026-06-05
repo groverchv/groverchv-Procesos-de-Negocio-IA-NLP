@@ -132,9 +132,8 @@ Form _$FormFromJson(Map<String, dynamic> json) => Form(
       defaultValue: json['defaultValue'] as String?,
       required: json['required'] as bool,
       estado: json['estado'] as String?,
-      options: (json['options'] as List<dynamic>?)
-          ?.map((e) => e as String)
-          .toList(),
+      options:
+          (json['options'] as List<dynamic>?)?.map((e) => e as String).toList(),
     );
 
 Map<String, dynamic> _$FormToJson(Form instance) => <String, dynamic>{
@@ -159,7 +158,7 @@ Modeling _$ModelingFromJson(Map<String, dynamic> json) => Modeling(
       version: json['version'] as String?,
       estado: json['estado'] as String?,
       senderId: json['senderId'] as String?,
-      timestamp: json['timestamp'] as int?,
+      timestamp: (json['timestamp'] as num?)?.toInt(),
       isDragPulse: json['isDragPulse'] as bool?,
     );
 

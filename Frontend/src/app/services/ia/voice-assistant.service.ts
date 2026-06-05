@@ -1,6 +1,6 @@
 import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Subject, BehaviorSubject, Observable, of } from 'rxjs';
+import { Subject, BehaviorSubject, Observable, of, Subscription } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { DiagramCommand } from './ia.service';
 import { API_GLOBAL } from '../api.global';
@@ -32,6 +32,20 @@ export class VoiceAssistantService {
   private continuousMode = false;
   private isProcessing = false;
   private currentSpeakId = 0;
+  private activeChatSubscription: Subscription | null = null;
+  private userExplicitStop = false;
+  private lastSpeakingTime = 0;
+
+  private setSpeaking(val: boolean) {
+    this.zone.run(() => {
+      this.isSpeaking$.next(val);
+      if (val) {
+        this.lastSpeakingTime = Date.now() + 99999999;
+      } else {
+        this.lastSpeakingTime = Date.now();
+      }
+    });
+  }
   
   constructor(private http: HttpClient, private zone: NgZone) {}
 
@@ -64,42 +78,70 @@ export class VoiceAssistantService {
 
   async sendText(text: string) {
     this.stopAudio();
+    
+    // Cancel any in-flight chat request to allow instant interruption
+    if (this.activeChatSubscription) {
+      this.activeChatSubscription.unsubscribe();
+      this.activeChatSubscription = null;
+    }
+    
     const clean = text.trim();
-    if (!clean || clean.length < 2 || this.isProcessing) return;
+    if (!clean || clean.length < 2) return;
 
     this.isProcessing = true;
     this.conversationHistory.push({ role: 'user', content: clean });
     
-    // Mantener un historial de tamaño manejable
     if (this.conversationHistory.length > 8) {
       this.conversationHistory = this.conversationHistory.slice(-8);
     }
     
     this.zone.run(() => this.messages$.next({ role: 'user', content: clean }));
 
+    const nodesContext = JSON.stringify((this.currentNodes || []).map(n => ({
+      id: n.id, type: n.type, label: n.label, x: Math.round(n.x), y: Math.round(n.y),
+      width: n.width, height: n.height, fontSize: n.fontSize
+    })));
+
+    const edgesContext = JSON.stringify((this.currentEdges || []).map(e => ({
+      id: e.id, source: e.source, target: e.target, label: e.label,
+      style: e.style, color: e.color
+    })));
+
+    const lanes = (this.currentNodes || []).filter(n => n.type === 'swimlane');
+    const lanesContext = lanes.map(l => `"${l.label}" (id=${l.id}, x=${Math.round(l.x)}, w=${l.width}, h=${l.height})`).join(', ');
+
     const headers = new HttpHeaders({
       'Content-Type': 'application/json'
     });
 
     const body = {
-      messages: this.conversationHistory
+      messages: this.conversationHistory,
+      nodes_context: nodesContext,
+      edges_context: edgesContext,
+      lanes_context: lanesContext
     };
 
-    try {
-      const response = await this.http.post<any>(this.BACKEND_CHAT_URL, body, { headers }).toPromise();
-      const reply = response.reply;
-      
-      this.conversationHistory.push({ role: 'assistant', content: reply });
-      this.zone.run(() => this.messages$.next({ role: 'assistant', content: reply }));
-      
-      this.speak(reply);
-    } catch (e: any) {
-      const msg = 'Error conectando con el Motor IA.';
-      this.zone.run(() => this.messages$.next({ role: 'assistant', content: msg }));
-      this.speak(msg);
-    } finally { 
-      this.isProcessing = false; 
-    }
+    this.activeChatSubscription = this.http.post<any>(this.BACKEND_CHAT_URL, body, { headers }).subscribe({
+      next: (response) => {
+        const reply = response.reply;
+        this.conversationHistory.push({ role: 'assistant', content: reply });
+        this.zone.run(() => this.messages$.next({ role: 'assistant', content: reply }));
+        this.speak(reply);
+        this.isProcessing = false;
+        this.activeChatSubscription = null;
+      },
+      error: (e) => {
+        if (e.name === 'AbortError' || e.status === 0) {
+          // Request was cancelled by the user making another request
+          return;
+        }
+        const msg = 'Error conectando con el Motor IA.';
+        this.zone.run(() => this.messages$.next({ role: 'assistant', content: msg }));
+        this.speak(msg);
+        this.isProcessing = false;
+        this.activeChatSubscription = null;
+      }
+    });
   }
 
   async auditDiagram(nodes: any[], edges: any[]): Promise<string> {
@@ -133,13 +175,13 @@ export class VoiceAssistantService {
     const speakId = ++this.currentSpeakId;
     const cleanText = text.replace(/[*#_\`\\[\\]()❌⚠️📊]/g, '').trim();
     
-    this.zone.run(() => this.isSpeaking$.next(true));
+    this.setSpeaking(true);
     
     if (this.TTS_ENABLED) {
       try {
         await this.playBackendTTS(cleanText);
         if (speakId === this.currentSpeakId) {
-          this.zone.run(() => this.isSpeaking$.next(false));
+          this.setSpeaking(false);
         }
         return;
       } catch (e) {
@@ -155,7 +197,11 @@ export class VoiceAssistantService {
       'Content-Type': 'application/json'
     });
 
-    const body = { text: text };
+    const voiceId = this.config.elevenLabsVoice || 'cjVigY5qzO86Huf0OWal';
+    const body = { 
+      text: text,
+      voice_id: voiceId
+    };
 
     return new Promise((resolve, reject) => {
       this.http.post(this.BACKEND_TTS_URL, body, {
@@ -178,14 +224,14 @@ export class VoiceAssistantService {
 
   private browserSpeak(text: string, speakId: number) {
     if (!('speechSynthesis' in window)) { 
-      this.zone.run(() => this.isSpeaking$.next(false)); 
+      this.setSpeaking(false); 
       return; 
     }
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text); 
     utt.lang = this.VOICE_LANG;
     utt.onend = () => { 
-      if (speakId === this.currentSpeakId) this.zone.run(() => this.isSpeaking$.next(false)); 
+      if (speakId === this.currentSpeakId) this.setSpeaking(false); 
     };
     window.speechSynthesis.speak(utt);
   }
@@ -197,43 +243,94 @@ export class VoiceAssistantService {
       this.currentAudio = null; 
     }
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    this.zone.run(() => this.isSpeaking$.next(false));
+    this.setSpeaking(false);
   }
 
   async startVoiceInput(): Promise<void> {
+    this.stopAudio();
+    this.userExplicitStop = false;
+
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) throw new Error('Speech recognition not supported');
+    
+    if (this.activeRecognition) {
+      try { this.activeRecognition.stop(); } catch {}
+    }
+
     const recognition = new SR(); 
     recognition.lang = this.VOICE_LANG;
-    recognition.continuous = false; 
+    recognition.continuous = true; 
     recognition.interimResults = true;
     
     this.zone.run(() => this.isListening$.next(true));
     
+    let lastProcessedIndex = -1;
+
     recognition.onresult = (event: any) => {
-      let final = ''; let interim = '';
-      for (let i = 0; i < event.results.length; i++) {
-        if (event.results[i].isFinal) final += event.results[i][0].transcript;
-        else interim += event.results[i][0].transcript;
+      const isSpeaking = this.isSpeaking$.value;
+      const cooldownActive = (Date.now() - this.lastSpeakingTime) < 1800; // 1.8 seconds cooldown to discard late echo transcripts
+      
+      if (isSpeaking || cooldownActive) {
+        return;
       }
-      if (interim) this.zone.run(() => this.transcript$.next(interim));
-      if (final) {
-        this.stopAudio();
-        this.zone.run(() => { 
-          this.transcript$.next(final); 
-          this.isListening$.next(false); 
-          this.sendText(final); 
-        });
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          if (i > lastProcessedIndex) {
+            lastProcessedIndex = i;
+            const text = result[0].transcript.trim();
+            if (text.length >= 2) {
+              // Stop audio immediately as user is starting a new command/question
+              this.stopAudio();
+              this.zone.run(() => { 
+                this.transcript$.next(text); 
+                this.sendText(text); 
+              });
+            }
+          }
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      if (interim) {
+        this.zone.run(() => this.transcript$.next(interim));
       }
     };
-    recognition.onend = () => this.zone.run(() => this.isListening$.next(false));
+
+    recognition.onend = () => {
+      if (!this.userExplicitStop) {
+        // Automatically restart to keep microphone open
+        try {
+          recognition.start();
+        } catch (e) {
+          console.warn('Failed to restart speech recognition:', e);
+        }
+      } else {
+        this.zone.run(() => this.isListening$.next(false));
+      }
+    };
+
+    recognition.onerror = (err: any) => {
+      console.error('Speech recognition error:', err);
+      // Restart on non-fatal errors if not explicitly stopped
+      if (err.error !== 'aborted' && !this.userExplicitStop) {
+        setTimeout(() => {
+          if (!this.userExplicitStop) {
+            try { recognition.start(); } catch {}
+          }
+        }, 500);
+      }
+    };
+
     recognition.start(); 
     this.activeRecognition = recognition;
   }
 
   stopListening() { 
+    this.userExplicitStop = true;
     if (this.activeRecognition) { 
-      this.activeRecognition.stop(); 
+      try { this.activeRecognition.stop(); } catch {}
       this.activeRecognition = null; 
     } 
     this.zone.run(() => this.isListening$.next(false)); 

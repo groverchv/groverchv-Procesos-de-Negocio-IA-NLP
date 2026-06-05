@@ -9,7 +9,7 @@ flutter run
 ```
 
 Verás la pantalla principal con 3 opciones:
-- 📁 **Proyectos** - Ver todos los proyectos
+-  **Proyectos** - Ver todos los proyectos
 - ▶️ **Procesos Activos** - Ver procesos en ejecución
 - ℹ️ **Información** - Detalles de la app
 

@@ -4,7 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
 class WebSocketService {
-  static const String baseUrl = 'wss://diagramador-de-actividades.up.railway.app/ws-bpmn';
+  String get baseUrl {
+    if (kIsWeb) {
+      return 'ws://localhost:8080/ws-bpmn';
+    } else {
+      return 'ws://10.0.2.2:8080/ws-bpmn';
+    }
+  }
   
   StompClient? _stompClient;
   String? _designId;

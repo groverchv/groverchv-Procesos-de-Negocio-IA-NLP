@@ -1,6 +1,6 @@
 # ✅ RESUMEN FINAL - Procesos Móvil
 
-## 📦 Proyecto Completado
+## Proyecto Completado
 
 Se ha creado una **aplicación móvil profesional en Flutter** en la carpeta `Movil/` con todas las funcionalidades solicitadas.
 
@@ -63,7 +63,7 @@ lib/
 └── DEVELOPMENT.md        ← Guía para desarrolladores
 ```
 
-### ⚙️ Configuración (4 archivos)
+### Configuración (4 archivos)
 ```
 ├── pubspec.yaml          ← Todas las dependencias Flutter
 ├── pubspec.lock          

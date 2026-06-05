@@ -1,4 +1,4 @@
-import 'package:hive/hive.hive';
+import 'package:hive/hive.dart';
 
 part 'tramite_local.g.dart';
 

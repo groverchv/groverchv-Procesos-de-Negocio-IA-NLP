@@ -378,10 +378,10 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     const action = ((cmd.action && actionAlias[cmd.action as string]) || cmd.action) as DiagramCommand['action'];
     const fixed: DiagramCommand = { ...cmd, action };
 
-    // Resolver referencias de nodos para que coincidan EXACTAMENTE con el diagrama (ej. "cumple" -> "cumple?")
-    if (fixed.sourceId) fixed.sourceId = this.resolveNodeLabelFromReference(fixed.sourceId, currentNodes) || fixed.sourceId;
-    if (fixed.targetId) fixed.targetId = this.resolveNodeLabelFromReference(fixed.targetId, currentNodes) || fixed.targetId;
-    if (fixed.nodeId) fixed.nodeId = this.resolveNodeLabelFromReference(fixed.nodeId, currentNodes) || fixed.nodeId;
+    // Resolver referencias de nodos para que coincidan con los IDs del diagrama
+    if (fixed.sourceId) fixed.sourceId = this.resolveNodeIdFromReference(fixed.sourceId, currentNodes) || fixed.sourceId;
+    if (fixed.targetId) fixed.targetId = this.resolveNodeIdFromReference(fixed.targetId, currentNodes) || fixed.targetId;
+    if (fixed.nodeId) fixed.nodeId = this.resolveNodeIdFromReference(fixed.nodeId, currentNodes) || fixed.nodeId;
     if (fixed.label && fixed.action !== 'add_node') {
       fixed.label = this.resolveNodeLabelFromReference(fixed.label, currentNodes) || fixed.label;
     }
@@ -1531,6 +1531,11 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     return matches.length > 0 ? (matches[0].label || null) : null;
   }
 
+  private resolveNodeIdFromReference(ref: string, nodes: NodeData[]): string | null {
+    const matches = this.findNodeMatches(ref, nodes);
+    return matches.length > 0 ? (matches[0].id || null) : null;
+  }
+
   private findLaneMatches(reference: string | null, nodes: NodeData[]): NodeData[] {
     const lanes = nodes
       .filter(n => n.type === 'swimlane')
@@ -1556,23 +1561,28 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
   }
 
   private findNodeMatches(ref: string, nodes: NodeData[]): NodeData[] {
-    let cleanRef = (ref || '').replace(/["'.,;:!?()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+    const targetOriginal = this.normalizeForSearch(ref);
+    const candidates = nodes.filter(n => !!n.label && n.label.trim().length > 0);
     
-    // Eliminar prefijos comunes de lenguaje natural que ensucian la búsqueda de etiquetas
-    cleanRef = cleanRef.replace(/^(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|la\s+pregunta|la\s+condicion|el\s+subproceso|calle|carril|zona|area|seccion|un|una|el|la|los|las|al|de\s+entre|entre|de)\s+/i, '').trim();
+    // 1. Intentar buscar con el término de búsqueda original intacto
+    const exactOriginal = candidates.filter(n => this.normalizeForSearch(n.label || '') === targetOriginal);
+    if (exactOriginal.length > 0) return exactOriginal;
 
-    // Eliminar sufijos de pertenencia a calles (ej: "X de la calle Y")
+    const containsOriginal = candidates.filter(n => this.normalizeForSearch(n.label || '').includes(targetOriginal) || targetOriginal.includes(this.normalizeForSearch(n.label || '')));
+    if (containsOriginal.length > 0) return containsOriginal;
+
+    // 2. Si no hay coincidencia directa, limpiar prefijos de lenguaje natural
+    let cleanRef = (ref || '').replace(/["'.,;:!?()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+    cleanRef = cleanRef.replace(/^(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|la\s+pregunta|la\s+condicion|el\s+subproceso|calle|carril|zona|area|seccion|un|una|el|la|los|las|al|de\s+entre|entre|de)\s+/i, '').trim();
     cleanRef = cleanRef.replace(/\b(?:de|del|en)\b\s+(?:la\s+|el\s+)?(?:calle|carril|swimlane|zona|area|área|seccion|fila|banda|pista|pool|departamento|sector).*/gi, '').trim();
 
     if (!cleanRef) return [];
+    const targetClean = this.normalizeForSearch(cleanRef);
 
-    const candidates = nodes.filter(n => !!n.label && n.label.trim().length > 0);
-    const target = this.normalizeForSearch(cleanRef);
+    const exactClean = candidates.filter(n => this.normalizeForSearch(n.label || '') === targetClean);
+    if (exactClean.length > 0) return exactClean;
 
-    const exact = candidates.filter(n => this.normalizeForSearch(n.label || '') === target);
-    if (exact.length > 0) return exact;
-
-    return candidates.filter(n => this.normalizeForSearch(n.label || '').includes(target) || target.includes(this.normalizeForSearch(n.label || '')));
+    return candidates.filter(n => this.normalizeForSearch(n.label || '').includes(targetClean) || targetClean.includes(this.normalizeForSearch(n.label || '')));
   }
 
   private buildAmbiguityQuestion(step: string, nodes: NodeData[]): string | null {

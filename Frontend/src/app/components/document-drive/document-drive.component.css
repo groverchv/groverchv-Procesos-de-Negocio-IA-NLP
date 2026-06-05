@@ -1,52 +1,759 @@
+/* Contenedor del Repositorio */
 .drive-container {
-  padding: 20px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  font-family: Arial, sans-serif;
-  height: 100%;
+  max-width: 1200px;
+  margin: 40px auto;
+  padding: 32px;
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: #1e293b;
+  animation: fadeIn 0.4s ease-out;
 }
 
+/* Selector de Usuario */
+.user-selector-bar {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px dashed #cbd5e1;
+}
+
+.premium-select {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  outline: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.premium-select:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* Breadcrumbs de Drive */
+.breadcrumbs-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  background: #f8fafc;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.breadcrumb-item-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.breadcrumb-link {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #4f46e5;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #3730a3;
+  text-decoration: underline;
+}
+
+.breadcrumb-separator {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Header */
 .drive-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid #e9ecef;
-  padding-bottom: 10px;
-  margin-bottom: 20px;
+  border-bottom: 1.5px solid #f1f5f9;
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+}
+
+.title-area h2 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px 0;
+  color: #0f172a;
+}
+
+.title-area p {
+  color: #64748b;
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 .hidden-input {
   display: none;
 }
 
-.upload-btn {
-  background-color: #0066cc;
-  color: white;
+/* Botones de Acción */
+.btn-action-outline {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
   padding: 10px 20px;
-  border-radius: 4px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
   cursor: pointer;
-  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn-action-outline:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.upload-btn {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+  transition: all 0.3s;
 }
 
 .upload-btn:hover {
-  background-color: #0052a3;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.25);
 }
 
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Tabla de Archivos */
 .files-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.files-table th, .files-table td {
-  padding: 12px;
+.files-table th {
+  padding: 16px 20px;
   text-align: left;
-  border-bottom: 1px solid #dee2e6;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-bottom: 2px solid #f1f5f9;
 }
 
-.action-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
+.files-table td {
+  padding: 16px 20px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.95rem;
 }
+
+.drive-row {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.drive-row:hover {
+  background: #f8fafc;
+}
+
+.file-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-icon-lead {
+  font-size: 1.3rem;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.folder-icon-lead {
+  font-size: 1.3rem;
+  color: #eab308;
+  background: rgba(234, 179, 8, 0.08);
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.file-name-text {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.file-name-text:hover {
+  text-decoration: underline;
+}
+
+.action-btn-download {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.action-btn-download:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 0;
+}
+
+/* ==================================================================== */
+/* GRID DE CARPETAS ESTILO GOOGLE DRIVE (BOXES HORIZONTALES) */
+/* ==================================================================== */
+.section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  margin: 0 0 16px 0;
+}
+
+.folders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.folder-card-drive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.folder-card-drive:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.folder-card-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0; /* Permite truncar texto si es muy largo */
+}
+
+.folder-card-icon {
+  font-size: 1.5rem;
+  color: #475569; /* Gris oscuro corporativo igual que en tu captura */
+  flex-shrink: 0;
+}
+
+.folder-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.folder-card-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-card-sub {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 1px;
+}
+
+.folder-card-dots {
+  color: #94a3b8;
+  font-size: 1.15rem;
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.folder-card-dots:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1e293b;
+}
+
+/* ==================================================================== */
+/* CUBIERTA DEL EDITOR GOOGLE DOCS (PAPER EDITOR WINDOW) */
+/* ==================================================================== --> */
+.editor-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #f1f5f9;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-header {
+  background: #ffffff;
+  border-bottom: 1.5px solid #cbd5e1;
+  padding: 16px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-title-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.editor-icon {
+  font-size: 2.2rem;
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.08);
+  padding: 10px;
+  border-radius: 12px;
+}
+
+.editor-title-area h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.editor-title-area p {
+  margin: 2px 0 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 550;
+}
+
+.editor-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-ia-action {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s;
+}
+
+.btn-ia-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.btn-ia-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-save {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+  transition: all 0.3s;
+}
+
+.btn-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.25);
+}
+
+.btn-close {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.btn-close:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* Cuerpo del Editor */
+.editor-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 20px;
+  display: flex;
+  justify-content: center;
+  background: #f1f5f9;
+}
+
+.document-paper {
+  width: 100%;
+  max-width: 800px;
+  min-height: 900px;
+  background: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
+  border: 1px solid #cbd5e1;
+  padding: 60px 80px;
+  display: flex;
+  flex-direction: column;
+}
+
+.paper-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 1.1rem;
+  line-height: 1.8;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  color: #1e293b;
+  background: transparent;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ==================================================================== */
+/* HISTORIAL DE NAVEGACIÓN Y BOTONES ATRÁS / ADELANTE */
+/* ==================================================================== */
+.navigation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  background: #f8fafc;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.nav-history-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-history-nav {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-history-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.btn-history-nav:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+
+.breadcrumbs-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: transparent;
+  padding: 0;
+  border: none;
+  margin-bottom: 0;
+}
+
+/* ==================================================================== */
+/* MODALES PERSONALIZADOS (REEMPLAZO DE ALERT/PROMPT DE NAVEGADOR) */
+/* ==================================================================== */
+.custom-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.custom-modal-card {
+  background: #ffffff;
+  width: 100%;
+  max-width: 460px;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.custom-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.modal-header-icon {
+  font-size: 1.6rem;
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.08);
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.custom-modal-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.custom-modal-body {
+  margin-bottom: 20px;
+}
+
+.modal-field-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.modal-text-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #cbd5e1;
+  font-size: 0.95rem;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.modal-text-input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.custom-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-modal-cancel {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-modal-cancel:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.btn-modal-confirm {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #ffffff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.15);
+}
+
+.btn-modal-confirm:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(79, 70, 229, 0.25);
+}
+
+.btn-modal-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ==================================================================== */
+/* COLABORADORES EN LÍNEA TIPO GOOGLE DOCS (PRESENCIA) */
+/* ==================================================================== */
+.editor-colabs-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f1f5f9;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.avatars-group {
+  display: flex;
+  align-items: center;
+}
+
+.user-colab-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: white;
+  font-weight: 700;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  position: relative;
+  margin-left: -8px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.user-colab-avatar:first-child {
+  margin-left: 0;
+}
+
+.user-colab-avatar:hover {
+  transform: translateY(-3px) scale(1.1);
+  z-index: 10;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+}
+
+.status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background-color: #10b981; /* Verde online */
+  border: 1.5px solid #ffffff;
+  border-radius: 50%;
+}
+
+.colabs-pill-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+

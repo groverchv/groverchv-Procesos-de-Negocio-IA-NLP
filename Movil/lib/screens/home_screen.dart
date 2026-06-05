@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'projects_list_screen.dart';
 import 'active_processes_screen.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -17,23 +18,55 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
-          'BPMN Flow',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 22,
-            letterSpacing: -0.5,
-            color: Color(0xFF0F172A),
-          ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.account_tree_rounded, color: Color(0xFF3B82F6), size: 18),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'BPMN Flow',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                letterSpacing: -0.5,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF64748B)),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 8),
+          if (ApiService.currentUser != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Chip(
+                avatar: const Icon(Icons.person_rounded, size: 14, color: Color(0xFF3B82F6)),
+                label: Text(
+                  ApiService.currentUser!.nombre.split(' ').first,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                backgroundColor: const Color(0xFFEFF6FF),
+                side: BorderSide.none,
+                padding: EdgeInsets.zero,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+              tooltip: 'Cerrar sesión',
+              onPressed: () {
+                ApiService.currentUser = null;
+                Navigator.pushReplacementNamed(context, '/auth');
+              },
+            ),
+          ],
+          const SizedBox(width: 4),
         ],
       ),
       body: AnimatedSwitcher(
@@ -57,9 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(0, Icons.dashboard_rounded, 'Explorar'),
+                _buildNavItem(0, Icons.folder_copy_rounded, 'Proyectos'),
                 _buildNavItem(1, Icons.play_circle_filled_rounded, 'Activos'),
-                _buildNavItem(2, Icons.info_rounded, 'Info'),
+                _buildNavItem(2, Icons.info_outline_rounded, 'Info'),
               ],
             ),
           ),

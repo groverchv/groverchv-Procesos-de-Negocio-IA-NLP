@@ -214,6 +214,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
             lane.width = Math.max(lane.width || 0, 300);
             lane.height = Math.max(lane.height || 0, 520);
           });
+        this.geminiLive.setDiagramContext(this.nodes, this.edges);
         this.saveHistory();
         setTimeout(() => this.zoomFit(), 100);
       },
@@ -467,6 +468,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
       };
       
       this.socketService.sendUpdate(this.designId, modeling, isDragPulse);
+      this.geminiLive.setDiagramContext(this.nodes, this.edges);
       if (shouldSaveHistory) {
         this.saveHistory();
       }
@@ -1226,6 +1228,7 @@ export class ModelerComponent implements OnInit, OnDestroy {
   }
 
   executeAiCommands(commands: DiagramCommand[]) {
+    console.log('[AI Assistant] executeAiCommands called with:', commands);
     for (const cmd of commands) {
       switch (cmd.action) {
 
@@ -1304,9 +1307,10 @@ export class ModelerComponent implements OnInit, OnDestroy {
         }
 
         case 'delete_node': {
-          const query = (cmd.nodeId || cmd.label || '').toLowerCase().trim();
+          const targetId = cmd.nodeId || (cmd as any).id;
+          const query = (targetId || cmd.label || '').toLowerCase().trim();
           const toDeleteNode = this.nodes.find(n => 
-            n.id === cmd.nodeId || 
+            (targetId && n.id === targetId) || 
             (n.label || '').toLowerCase().trim() === query
           );
           if (toDeleteNode) {
@@ -1319,15 +1323,25 @@ export class ModelerComponent implements OnInit, OnDestroy {
         }
 
         case 'update_node': {
-          const query = (cmd.nodeId || cmd.label || '').toLowerCase().trim();
+          console.log('[AI Command] executing update_node:', cmd);
+          const targetId = cmd.nodeId || (cmd as any).id;
+          const query = (targetId || cmd.label || '').toLowerCase().trim();
+          console.log('[AI Command] query:', query, 'targetId:', targetId, 'label:', cmd.label);
           const n = this.nodes.find(n => 
-            (cmd.nodeId && n.id === cmd.nodeId) || 
-            (!cmd.nodeId && (n.label || '').toLowerCase().trim() === query)
+            (targetId && n.id === targetId) || 
+            (n.label || '').toLowerCase().trim() === query
           );
           if (n) {
-            if (cmd.newLabel !== undefined) n.label = cmd.newLabel;
-            else if (cmd.label !== undefined && !cmd.nodeId) { /* label used for lookup, skip */ }
-            else if (cmd.label !== undefined) n.label = cmd.label;
+            console.log('[AI Command] found node to update:', n);
+            if (cmd.newLabel !== undefined) {
+              console.log('[AI Command] updating label from', n.label, 'to', cmd.newLabel);
+              n.label = cmd.newLabel;
+            }
+            else if (cmd.label !== undefined && !targetId) { /* label used for lookup, skip */ }
+            else if (cmd.label !== undefined) {
+              console.log('[AI Command] updating label from', n.label, 'to', cmd.label);
+              n.label = cmd.label;
+            }
             if (cmd.x !== undefined) n.x = cmd.x;
             if (cmd.y !== undefined) n.y = cmd.y;
             if (cmd.width !== undefined) n.width = cmd.width;
@@ -1341,6 +1355,12 @@ export class ModelerComponent implements OnInit, OnDestroy {
                 modelingId: this.modelingId || ''
               }));
             }
+            console.log('[AI Command] node after update:', n);
+            if (n.type === 'swimlane') {
+              this.syncLanesLayout(false);
+            }
+          } else {
+            console.warn('[AI Command] node not found for update query:', query, 'among nodes:', this.nodes);
           }
           break;
         }
@@ -1415,8 +1435,8 @@ export class ModelerComponent implements OnInit, OnDestroy {
         case 'move_node_to_lane': {
           const query = (cmd.nodeId || cmd.label || '').toLowerCase().trim();
           const node = this.nodes.find(n => 
-            (cmd.nodeId && n.id === cmd.nodeId) || 
-            (!cmd.nodeId && (n.label || '').toLowerCase().trim() === query)
+            n.id === cmd.nodeId || 
+            (n.label || '').toLowerCase().trim() === query
           );
           const laneQ = (cmd.targetLaneName || '').toLowerCase().trim();
           const targetLane = this.nodes.find(n =>
@@ -1630,6 +1650,10 @@ export class ModelerComponent implements OnInit, OnDestroy {
           break;
       }
     }
+    // Force Change Detection by recreating the arrays with cloned references
+    this.nodes = this.nodes.map(n => ({ ...n }));
+    this.edges = this.edges.map(e => ({ ...e }));
+
     this.checkAndExpandLanes();
     this.broadcastUpdate();
     this.message.success(`IA: ${this.aiLastMessage}`);
@@ -1764,9 +1788,13 @@ export class ModelerComponent implements OnInit, OnDestroy {
 
   toggleAssistantVoice() {
     this.geminiLive.setDiagramContext(this.nodes, this.edges);
-    this.geminiLive.startVoiceInput().catch(() => {
-      this.message.warning('Tu navegador no soporta reconocimiento de voz');
-    });
+    if (this.geminiLive.isListening$.value) {
+      this.geminiLive.stopListening();
+    } else {
+      this.geminiLive.startVoiceInput().catch(() => {
+        this.message.warning('Tu navegador no soporta reconocimiento de voz');
+      });
+    }
   }
 
   sendAssistantQuery() {

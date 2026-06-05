@@ -21,7 +21,18 @@ class _ActiveProcessesScreenState extends State<ActiveProcessesScreen> {
   }
 
   void _loadData() {
-    _processesFuture = Provider.of<ApiService>(context, listen: false).getActiveInstances();
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final currentUser = ApiService.currentUser;
+
+    // Si el usuario logueado es CLIENTE, solo mostrar los procesos habilitados por el Funcionario
+    if (currentUser != null &&
+        currentUser.rol.toUpperCase() == 'CLIENTE' &&
+        currentUser.id != null) {
+      _processesFuture = apiService.getActiveInstancesParaCliente(currentUser.id!);
+    } else {
+      // Diseñadores y Funcionarios ven todas las instancias activas
+      _processesFuture = apiService.getActiveInstances();
+    }
   }
 
   @override

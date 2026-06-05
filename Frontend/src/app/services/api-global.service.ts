@@ -29,8 +29,8 @@ export class ApiGlobalService {
     if (override && override.trim().length > 0) {
       url = override.trim().replace(/\/+$/, '');
     } else if (host === 'localhost' || host === '127.0.0.1') {
-      // 2. Local development fallback (pointing to Railway by default to fix the user's connection error)
-      url = PRODUCTION_BACKEND_URL;
+      // 2. Local development fallback
+      url = 'http://localhost:8080';
     } else {
       // 3. Default production URL
       url = PRODUCTION_BACKEND_URL;
