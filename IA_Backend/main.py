@@ -625,9 +625,10 @@ async def generar_reporte_dinamico(requerimiento: ReporteDinamicoRequest):
 
 @app.get("/api/v1/reportes/generar")
 def generar_reporte_bi(tenant_id: str):
+    bucket_name = os.getenv("AWS_S3_BUCKET", "gestion-procesos-203677519083-sa-east-1-an")
     return {
         "tenant_id": tenant_id,
-        "reporte_url": f"https://s3.amazonaws.com/bpm-documentos-clientes/{tenant_id}/reporte_ia_mensual.pdf",
+        "reporte_url": f"https://s3.amazonaws.com/{bucket_name}/{tenant_id}/reporte_ia_mensual.pdf",
         "insights": [
             "El proceso 'Solicitud Vacaciones' demora un 40% más en el área de RRHH.",
             "Ahorro estimado: 120 horas.",
