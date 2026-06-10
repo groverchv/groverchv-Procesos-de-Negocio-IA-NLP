@@ -9,6 +9,7 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { API_GLOBAL } from '../../services/api.global';
+import { ApiGlobalService } from '../../services/api-global.service';
 
 interface DriveItem {
   id: string;
@@ -100,7 +101,8 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     private http: HttpClient, 
     public documentService: DocumentService,
     private documentSocketService: DocumentSocketService,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private apiGlobalService: ApiGlobalService
   ) {}
 
   ngOnInit() {
@@ -129,9 +131,9 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.allItems = [];
 
     // Load users, projects, and instances in parallel
-    const users$ = this.http.get<any[]>('http://localhost:8080/api/usuarios');
-    const projects$ = this.http.get<any[]>('http://localhost:8080/api/projects');
-    const instances$ = this.http.get<any[]>('http://localhost:8080/api/instances');
+    const users$ = this.http.get<any[]>(this.apiGlobalService.getEndpointUrl('usuarios'));
+    const projects$ = this.http.get<any[]>(this.apiGlobalService.getEndpointUrl('projects'));
+    const instances$ = this.http.get<any[]>(this.apiGlobalService.getEndpointUrl('instances'));
 
     let usersData: any[] = [];
     let projectsData: any[] = [];
@@ -625,7 +627,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       formData.append('fileName', s3Path);
       formData.append('usuario', this.getCurrentUser());
 
-      this.http.post('http://localhost:8080/api/documentos/upload', formData).subscribe({
+      this.http.post(this.apiGlobalService.getEndpointUrl('documentos/upload'), formData).subscribe({
         next: () => {
           const nuevoDocumento: DriveItem = {
             id: `file_${Date.now()}`,
@@ -1010,7 +1012,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     }
 
     const s3Path = this.resolverS3Path(item);
-    const viewUrl = `http://localhost:8080/api/documentos/view?tenantId=${item.tenantId}&fileName=${s3Path}`;
+    const viewUrl = `${this.apiGlobalService.getEndpointUrl('documentos/view')}?tenantId=${item.tenantId}&fileName=${s3Path}`;
     
     this.documentService.getPresignedUrl(item.tenantId, s3Path, this.getCurrentUser()).subscribe({
       next: () => {

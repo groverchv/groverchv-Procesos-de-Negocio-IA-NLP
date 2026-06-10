@@ -20,27 +20,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF4F46E5).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.account_tree_rounded, color: Color(0xFF4F46E5), size: 18),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'BPMN Flow',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 20,
-                letterSpacing: -0.8,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-          ],
+        title: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: const Color(0xFF4F46E5).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.account_tree_rounded, color: Color(0xFF4F46E5), size: 18),
         ),
         backgroundColor: Colors.white,
         elevation: 0,

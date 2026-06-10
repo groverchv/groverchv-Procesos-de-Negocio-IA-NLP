@@ -412,7 +412,8 @@ async def analizar_y_alertar_documento(doc_id: str, user_id: str, user_name: str
     analisis = await motor_nlp.analizar_documento(doc_id=doc_id, user_name=user_name, texto=texto)
     
     if analisis and analisis.get("has_alert"):
-        webhook_url = "http://localhost:8080/api/ia/alertas"
+        backend_base = os.getenv("SPRING_BOOT_URL", "https://backend-principal.up.railway.app")
+        webhook_url = f"{backend_base}/api/ia/alertas"
         payload = {
             "docId": doc_id,
             "payload": {

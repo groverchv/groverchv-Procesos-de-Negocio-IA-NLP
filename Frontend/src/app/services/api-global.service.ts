@@ -21,22 +21,7 @@ const PRODUCTION_BACKEND_URL = 'https://backend-principal.up.railway.app';
 export class ApiGlobalService {
 
   get baseUrl(): string {
-    const host = window.location.hostname;
-    let url = '';
-
-    // 1. Priority: Manual override via localStorage
-    const override = localStorage.getItem('BACKEND_URL');
-    if (override && override.trim().length > 0) {
-      url = override.trim().replace(/\/+$/, '');
-    } else if (host === 'localhost' || host === '127.0.0.1') {
-      // 2. Local development fallback
-      url = 'http://localhost:8080';
-    } else {
-      // 3. Default production URL
-      url = PRODUCTION_BACKEND_URL;
-    }
-
-    return url;
+    return PRODUCTION_BACKEND_URL;
   }
 
   get apiUrl(): string {
