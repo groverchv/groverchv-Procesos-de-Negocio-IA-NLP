@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 
+import { ApiGlobalService } from '../../services/api-global.service';
+
 interface ChatMessage {
   sender: 'user' | 'ia';
   text: string;
@@ -21,7 +23,7 @@ export class VirtualAssistantComponent {
   ];
   userInput: string = '';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private apiGlobal: ApiGlobalService) {}
 
   sendMessage() {
     if (!this.userInput.trim()) return;
@@ -33,7 +35,7 @@ export class VirtualAssistantComponent {
 
     // Enviar a Spring Boot (que a su vez habla con FastAPI)
     // Aquí hacemos un mock temporal hasta encender los backends
-    this.http.post('http://localhost:8080/api/v1/ia/procesar-intencion', {
+    this.http.post(this.apiGlobal.getEndpointUrl('/v1/ia/procesar-intencion'), {
       cliente_id: 'cliente-001',
       texto: userText
     }).subscribe({

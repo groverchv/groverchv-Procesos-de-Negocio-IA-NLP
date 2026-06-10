@@ -2,13 +2,17 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
+import { ApiGlobalService } from '../api-global.service';
+
 @Injectable({
   providedIn: 'root'
 })
 export class DocumentService {
-  private apiUrl = 'http://localhost:8080/api/documentos'; // Apunta a Spring Boot Correcto
+  private get apiUrl() {
+    return `${this.apiGlobal.baseUrl}/api/documentos`;
+  }
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private apiGlobal: ApiGlobalService) {}
 
   uploadFile(tenantId: string, fileName: string, file: File): Observable<any> {
     const formData = new FormData();

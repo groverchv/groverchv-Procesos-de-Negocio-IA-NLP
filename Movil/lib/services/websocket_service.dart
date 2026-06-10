@@ -4,12 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
 class WebSocketService {
+  static const String _apiBaseEnv = String.fromEnvironment('API_BASE_URL');
+
   String get baseUrl {
-    if (kIsWeb) {
-      return 'ws://localhost:8080/ws-bpmn';
-    } else {
-      return 'ws://10.0.2.2:8080/ws-bpmn';
+    if (_apiBaseEnv.isNotEmpty) {
+      final uri = Uri.parse(_apiBaseEnv);
+      final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
+      final hostPort = uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+      return '$scheme://$hostPort/ws-bpmn';
     }
+    return 'wss://backend-principal.up.railway.app/ws-bpmn';
   }
   
   StompClient? _stompClient;

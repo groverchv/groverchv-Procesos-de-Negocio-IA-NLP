@@ -13,7 +13,7 @@ import { Injectable } from '@angular/core';
  * DEPLOYMENT STEP:
  *   After deploying the backend to Railway, paste your Railway URL below:
  */
-const PRODUCTION_BACKEND_URL = 'https://diagramador-de-actividades.up.railway.app';
+const PRODUCTION_BACKEND_URL = 'https://backend-principal.up.railway.app';
 
 @Injectable({
   providedIn: 'root'

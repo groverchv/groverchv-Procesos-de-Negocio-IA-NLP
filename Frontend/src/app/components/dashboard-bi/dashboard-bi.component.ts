@@ -5,6 +5,8 @@ import { FormsModule } from '@angular/forms';
 import { API_GLOBAL } from '../../services/api.global';
 import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
+import { ApiGlobalService } from '../../services/api-global.service';
+
 
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -65,7 +67,7 @@ export class DashboardBiComponent implements OnInit, OnDestroy {
   tiemposEjecucion: any[] = [];
   exitoFlujos: any[] = [];
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private apiGlobal: ApiGlobalService) {}
 
   ngOnInit() {
     this.cargarUsuarios();
@@ -79,7 +81,7 @@ export class DashboardBiComponent implements OnInit, OnDestroy {
 
   conectarWebSocket() {
     this.stompClient = new Client({
-      webSocketFactory: () => new SockJS('http://localhost:8080/ws-bpmn'),
+      webSocketFactory: () => new SockJS(`${this.apiGlobal.baseUrl}/ws-bpmn`),
       heartbeatIncoming: 0,
       heartbeatOutgoing: 0,
       reconnectDelay: 2000,
@@ -116,7 +118,7 @@ export class DashboardBiComponent implements OnInit, OnDestroy {
 
   cargarUsuarios() {
     this.cargandoUsuarios = true;
-    this.http.get<any[]>('http://localhost:8080/api/usuarios').subscribe({
+    this.http.get<any[]>(this.apiGlobal.getEndpointUrl('/usuarios')).subscribe({
       next: (data) => {
         this.usuarios = data;
         this.kpisLocales.totalUsuariosActivos = data.length.toString();
@@ -137,7 +139,7 @@ export class DashboardBiComponent implements OnInit, OnDestroy {
 
   cargarDatosRealesBPM() {
     // Consumir el endpoint real de instancias de procesos de Spring Boot para calcular métricas
-    this.http.get<any[]>('http://localhost:8080/api/instances').subscribe({
+    this.http.get<any[]>(this.apiGlobal.getEndpointUrl('/instances')).subscribe({
       next: (instances) => {
         const total = instances ? instances.length : 0;
         if (total > 0) {
@@ -236,7 +238,7 @@ export class DashboardBiComponent implements OnInit, OnDestroy {
     this.presignedReportUrl = null;
     this.activeTab = 'ia-reports';
 
-    this.http.post<any>('http://localhost:8080/api/documentos/reporte-ia', {
+    this.http.post<any>(this.apiGlobal.getEndpointUrl('/documentos/reporte-ia'), {
       query: this.promptQuery,
       tenantId: 'tenant_default'
     }).subscribe({

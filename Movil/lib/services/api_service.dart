@@ -7,20 +7,23 @@ import '../models/types.dart';
 
 class ApiService {
   static const String _apiBaseEnv = String.fromEnvironment('API_BASE_URL');
+  static const String _iaBaseEnv = String.fromEnvironment('IA_BASE_URL');
   static Usuario? currentUser;
 
   String get baseUrl {
     if (_apiBaseEnv.isNotEmpty) {
       return _apiBaseEnv;
     }
-
-    // Web en localhost y Android emulator usan hosts distintos.
-    if (kIsWeb) {
-      return 'http://localhost:8080/api';
-    } else {
-      return 'http://10.0.2.2:8080/api';
-    }
+    return 'https://backend-principal.up.railway.app/api';
   }
+
+  String get iaUrl {
+    if (_iaBaseEnv.isNotEmpty) {
+      return _iaBaseEnv;
+    }
+    return 'https://backend-ia-nlp.up.railway.app';
+  }
+
 
   Future<http.Response> _get(String path) async {
     final separator = path.contains('?') ? '&' : '?';
@@ -223,7 +226,7 @@ class ApiService {
   /// Envía texto al microservicio de IA local (Groq NLP) para procesar la intención del cliente
   Future<Map<String, dynamic>> nlpProcesarIntencion(String texto) async {
     // 10.0.2.2 es el alias IP para localhost del PC desde el emulador de Android
-    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+    final String iaUrl = this.iaUrl;
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-asesor'),
@@ -254,7 +257,7 @@ class ApiService {
     required List<Map<String, String>> messages,
     String? procesoContext,
   }) async {
-    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+    final String iaUrl = this.iaUrl;
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-movil'),
@@ -285,7 +288,7 @@ class ApiService {
     required List<Map<String, dynamic>> messages,
     required String tenantId,
   }) async {
-    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+    final String iaUrl = this.iaUrl;
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-rag'),
@@ -310,7 +313,7 @@ class ApiService {
 
   /// Genera audio usando ElevenLabs a través del microservicio de IA
   Future<Uint8List?> ttsGenerarVoz(String texto) async {
-    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+    final String iaUrl = this.iaUrl;
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/tts/generar-voz'),
