@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../models/types.dart';
 import 'diagram_viewer_screen.dart';
+import 'sugerencias_ia_screen.dart';
 
 class DesignProcessesScreen extends StatefulWidget {
   final String designId;
@@ -278,6 +279,77 @@ class _DesignProcessesScreenState extends State<DesignProcessesScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A)),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
+            child: GestureDetector(
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => SugerenciasIAScreen(
+                    initialPrompt: 'Tengo abierto el flujo de "${widget.designNombre}". ¿Qué camino me recomiendas tomar o cómo lo inicio?',
+                    extraContext: 'El usuario está en el listado de instancias de "${widget.designNombre}". Habilitado para iniciar: $isHabilitado, Solicitado: $isSolicitado.',
+                    customSuggestions: [
+                      {
+                        'texto': '¿Cómo inicio un nuevo proceso?',
+                        'icono': Icons.play_arrow_rounded,
+                        'color': const Color(0xFF10B981),
+                      },
+                      if (!isHabilitado && !isSolicitado)
+                        {
+                          'texto': '¿Por qué me sale "Solicitar de nuevo"?',
+                          'icono': Icons.help_outline_rounded,
+                          'color': const Color(0xFFF59E0B),
+                        },
+                      {
+                        'texto': '¿Qué camino es el recomendado aquí?',
+                        'icono': Icons.alt_route_rounded,
+                        'color': const Color(0xFF8B5CF6),
+                      },
+                    ],
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withOpacity(0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 14),
+                    SizedBox(width: 5),
+                    Text(
+                      'Sugerencias IA',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(36),
           child: Container(

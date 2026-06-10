@@ -14,16 +14,14 @@ class ProjectsListScreen extends StatefulWidget {
 class _ProjectsListScreenState extends State<ProjectsListScreen> {
   late Future<List<Project>> _projectsFuture;
 
-  // Palette of folder colors to cycle through
+  // Palette of folder colors to cycle through (Refined premium tones)
   static const List<Color> _folderColors = [
-    Color(0xFF3B82F6), // blue
-    Color(0xFF8B5CF6), // violet
-    Color(0xFF10B981), // emerald
-    Color(0xFFF59E0B), // amber
-    Color(0xFFEF4444), // red
-    Color(0xFF06B6D4), // cyan
-    Color(0xFFEC4899), // pink
-    Color(0xFF84CC16), // lime
+    Color(0xFF4F46E5), // Indigo
+    Color(0xFF06B6D4), // Cyan
+    Color(0xFF10B981), // Emerald
+    Color(0xFFF59E0B), // Amber
+    Color(0xFF8B5CF6), // Violet
+    Color(0xFFEC4899), // Pink
   ];
 
   @override
@@ -40,9 +38,9 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFF1F5F9),
+      color: const Color(0xFFF8FAFC), // Slate 50 ultra limpio
       child: RefreshIndicator(
-        color: const Color(0xFF3B82F6),
+        color: const Color(0xFF4F46E5),
         onRefresh: () async {
           setState(() => _loadData());
         },
@@ -89,6 +87,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                             color: Color(0xFF0F172A),
                             fontSize: 28,
                             fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -113,12 +112,12 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                     child: Row(
                       children: [
                         const Icon(Icons.home_rounded,
-                            size: 14, color: Color(0xFF3B82F6)),
+                            size: 14, color: Color(0xFF4F46E5)),
                         const SizedBox(width: 4),
                         const Text(
                           'Inicio',
                           style: TextStyle(
-                            color: Color(0xFF3B82F6),
+                            color: Color(0xFF4F46E5),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),

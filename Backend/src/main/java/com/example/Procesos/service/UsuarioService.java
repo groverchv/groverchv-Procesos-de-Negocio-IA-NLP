@@ -13,6 +13,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
+    private final S3DocumentService s3DocumentService;
 
     @PostConstruct
     public void seedUsuarios() {
@@ -33,13 +34,24 @@ public class UsuarioService {
                     .tenantId("tenant_default")
                     .build());
 
-            usuarioRepository.save(Usuario.builder()
+            Usuario carlos = Usuario.builder()
                     .nombre("Carlos Cliente (Acme Corp)")
                     .email("carlos@acme.com")
                     .password("password")
                     .rol("CLIENTE")
                     .tenantId("tenant_acme")
-                    .build());
+                    .build();
+            usuarioRepository.save(carlos);
+
+            // Crear carpeta S3 para Carlos
+            try {
+                String content = "Repositorio de " + carlos.getNombre() + "\n===============================================\nNo hay proyectos registrados en el sistema aún.";
+                byte[] welcomeBytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(welcomeBytes);
+                s3DocumentService.uploadDocument("tenant_acme", "bienvenida.txt", inputStream, welcomeBytes.length, "text/plain");
+            } catch (Exception e) {
+                System.err.println("Advertencia S3 al seedear Carlos: " + e.getMessage());
+            }
         }
     }
 
@@ -64,7 +76,33 @@ public class UsuarioService {
     }
 
     public Usuario createUsuario(Usuario usuario) {
-        return usuarioRepository.save(usuario);
+        if (usuario.getRol() == null) {
+            usuario.setRol("CLIENTE");
+        }
+        if (usuario.getTenantId() == null || usuario.getTenantId().trim().isEmpty() || "tenant_default".equals(usuario.getTenantId())) {
+            if (usuario.getEmail() != null && !usuario.getEmail().trim().isEmpty()) {
+                String prefix = usuario.getEmail().split("@")[0].replaceAll("[^a-zA-Z0-9]", "");
+                usuario.setTenantId("tenant_" + prefix);
+            } else {
+                usuario.setTenantId("tenant_" + System.currentTimeMillis());
+            }
+        }
+        
+        Usuario saved = usuarioRepository.save(usuario);
+
+        // Crear carpeta S3 automáticamente para el nuevo usuario cliente
+        if ("CLIENTE".equals(saved.getRol())) {
+            try {
+                String content = "Repositorio de " + saved.getNombre() + "\n===============================================\nNo hay proyectos registrados en el sistema aún.";
+                byte[] welcomeBytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(welcomeBytes);
+                s3DocumentService.uploadDocument(saved.getTenantId(), "bienvenida.txt", inputStream, welcomeBytes.length, "text/plain");
+            } catch (Exception e) {
+                System.err.println("Advertencia S3 al crear usuario: " + e.getMessage());
+            }
+        }
+
+        return saved;
     }
 
     public void deleteUsuario(String id) {

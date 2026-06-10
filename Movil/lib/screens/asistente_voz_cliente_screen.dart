@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../services/api_service.dart';
 
 class AsistenteVozClienteScreen extends StatefulWidget {
@@ -15,6 +16,27 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
   
   final ApiService _apiService = ApiService();
   final TextEditingController _textController = TextEditingController();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
+  @override
+  void initState() {
+    super.initState();
+    // Apagar animación de reproducción al finalizar el audio
+    _audioPlayer.onPlayerComplete.listen((event) {
+      if (mounted) {
+        setState(() {
+          _reproduciendoVoz = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    _textController.dispose();
+    super.dispose();
+  }
 
   void _empezarDictado() {
     setState(() {
@@ -27,7 +49,6 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
   void _detenerDictado() {
     setState(() {
       _estaEscuchando = false;
-      // Simulación de dictado de voz de alta fidelidad
       _textoDictado = 'Hola, necesito crear un trámite para solicitar vacaciones de 15 días a partir del próximo mes.';
     });
     
@@ -43,7 +64,6 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
     });
 
     try {
-      // 1. Enviar el requerimiento de voz a Groq NLP a través de FastAPI
       final res = await _apiService.nlpProcesarIntencion(texto);
       final String reply = res['reply'] ?? 'Lo siento, no pude procesar tu solicitud.';
 
@@ -52,7 +72,6 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
         _cargandoIA = false;
       });
 
-      // 2. Generar respuesta hablada a través de ElevenLabs TTS
       _generarAudioRespuesta(reply);
 
     } catch (e) {
@@ -69,52 +88,52 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
     });
 
     try {
-      final base64Audio = await _apiService.ttsGenerarVoz(texto);
-      if (base64Audio.isNotEmpty) {
-        print('[ElevenLabs MÓVIL] Audio base64 recibido exitosamente. Listón para reproducirse.');
-        // En ambiente real, aquí se decodifica y reproduce el audio usando la librería audioplayers
-        // por ejemplo: await _audioPlayer.play(BytesSource(base64Decode(base64Audio)));
-      }
-    } catch (e) {
-      print('Error al generar respuesta hablada con ElevenLabs: $e');
-    }
-
-    // Simular fin de reproducción de voz después de un breve periodo
-    Future.delayed(const Duration(seconds: 4), () {
-      if (mounted) {
+      final audioBytes = await _apiService.ttsGenerarVoz(texto);
+      if (audioBytes != null && audioBytes.isNotEmpty) {
+        print('[ElevenLabs MÓVIL] Audio recibido exitosamente. Reproduciendo...');
+        await _audioPlayer.play(BytesSource(audioBytes));
+      } else {
         setState(() {
           _reproduciendoVoz = false;
         });
       }
-    });
+    } catch (e) {
+      print('Error al generar respuesta hablada con ElevenLabs: $e');
+      setState(() {
+        _reproduciendoVoz = false;
+      });
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Colors.indigo[900]!;
+    const primaryColor = Color(0xFF4F46E5);
+    const secondaryAccent = Color(0xFF06B6D4);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Asistente de Voz Inteligente', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: primaryColor,
+        title: const Text('Asistente de Voz', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+        backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        surfaceTintColor: Colors.transparent,
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [primaryColor.withOpacity(0.05), Colors.white],
+            colors: [Colors.white, Color(0xFFF8FAFC)],
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
             children: [
               // Área del Micrófono e Indicadores Visuales UI/UX
               Expanded(
-                flex: 3,
+                flex: 2,
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -124,36 +143,50 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
                         children: [
                           if (_estaEscuchando || _reproduciendoVoz)
                             Container(
-                              width: 160,
-                              height: 160,
+                              width: 130,
+                              height: 130,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: (_estaEscuchando ? Colors.red : Colors.green).withOpacity(0.15),
+                                color: (_estaEscuchando ? Colors.redAccent : secondaryAccent).withOpacity(0.12),
                               ),
                             ),
                           Container(
-                            width: 120,
-                            height: 120,
+                            width: 100,
+                            height: 100,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: _estaEscuchando
-                                  ? Colors.red
-                                  : (_reproduciendoVoz ? Colors.green : primaryColor),
+                              gradient: LinearGradient(
+                                colors: _estaEscuchando
+                                    ? [Colors.redAccent, Colors.red]
+                                    : (_reproduciendoVoz
+                                        ? [secondaryAccent, const Color(0xFF0891B2)]
+                                        : [primaryColor, const Color(0xFF3730A3)]),
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: (_estaEscuchando ? Colors.red : primaryColor).withOpacity(0.3),
+                                  color: (_estaEscuchando
+                                          ? Colors.redAccent
+                                          : (_reproduciendoVoz ? secondaryAccent : primaryColor))
+                                      .withOpacity(0.3),
                                   blurRadius: 20,
-                                  spreadRadius: 5,
+                                  offset: const Offset(0, 6),
                                 )
                               ],
                             ),
                             child: IconButton(
-                              iconSize: 56,
+                              iconSize: 44,
                               color: Colors.white,
-                              icon: Icon(_estaEscuchando ? Icons.stop : (_reproduciendoVoz ? Icons.volume_up : Icons.mic)),
+                              icon: Icon(_estaEscuchando
+                                  ? Icons.stop_rounded
+                                  : (_reproduciendoVoz ? Icons.volume_up_rounded : Icons.mic_rounded)),
                               onPressed: () {
                                 if (_estaEscuchando) {
                                   _detenerDictado();
+                                } else if (_reproduciendoVoz) {
+                                  _audioPlayer.stop();
+                                  setState(() {
+                                    _reproduciendoVoz = false;
+                                  });
                                 } else {
                                   _empezarDictado();
                                 }
@@ -162,15 +195,17 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       Text(
-                        _estaEscuchando 
-                            ? 'Escuchando activamente...' 
-                            : (_reproduciendoVoz ? 'Hablando respuesta (ElevenLabs)...' : 'Asistente de Voz'),
+                        _estaEscuchando
+                            ? 'Escuchando requerimiento...'
+                            : (_reproduciendoVoz ? 'Reproduciendo respuesta por voz...' : 'Toca el micrófono para hablar'),
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: _estaEscuchando ? Colors.red : (_reproduciendoVoz ? Colors.green : Colors.grey[700]),
+                          color: _estaEscuchando
+                              ? Colors.redAccent
+                              : (_reproduciendoVoz ? secondaryAccent : const Color(0xFF64748B)),
                         ),
                       ),
                     ],
@@ -179,28 +214,32 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
               ),
 
               // Requerimiento Dictado por el Usuario
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade100, width: 1),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(18.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        children: [
-                          Icon(Icons.person, color: primaryColor, size: 20),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Tu Solicitud:',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey),
+                        children: const [
+                          Icon(Icons.person_outline_rounded, color: primaryColor, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Tu solicitud',
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Color(0xFF64748B)),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
                         _textoDictado,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
                       ),
                     ],
                   ),
@@ -210,51 +249,59 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
 
               // Respuesta de la IA con ElevenLabs
               Expanded(
-                flex: 4,
-                child: Card(
-                  elevation: 6,
-                  shadowColor: primaryColor.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.auto_awesome, color: primaryColor, size: 22),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Análisis y Respuesta IA:',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: primaryColor),
-                            ),
-                          ],
-                        ),
-                        const Divider(height: 20),
-                        Expanded(
-                          child: _cargandoIA
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(primaryColor)),
-                                      const SizedBox(height: 12),
-                                      const Text('Analizando políticas de negocio...', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                                    ],
-                                  ),
-                                )
-                              : SingleChildScrollView(
-                                  child: Text(
-                                    _respuestaIA.isNotEmpty
-                                        ? _respuestaIA
-                                        : 'Solicita un trámite diciendo por ejemplo: "Quiero iniciar mi solicitud de vacaciones" o "Necesito cotizar un software corporativo". La IA analizará la política asociada y responderá de inmediato por voz.',
-                                    style: const TextStyle(fontSize: 15, height: 1.5, color: Colors.black87),
-                                  ),
+                flex: 3,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.grey.shade100, width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0F172A).withOpacity(0.02),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.auto_awesome_rounded, color: primaryColor, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Análisis y Respuesta IA',
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      Expanded(
+                        child: _cargandoIA
+                            ? const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    CircularProgressIndicator(strokeWidth: 2, color: primaryColor),
+                                    SizedBox(height: 16),
+                                    Text('Analizando políticas de negocio...',
+                                        style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                                  ],
                                 ),
-                        ),
-                      ],
-                    ),
+                              )
+                            : SingleChildScrollView(
+                                child: Text(
+                                  _respuestaIA.isNotEmpty
+                                      ? _respuestaIA
+                                      : 'Solicita un trámite diciendo por ejemplo: "Quiero iniciar mi solicitud de vacaciones" o "Necesito cotizar un software corporativo". La IA analizará la política asociada y responderá de inmediato por voz.',
+                                  style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF334155)),
+                                ),
+                              ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -268,29 +315,52 @@ class _AsistenteVozClienteScreenState extends State<AsistenteVozClienteScreen> {
                       controller: _textController,
                       decoration: InputDecoration(
                         hintText: 'O escribe tu requerimiento aquí...',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                         filled: true,
                         fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(color: primaryColor, width: 1.5),
+                        ),
                       ),
                       onSubmitted: (val) {
                         _textController.clear();
-                        setState(() => _textoDictado = val);
-                        _consultarIAPorPolitica(val);
+                        if (val.trim().isNotEmpty) {
+                          setState(() => _textoDictado = val);
+                          _consultarIAPorPolitica(val);
+                        }
                       },
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(Icons.send, color: primaryColor),
-                    onPressed: () {
-                      final val = _textController.text;
-                      if (val.isNotEmpty) {
-                        _textController.clear();
-                        setState(() => _textoDictado = val);
-                        _consultarIAPorPolitica(val);
-                      }
-                    },
+                  const SizedBox(width: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                      onPressed: () {
+                        final val = _textController.text;
+                        if (val.trim().isNotEmpty) {
+                          _textController.clear();
+                          setState(() => _textoDictado = val);
+                          _consultarIAPorPolitica(val);
+                        }
+                      },
+                    ),
                   )
                 ],
               ),

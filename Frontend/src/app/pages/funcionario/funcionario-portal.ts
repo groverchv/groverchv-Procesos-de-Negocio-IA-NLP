@@ -1,8 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -10,6 +10,9 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { NzTooltipModule } from 'ng-zorro-antd/tooltip';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+import { ApiGlobalService } from '../../services/api-global.service';
 import { Usuario, Project, Design, AsignacionProceso } from '../../services/types';
 
 interface InstanciaResumen {
@@ -23,14 +26,14 @@ interface InstanciaResumen {
   selector: 'app-funcionario-portal',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, RouterLink,
+    CommonModule, FormsModule,
     NzIconModule, NzButtonModule, NzTagModule,
     NzSwitchModule, NzTooltipModule, NzSpinModule
   ],
   templateUrl: './funcionario-portal.html',
   styleUrls: ['./funcionario-portal.css']
 })
-export class FuncionarioPortalComponent implements OnInit {
+export class FuncionarioPortalComponent implements OnInit, OnDestroy {
 
   // ─── Stepper state ──────────────────────────────────────────────────────────
   currentStep = 0; // 0=cliente, 1=proyecto, 2=diseño, 3=habilitar
@@ -54,12 +57,18 @@ export class FuncionarioPortalComponent implements OnInit {
   cargandoAsignaciones = false;
   guardando = false;
 
-  readonly BASE = 'http://localhost:8080/api';
+  get BASE() {
+    return this.apiGlobal.apiUrl;
+  }
+
+  // WebSockets for Real-time updates
+  private stompClient: Client | null = null;
 
   constructor(
     private http: HttpClient,
     private router: Router,
-    private message: NzMessageService
+    private message: NzMessageService,
+    private apiGlobal: ApiGlobalService
   ) {}
 
   ngOnInit() {
@@ -68,13 +77,58 @@ export class FuncionarioPortalComponent implements OnInit {
     this.restaurarEstado();
   }
 
+  ngOnDestroy() {
+    this.disconnectWebSocket();
+  }
+
+  // ─── WebSocket connection management ─────────────────────────────────────────
+  connectWebSocket() {
+    this.disconnectWebSocket();
+
+    if (!this.clienteSeleccionado?.id) return;
+
+    const wsUrl = this.apiGlobal.wsUrl;
+    this.stompClient = new Client({
+      webSocketFactory: () => new SockJS(wsUrl),
+      heartbeatIncoming: 0,
+      heartbeatOutgoing: 0,
+      reconnectDelay: 2000,
+    });
+
+    this.stompClient.onConnect = () => {
+      const topic = `/topic/asignaciones/${this.clienteSeleccionado!.id}`;
+      this.stompClient?.subscribe(topic, (message) => {
+        if (message.body) {
+          try {
+            const data = JSON.parse(message.body);
+            if (data.type === 'ASSIGNMENTS_UPDATED') {
+              this.cargarAsignacionesProyecto();
+            }
+          } catch (e) {}
+        }
+      });
+    };
+
+    this.stompClient.activate();
+  }
+
+  disconnectWebSocket() {
+    if (this.stompClient?.active) {
+      this.stompClient.deactivate();
+      this.stompClient = null;
+    }
+  }
+
   // ─── Persistencia de estado en sessionStorage ────────────────────────────────
   private restaurarEstado() {
     try {
       const raw = sessionStorage.getItem('fp_state');
       if (!raw) return;
       const state = JSON.parse(raw);
-      if (state.clienteSeleccionado) this.clienteSeleccionado = state.clienteSeleccionado;
+      if (state.clienteSeleccionado) {
+        this.clienteSeleccionado = state.clienteSeleccionado;
+        this.connectWebSocket();
+      }
       if (state.proyectoSeleccionado) this.proyectoSeleccionado = state.proyectoSeleccionado;
       if (state.disenoSeleccionado) this.disenoSeleccionado = state.disenoSeleccionado;
       if (state.currentStep) {
@@ -115,6 +169,7 @@ export class FuncionarioPortalComponent implements OnInit {
     this.disenoSeleccionado = null;
     this.asignaciones = [];
     this.guardarEstado();
+    this.connectWebSocket();
   }
 
   // ─── Step 2 ─────────────────────────────────────────────────────────────────
@@ -308,6 +363,7 @@ export class FuncionarioPortalComponent implements OnInit {
   }
 
   volverAlInicio() {
+    this.disconnectWebSocket();
     sessionStorage.removeItem('fp_state');
     this.router.navigate(['/']);
   }

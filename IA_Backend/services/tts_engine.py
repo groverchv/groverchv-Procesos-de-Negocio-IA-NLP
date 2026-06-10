@@ -37,12 +37,22 @@ class MotorTTS:
             try:
                 response = await client.post(f"{self.elevenlabs_url}/{target_voice_id}", json=body, headers=headers, timeout=30.0)
                 response.raise_for_status()
-                
-                # Devolver el archivo de audio directamente
                 return Response(content=response.content, media_type="audio/mpeg")
-            except httpx.HTTPStatusError as e:
-                raise HTTPException(status_code=e.response.status_code, detail=f"Error de ElevenLabs: {e.response.text}")
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+                print(f"[ElevenLabs Fallback] Error en ElevenLabs: {e}. Usando Google Translate TTS...")
+                try:
+                    google_tts_url = "https://translate.google.com/translate_tts"
+                    params = {
+                        "ie": "UTF-8",
+                        "tl": "es",
+                        "client": "tw-ob",
+                        "q": text[:200]
+                    }
+                    fallback_response = await client.get(google_tts_url, params=params, timeout=15.0)
+                    fallback_response.raise_for_status()
+                    return Response(content=fallback_response.content, media_type="audio/mpeg")
+                except Exception as ex:
+                    print(f"[ElevenLabs Fallback] Google TTS también falló: {ex}")
+                    raise HTTPException(status_code=500, detail=f"Ambos motores de voz fallaron: {ex}")
 
 motor_tts = MotorTTS()

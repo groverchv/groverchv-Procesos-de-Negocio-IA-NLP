@@ -1,0 +1,546 @@
+package com.example.Procesos.controller;
+
+import com.example.Procesos.service.S3DocumentService;
+import com.example.Procesos.repository.DocumentoHistorialRepository;
+import com.example.Procesos.model.DocumentoHistorial;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpServletRequest;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.List;
+import java.util.Date;
+import java.util.stream.Collectors;
+
+/**
+ * Controlador REST para gestionar la interacción directa de documentos con Amazon S3.
+ * Expone endpoints para subir archivos y solicitar enlaces pre-firmados (Pre-signed URLs).
+ */
+@RestController
+@RequestMapping("/api/documentos")
+@RequiredArgsConstructor
+@CrossOrigin(origins = "*")
+public class DocumentoController {
+
+    private final S3DocumentService s3DocumentService;
+    private final com.example.Procesos.service.FastApiClientService iaClient;
+    private final DocumentoHistorialRepository documentoHistorialRepository;
+
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        return ip;
+    }
+
+    /**
+     * Endpoint para generar una URL temporal firmada para descarga segura.
+     * GET /api/documentos/presigned-url?tenantId=tenant_123&fileName=reporte.pdf
+     */
+    @GetMapping("/presigned-url")
+    public ResponseEntity<Map<String, String>> getPresignedUrl(
+            @RequestParam String tenantId,
+            @RequestParam String fileName,
+            @RequestParam(required = false, defaultValue = "Desconocido") String usuario,
+            @RequestParam(required = false, defaultValue = "CLIENTE") String rol,
+            HttpServletRequest request) {
+        try {
+            // Genera la URL con validez de 15 minutos
+            String url = s3DocumentService.generatePresignedUrl(tenantId, fileName, 15);
+
+            // Log access to history
+            if (!fileName.contains("historial_bitacora.txt") && !fileName.contains("bitacora.txt") && !fileName.contains("bienvenida.txt")) {
+                documentoHistorialRepository.save(DocumentoHistorial.builder()
+                        .tenantId(tenantId)
+                        .nombreArchivo(fileName)
+                        .usuario(usuario)
+                        .rol(rol)
+                        .ip(getClientIp(request))
+                        .accion("LECTURA")
+                        .detalle("Obtuvo enlace de visualización o descarga del archivo")
+                        .fecha(new Date())
+                        .build());
+            }
+
+            return ResponseEntity.ok(Map.of("url", url));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Genera un reporte de telemetría dinámica por IA, lo sube a S3 y retorna una URL pre-firmada.
+     * POST /api/documentos/reporte-ia
+     */
+    @PostMapping("/reporte-ia")
+    public ResponseEntity<?> generarReporteYSubirS3(@RequestBody Map<String, String> request) {
+        String query = request.get("query");
+        String tenantId = request.getOrDefault("tenantId", "tenant_default");
+
+        try {
+            // 1. Obtener reporte de FastAPI
+            Map<String, Object> reporte = iaClient.generarReporteDinamico(query, tenantId).block();
+            
+            // 2. Subir reporte en formato JSON a S3
+            String reportJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(reporte);
+            byte[] reportBytes = reportJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(reportBytes);
+            
+            String fileName = "reporte_ia_" + System.currentTimeMillis() + ".json";
+            s3DocumentService.uploadDocument(tenantId, fileName, inputStream, reportBytes.length, "application/json");
+            
+            // 3. Generar URL pre-firmada para descargar el reporte
+            String presignedUrl = s3DocumentService.generatePresignedUrl(tenantId, fileName, 30); // 30 minutos
+
+            // 4. Retornar el reporte y la URL pre-firmada
+            return ResponseEntity.ok(Map.of(
+                "reporte", reporte,
+                "presignedUrl", presignedUrl
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Endpoint proxy tradicional para subida directa desde el cliente si no se desea hacer directo a S3.
+     * POST /api/documentos/upload
+     */
+    @PostMapping("/upload")
+    public ResponseEntity<Map<String, String>> uploadDocument(
+            @RequestParam String tenantId,
+            @RequestParam String fileName,
+            @RequestParam MultipartFile file,
+            @RequestParam(required = false, defaultValue = "Cliente/Funcionario") String usuario,
+            @RequestParam(required = false, defaultValue = "CLIENTE") String rol,
+            HttpServletRequest request) {
+        try {
+            byte[] bytes = file.getBytes();
+            s3DocumentService.uploadDocument(
+                    tenantId,
+                    fileName,
+                    new java.io.ByteArrayInputStream(bytes),
+                    file.getSize(),
+                    file.getContentType()
+            );
+
+            String textContent = null;
+            if (fileName.endsWith(".txt") || fileName.endsWith(".json") || "text/plain".equals(file.getContentType())) {
+                textContent = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            // Log upload/creation to history
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("CREACION")
+                    .detalle("Subió archivo " + fileName + " a S3")
+                    .contenido(textContent)
+                    .fecha(new Date())
+                    .build());
+            
+            // Si el archivo es de texto plano, indexarlo para RAG automáticamente en FastAPI
+            if (fileName.endsWith(".txt") || fileName.endsWith(".json") || "text/plain".equals(file.getContentType())) {
+                String content = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                String docId = "doc-" + System.currentTimeMillis();
+                iaClient.indexarDocumento(tenantId, docId, fileName, content).subscribe(
+                    null,
+                    err -> System.err.println("[SPRING S3 RAG] Error al indexar documento: " + err.getMessage())
+                );
+            }
+            
+            return ResponseEntity.ok(Map.of(
+                "message", "Archivo subido exitosamente a S3",
+                "fileName", fileName
+            ));
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Sube un archivo a S3 y lo valida contra la regla de negocio (policy) de la actividad.
+     * POST /api/documentos/upload-and-validate
+     */
+    @PostMapping("/upload-and-validate")
+    public ResponseEntity<?> uploadAndValidateDocument(
+            @RequestParam String tenantId,
+            @RequestParam String fileName,
+            @RequestParam(required = false) String policy,
+            @RequestParam MultipartFile file,
+            @RequestParam(required = false, defaultValue = "Cliente") String usuario,
+            @RequestParam(required = false, defaultValue = "CLIENTE") String rol,
+            HttpServletRequest request) {
+        try {
+            byte[] bytes = file.getBytes();
+            
+            // 1. Subir a S3
+            s3DocumentService.uploadDocument(
+                    tenantId,
+                    fileName,
+                    new java.io.ByteArrayInputStream(bytes),
+                    file.getSize(),
+                    file.getContentType()
+            );
+
+            String textContent = null;
+            if (fileName.endsWith(".txt") || fileName.endsWith(".json") || "text/plain".equals(file.getContentType())) {
+                textContent = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            // Log upload/creation to history
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("CREACION")
+                    .detalle("Subió y validó archivo " + fileName + " en S3")
+                    .contenido(textContent)
+                    .fecha(new Date())
+                    .build());
+
+            // 2. Indexar en RAG si es un archivo de texto
+            String content = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            if (fileName.endsWith(".txt") || fileName.endsWith(".json") || "text/plain".equals(file.getContentType())) {
+                String docId = "doc-" + System.currentTimeMillis();
+                iaClient.indexarDocumento(tenantId, docId, fileName, content).subscribe(
+                    null,
+                    err -> System.err.println("[SPRING S3 RAG] Error al indexar documento: " + err.getMessage())
+                );
+            }
+
+            // 3. Validar contra política
+            java.util.Map<String, Object> validationResult = new java.util.HashMap<>();
+            if (policy != null && !policy.trim().isEmpty()) {
+                validationResult = iaClient.validarDocumentoConPolitica(content, policy).block();
+            } else {
+                validationResult.put("valido", true);
+                validationResult.put("mensaje", "No hay reglas de negocio definidas para este paso. El archivo se acepta automáticamente.");
+                validationResult.put("sugerencia", "");
+            }
+
+            return ResponseEntity.ok(java.util.Map.of(
+                "message", "Archivo subido exitosamente a S3 y validado.",
+                "fileName", fileName,
+                "validation", validationResult
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Recupera el contenido de un archivo de texto de S3.
+     * GET /api/documentos/content?tenantId=tenant_123&fileName=reporte.txt&usuario=NombreUser
+     */
+    @GetMapping("/content")
+    public ResponseEntity<?> getDocumentContent(
+            @RequestParam String tenantId,
+            @RequestParam String fileName,
+            @RequestParam(required = false, defaultValue = "Desconocido") String usuario,
+            @RequestParam(required = false, defaultValue = "CLIENTE") String rol,
+            HttpServletRequest request) {
+        try {
+            if ("historial_bitacora.txt".equals(fileName) || "bitacora.txt".equals(fileName) || "bienvenida.txt".equals(fileName)) {
+                // Generar bitácora de actividad dinámica desde MongoDB
+                List<DocumentoHistorial> logs = documentoHistorialRepository.findByTenantIdOrderByFechaDesc(tenantId);
+                StringBuilder sb = new StringBuilder();
+                sb.append("=========================================================================\n");
+                sb.append("            BITACORA DE HISTORIAL Y AUDITORIA DE ACTIVIDAD DEL SISTEMA   \n");
+                sb.append("=========================================================================\n");
+                sb.append("Cliente/Tenant ID: ").append(tenantId).append("\n");
+                sb.append("Generado en: ").append(new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date())).append("\n");
+                sb.append("Total registros: ").append(logs.size()).append("\n\n");
+                
+                if (logs.isEmpty()) {
+                    sb.append("No se registran eventos en la bitácora aún.\n");
+                } else {
+                    for (DocumentoHistorial log : logs) {
+                        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                        sb.append("[").append(sdf.format(log.getFecha())).append("] ")
+                          .append("ACCION: ").append(log.getAccion()).append("\n")
+                          .append("  • Usuario: ").append(log.getUsuario() != null ? log.getUsuario() : "Desconocido").append("\n")
+                          .append("  • Rol/Permisos: ").append(log.getRol() != null ? log.getRol() : "N/A").append("\n")
+                          .append("  • IP Origen: ").append(log.getIp() != null ? log.getIp() : "Localhost/Desconocido").append("\n")
+                          .append("  • Archivo/Recurso: ").append(log.getNombreArchivo()).append("\n")
+                          .append("  • Detalle: ").append(log.getDetalle()).append("\n")
+                          .append("-------------------------------------------------------------------------\n");
+                    }
+                }
+                
+                return ResponseEntity.ok(Map.of("content", sb.toString()));
+            }
+
+            byte[] bytes = s3DocumentService.downloadDocument(tenantId, fileName);
+            String content = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+
+            // Log access to history
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("LECTURA")
+                    .detalle("Abrió el documento en el editor")
+                    .fecha(new Date())
+                    .build());
+
+            return ResponseEntity.ok(Map.of("content", content));
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body(Map.of("error", "Archivo no encontrado: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Guarda el contenido de un archivo de texto de vuelta en S3.
+     * POST /api/documentos/save-content
+     */
+    @PostMapping("/save-content")
+    public ResponseEntity<?> saveDocumentContent(
+            @RequestBody Map<String, String> body,
+            HttpServletRequest request) {
+        String tenantId = body.get("tenantId");
+        String fileName = body.get("fileName");
+        String content = body.get("content");
+        String usuario = body.getOrDefault("usuario", "Desconocido");
+        String rol = body.getOrDefault("rol", "CLIENTE");
+
+        try {
+            byte[] bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            s3DocumentService.uploadDocument(
+                    tenantId,
+                    fileName,
+                    new java.io.ByteArrayInputStream(bytes),
+                    bytes.length,
+                    "text/plain"
+            );
+
+            // Log edit to history
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("EDICION")
+                    .detalle("Modificó el contenido del archivo")
+                    .contenido(content)
+                    .fecha(new Date())
+                    .build());
+
+            return ResponseEntity.ok(Map.of("message", "Contenido guardado exitosamente en S3"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Restaura un archivo a partir de un ID de historial de versiones.
+     * POST /api/documentos/restaurar
+     */
+    @PostMapping("/restaurar")
+    public ResponseEntity<?> restaurarVersion(
+            @RequestBody Map<String, String> body,
+            HttpServletRequest request) {
+        String historyId = body.get("historyId");
+        String usuario = body.getOrDefault("usuario", "Desconocido");
+        String rol = body.getOrDefault("rol", "CLIENTE");
+
+        try {
+            java.util.Optional<DocumentoHistorial> historyOpt = documentoHistorialRepository.findById(historyId);
+            if (!historyOpt.isPresent()) {
+                return ResponseEntity.status(404).body(Map.of("error", "Registro de historial no encontrado"));
+            }
+
+            DocumentoHistorial hist = historyOpt.get();
+            String content = hist.getContenido();
+            if (content == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "La versión seleccionada no tiene contenido guardado"));
+            }
+
+            byte[] bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            s3DocumentService.uploadDocument(
+                    hist.getTenantId(),
+                    hist.getNombreArchivo(),
+                    new java.io.ByteArrayInputStream(bytes),
+                    bytes.length,
+                    "text/plain"
+            );
+
+            String fechaOriginal = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm").format(hist.getFecha());
+            String detalle = "Restauró la versión del " + fechaOriginal + " creada por " + hist.getUsuario();
+
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(hist.getTenantId())
+                    .nombreArchivo(hist.getNombreArchivo())
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("EDICION")
+                    .detalle(detalle)
+                    .contenido(content)
+                    .fecha(new Date())
+                    .build());
+
+            return ResponseEntity.ok(Map.of(
+                "message", "Versión restaurada exitosamente",
+                "content", content,
+                "fileName", hist.getNombreArchivo()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Recupera el historial de edición de un archivo o todo el historial si el nombre está vacío.
+     * GET /api/documentos/historial?tenantId=tenant_123&fileName=reporte.txt
+     */
+    @GetMapping("/historial")
+    public ResponseEntity<?> getDocumentHistorial(
+            @RequestParam String tenantId,
+            @RequestParam(required = false) String fileName) {
+        try {
+            List<DocumentoHistorial> historial;
+            if (fileName == null || fileName.trim().isEmpty() || "historial_bitacora.txt".equals(fileName) || "bitacora.txt".equals(fileName) || "bienvenida.txt".equals(fileName)) {
+                historial = documentoHistorialRepository.findByTenantIdOrderByFechaDesc(tenantId);
+            } else {
+                historial = documentoHistorialRepository.findByTenantIdAndNombreArchivoOrderByFechaDesc(tenantId, fileName);
+            }
+            return ResponseEntity.ok(historial);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Lista todos los archivos reales de S3 bajo un tenant y ruta.
+     * GET /api/documentos/list-s3?tenantId=tenant_123&folderPath=Proyecto/Diseño/instancia
+     */
+    @GetMapping("/list-s3")
+    public ResponseEntity<?> listS3Files(
+            @RequestParam String tenantId,
+            @RequestParam(required = false, defaultValue = "") String folderPath) {
+        try {
+            String prefix = tenantId + "/";
+            if (!folderPath.isEmpty()) {
+                prefix = prefix + folderPath;
+                if (!prefix.endsWith("/")) {
+                    prefix = prefix + "/";
+                }
+            }
+
+            List<software.amazon.awssdk.services.s3.model.S3Object> objects = s3DocumentService.listObjects(prefix);
+            java.util.List<Map<String, Object>> files = objects.stream()
+                .filter(obj -> !obj.key().endsWith("/")) // Omitir directorios
+                .map(obj -> {
+                    try {
+                        String key = obj.key();
+                        String name = key.substring(key.lastIndexOf("/") + 1);
+                        long size = obj.size() != null ? obj.size() : 0L;
+                        long lastMod = obj.lastModified() != null ? obj.lastModified().toEpochMilli() : System.currentTimeMillis();
+                        
+                        java.util.HashMap<String, Object> map = new java.util.HashMap<>();
+                        map.put("key", key);
+                        map.put("name", name);
+                        map.put("size", size);
+                        map.put("lastModified", lastMod);
+                        return map;
+                    } catch (Exception e) {
+                        java.util.HashMap<String, Object> errMap = new java.util.HashMap<>();
+                        errMap.put("key", obj.key());
+                        errMap.put("name", "error");
+                        errMap.put("size", 0L);
+                        errMap.put("lastModified", System.currentTimeMillis());
+                        return errMap;
+                    }
+                })
+                .collect(Collectors.toList());
+
+            return ResponseEntity.ok(files);
+        } catch (Exception e) {
+            java.io.StringWriter sw = new java.io.StringWriter();
+            e.printStackTrace(new java.io.PrintWriter(sw));
+            return ResponseEntity.internalServerError().body(Map.of(
+                "error", e.getMessage(),
+                "stacktrace", sw.toString()
+            ));
+        }
+    }
+
+    /**
+     * Elimina un archivo de S3.
+     * DELETE /api/documentos/delete?tenantId=tenant_123&fileName=reporte.pdf&usuario=NombreUser
+     */
+    @DeleteMapping("/delete")
+    public ResponseEntity<?> deleteDocument(
+            @RequestParam String tenantId,
+            @RequestParam String fileName,
+            @RequestParam(required = false, defaultValue = "Cliente/Funcionario") String usuario,
+            @RequestParam(required = false, defaultValue = "CLIENTE") String rol,
+            HttpServletRequest request) {
+        try {
+            s3DocumentService.deleteDocument(tenantId, fileName);
+
+            // Log delete to history
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("ELIMINACION")
+                    .detalle("Eliminó el archivo del repositorio S3")
+                    .fecha(new Date())
+                    .build());
+
+            return ResponseEntity.ok(Map.of("message", "Archivo eliminado exitosamente de S3"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Devuelve los bytes crudos del archivo en S3 con la cabecera Content-Type correcta para que el navegador lo visualice directamente.
+     * GET /api/documentos/view?tenantId=tenant_123&fileName=reporte.pdf
+     */
+    @GetMapping("/view")
+    public ResponseEntity<byte[]> viewDocument(
+            @RequestParam String tenantId,
+            @RequestParam String fileName) {
+        try {
+            byte[] bytes = s3DocumentService.downloadDocument(tenantId, fileName);
+            
+            String contentType = "application/octet-stream";
+            String lower = fileName.toLowerCase();
+            if (lower.endsWith(".pdf")) {
+                contentType = "application/pdf";
+            } else if (lower.endsWith(".png")) {
+                contentType = "image/png";
+            } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+                contentType = "image/jpeg";
+            } else if (lower.endsWith(".gif")) {
+                contentType = "image/gif";
+            } else if (lower.endsWith(".txt")) {
+                contentType = "text/plain";
+            }
+
+            return ResponseEntity.ok()
+                    .header("Content-Type", contentType)
+                    .header("Content-Disposition", "inline; filename=\"" + fileName.substring(fileName.lastIndexOf("/") + 1) + "\"")
+                    .body(bytes);
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body(null);
+        }
+    }
+}

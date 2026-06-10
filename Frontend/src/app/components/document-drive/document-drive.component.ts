@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DocumentService } from '../../services/document/document.service';
+import { DocumentSocketService } from '../../services/document/document-socket.service';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
@@ -17,6 +19,7 @@ interface DriveItem {
   date: Date;
   content?: string;
   tenantId: string;
+  s3Path?: string;
 }
 
 @Component({
@@ -26,7 +29,7 @@ interface DriveItem {
   templateUrl: './document-drive.component.html',
   styleUrls: ['./document-drive.component.css']
 })
-export class DocumentDriveComponent implements OnInit {
+export class DocumentDriveComponent implements OnInit, OnDestroy {
   usuarios: any[] = [];
   cargandoUsuarios: boolean = false;
 
@@ -56,11 +59,62 @@ export class DocumentDriveComponent implements OnInit {
   // Colaboradores en línea en tiempo real
   colaboradoresActivos: { nombre: string; iniciales: string; rol: string; color: string }[] = [];
 
+  // WebSockets & Colaboración
+  private docSocketSubscription: any = null;
+  savingStatus: 'saved' | 'saving' | 'offline' = 'saved';
+  private autoSaveTimer: any = null;
 
-  constructor(private http: HttpClient, private documentService: DocumentService) {}
+  // Visualización y restauración del historial
+  previewingHistoryItem: any = null;
+  isPreviewingHistory: boolean = false;
+  historyPreviewContent: string = '';
+
+  // Parseo de process_info.txt para una UX mejorada
+  isProcessInfoFile: boolean = false;
+  processInfoParsed: {
+    cliente?: string;
+    flujo?: string;
+    instanciaId?: string;
+    proyecto?: string;
+    iniciadoPor?: string;
+    fechaInicio?: string;
+    estado?: string;
+    variables?: any;
+    actividades?: { label: string; type: string; status: string }[];
+  } | null = null;
+
+  // Historial de cambios
+  historialDocumento: any[] = [];
+
+  // Modal de previsualización
+  isPreviewVisible: boolean = false;
+  previewItem: DriveItem | null = null;
+  previewUrl: string = '';
+  previewPdfUrl: SafeResourceUrl | null = null;
+
+  // Modal de confirmación de eliminación
+  isDeleteModalVisible: boolean = false;
+  deletingItem: DriveItem | null = null;
+
+  constructor(
+    private http: HttpClient, 
+    public documentService: DocumentService,
+    private documentSocketService: DocumentSocketService,
+    private sanitizer: DomSanitizer
+  ) {}
 
   ngOnInit() {
     this.cargarRepositorioDinamico();
+  }
+
+  ngOnDestroy() {
+    if (this.docSocketSubscription) {
+      this.docSocketSubscription.unsubscribe();
+    }
+    this.documentSocketService.disconnect();
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
   }
 
   /**
@@ -130,12 +184,14 @@ export class DocumentDriveComponent implements OnInit {
         type: 'folder',
         parentId: null,
         date: new Date(),
-        tenantId
+        tenantId,
+        s3Path: ''
       });
 
       // Level 2 - Project Folders under this client
       proyectos.forEach(proyecto => {
         const projectFolderId = `project_${cliente.id}_${proyecto.id}`;
+        const sanitizedProjectName = proyecto.nombre.replace(/[^a-zA-Z0-9_.-]/g, "_");
 
         this.allItems.push({
           id: projectFolderId,
@@ -143,7 +199,8 @@ export class DocumentDriveComponent implements OnInit {
           type: 'folder',
           parentId: tenantFolderId,
           date: new Date(proyecto.fechaCreacion || Date.now()),
-          tenantId
+          tenantId,
+          s3Path: sanitizedProjectName
         });
 
         // Level 3 - Design Folders inside the project (grouped by designId for the active instances of this client)
@@ -160,6 +217,7 @@ export class DocumentDriveComponent implements OnInit {
 
         instanciasDisenoMap.forEach(({ designName, list }, designId) => {
           const designFolderId = `design_${cliente.id}_${proyecto.id}_${designId}`;
+          const sanitizedDesignName = designName.replace(/[^a-zA-Z0-9_.-]/g, "_");
 
           this.allItems.push({
             id: designFolderId,
@@ -167,13 +225,15 @@ export class DocumentDriveComponent implements OnInit {
             type: 'folder',
             parentId: projectFolderId,
             date: new Date(),
-            tenantId
+            tenantId,
+            s3Path: `${sanitizedProjectName}/${sanitizedDesignName}`
           });
 
           // Level 4 - Process Instance Folders (one per execution run)
           list.forEach(inst => {
             const instFolderId = `instance_${inst.id}`;
             const fechaInicio = inst.startedAt ? new Date(inst.startedAt).toLocaleDateString() : 'N/A';
+            const instS3Path = `${sanitizedProjectName}/${sanitizedDesignName}/${inst.id}`;
 
             this.allItems.push({
               id: instFolderId,
@@ -181,10 +241,13 @@ export class DocumentDriveComponent implements OnInit {
               type: 'folder',
               parentId: designFolderId,
               date: new Date(inst.startedAt || Date.now()),
-              tenantId
+              tenantId,
+              s3Path: instS3Path
             });
 
             // process_info.txt containing details and form variables
+            const s3PathVal = `${instS3Path}/process_info.txt`;
+
             this.allItems.push({
               id: `file_info_${inst.id}`,
               name: 'process_info.txt',
@@ -193,7 +256,8 @@ export class DocumentDriveComponent implements OnInit {
               size: '< 1 KB',
               date: new Date(inst.startedAt || Date.now()),
               content: `BPMNFLOW - REPORTE DE PROCESO EN DRIVE\n===============================================\nCliente: ${cliente.nombre}\nDiseño/Flujo: ${designName}\nID de Instancia: ${inst.id}\nProyecto: ${proyecto.nombre}\nIniciado por: ${inst.startedBy}\nFecha de Inicio: ${fechaInicio}\nEstado: ${inst.status}\n\nVARIABLES DEL PROCESO:\n${JSON.stringify(inst.variables || {}, null, 2)}\n\nHOJA DE RUTA / ACTIVIDADES:\n${(inst.activities || []).map((a: any) => `  • ${a.nodeLabel} (${a.nodeType}) -> [${a.status}]`).join('\n')}`,
-              tenantId
+              tenantId,
+              s3Path: s3PathVal
             });
           });
         });
@@ -213,19 +277,18 @@ export class DocumentDriveComponent implements OnInit {
         }
       });
 
-      // If no projects available, display a welcome placeholder
-      if (proyectos.length === 0) {
-        this.allItems.push({
-          id: `file_empty_${cliente.id}`,
-          name: 'bienvenida.txt',
-          type: 'file',
-          parentId: tenantFolderId,
-          size: '0.2 KB',
-          date: new Date(),
-          content: `Repositorio de ${cliente.nombre}\n===============================================\nNo hay proyectos registrados en el sistema aún.`,
-          tenantId
-        });
-      }
+      // Unconditionally add "historial_bitacora.txt" at the root level of the client/tenant
+      this.allItems.push({
+        id: `file_bitacora_${cliente.id}`,
+        name: 'historial_bitacora.txt',
+        type: 'file',
+        parentId: tenantFolderId,
+        size: '1.5 KB',
+        date: new Date(),
+        content: `Cargando bitácora de actividad en tiempo real...`,
+        tenantId,
+        s3Path: 'historial_bitacora.txt'
+      });
     });
 
     this.currentFolderId = null;
@@ -310,8 +373,65 @@ export class DocumentDriveComponent implements OnInit {
     this.actualizarRepositorio();
   }
 
+  formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
   actualizarRepositorio() {
-    this.visibleItems = this.allItems.filter(item => item.parentId === this.currentFolderId);
+    const localItems = this.allItems.filter(item => item.parentId === this.currentFolderId);
+    const currentFolder = this.allItems.find(item => item.id === this.currentFolderId);
+
+    if (currentFolder) {
+      const s3Path = this.resolverS3Path(currentFolder);
+      this.documentService.listS3Files(currentFolder.tenantId, s3Path).subscribe({
+        next: (s3Files) => {
+          const folders = localItems.filter(item => item.type === 'folder');
+          const virtualFiles = localItems.filter(item => 
+            item.type === 'file' && 
+            (item.id.startsWith('file_bitacora_') || item.id.startsWith('file_placeholder_') || item.id.startsWith('file_empty_'))
+          );
+          const mappedS3Files = s3Files
+            .filter(file => {
+              // Filtrar para mostrar solo los archivos en el directorio actual
+              const relativeKey = file.key.substring(currentFolder.tenantId.length + 1);
+              if (s3Path === '') {
+                return !relativeKey.includes('/');
+              } else {
+                if (relativeKey.startsWith(s3Path + '/')) {
+                  const subPath = relativeKey.substring(s3Path.length + 1);
+                  return !subPath.includes('/');
+                }
+                return false;
+              }
+            })
+            .map(file => {
+              const localFile = localItems.find(item => item.name === file.name && item.type === 'file');
+              return {
+                id: localFile?.id || `s3_file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                name: file.name,
+                type: 'file',
+                parentId: this.currentFolderId,
+                size: this.formatBytes(file.size),
+                date: new Date(file.lastModified),
+                tenantId: currentFolder.tenantId,
+                s3Path: file.key.substring(file.key.indexOf('/') + 1),
+                content: localFile?.content || ''
+              } as DriveItem;
+            });
+          this.visibleItems = [...folders, ...virtualFiles, ...mappedS3Files];
+        },
+        error: (err) => {
+          console.error('Error al listar archivos de S3:', err);
+          this.visibleItems = localItems;
+        }
+      });
+    } else {
+      this.visibleItems = localItems;
+    }
   }
 
   // SISTEMA DE NAVEGACIÓN LIBRE (ATRÁS / ADELANTE)
@@ -326,7 +446,7 @@ export class DocumentDriveComponent implements OnInit {
       this.pathStack.push({ id: item.id, name: item.name });
       this.actualizarRepositorio();
     } else {
-      this.abrirEditor(item);
+      this.visualizarElemento(item);
     }
   }
 
@@ -455,33 +575,129 @@ export class DocumentDriveComponent implements OnInit {
     this.cerrarModalCreacion();
   }
 
+  getCurrentUser(): string {
+    const isStaff = window.location.href.includes('/staff') || window.location.href.includes('/funcionario');
+    return isStaff ? 'Maria Funcionario' : 'Juan Diseñador';
+  }
+
+  resolverS3Path(item: DriveItem): string {
+    if (item.s3Path) return item.s3Path;
+    
+    const pathParts: string[] = [];
+    let current: DriveItem | undefined = item;
+    
+    while (current && current.parentId !== null) {
+      if (!current.id.startsWith('tenant_')) {
+        const cleanName = current.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+        pathParts.unshift(cleanName);
+      }
+      current = this.allItems.find(x => x.id === current!.parentId);
+    }
+    
+    return pathParts.join('/');
+  }
+
+  cargarHistorial() {
+    if (!this.editingFile) return;
+    const s3Path = this.resolverS3Path(this.editingFile);
+    this.documentService.getFileHistorial(this.editingFile.tenantId, s3Path).subscribe({
+      next: (data) => {
+        this.historialDocumento = data;
+      },
+      error: (err) => {
+        console.error('Error al cargar historial:', err);
+      }
+    });
+  }
+
   onFileSelected(event: any) {
     const file: File = event.target.files[0];
     if (file) {
       const activeParent = this.allItems.find(item => item.id === this.currentFolderId);
       const tenantId = activeParent ? activeParent.tenantId : 'tenant_default';
       
-      const nuevoDocumento: DriveItem = {
-        id: `file_${Date.now()}`,
-        name: file.name,
-        type: 'file',
-        parentId: this.currentFolderId,
-        size: (file.size / 1024).toFixed(1) + ' KB',
-        date: new Date(),
-        content: `DOCUMENTO CARGADO: ${file.name}\n==============================================\nContenido del archivo subido localmente por el usuario.`,
-        tenantId: tenantId
-      };
+      const parentPath = activeParent ? this.resolverS3Path(activeParent) : '';
+      const s3Path = parentPath ? `${parentPath}/${file.name}` : file.name;
 
-      this.allItems.push(nuevoDocumento);
-      this.actualizarRepositorio();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('tenantId', tenantId);
+      formData.append('fileName', s3Path);
+      formData.append('usuario', this.getCurrentUser());
+
+      this.http.post('http://localhost:8080/api/documentos/upload', formData).subscribe({
+        next: () => {
+          const nuevoDocumento: DriveItem = {
+            id: `file_${Date.now()}`,
+            name: file.name,
+            type: 'file',
+            parentId: this.currentFolderId,
+            size: (file.size / 1024).toFixed(1) + ' KB',
+            date: new Date(),
+            content: `DOCUMENTO CARGADO EN S3: ${file.name}\n==============================================\nContenido del archivo subido localmente por el usuario.`,
+            tenantId: tenantId,
+            s3Path: s3Path
+          };
+
+          this.allItems.push(nuevoDocumento);
+          this.actualizarRepositorio();
+        },
+        error: (err) => {
+          console.error('Error al subir archivo a S3:', err);
+        }
+      });
     }
   }
 
   // EDITOR INLINE
   abrirEditor(file: DriveItem) {
+    if (!file.name.endsWith('.txt')) {
+      this.visualizarElemento(file);
+      return;
+    }
+
     this.isEditing = true;
     this.editingFile = file;
-    this.fileContent = file.content || '';
+    this.fileContent = 'Cargando contenido desde S3...';
+    this.historialDocumento = [];
+    this.savingStatus = 'saved';
+
+    // Verificar si es process_info.txt
+    this.isProcessInfoFile = file.name === 'process_info.txt';
+    this.processInfoParsed = null;
+
+    const s3Path = this.resolverS3Path(file);
+    this.documentService.getFileContent(file.tenantId, s3Path, this.getCurrentUser()).subscribe({
+      next: (res) => {
+        this.fileContent = res.content;
+        file.content = res.content;
+        this.cargarHistorial();
+        if (this.isProcessInfoFile) {
+          this.parseProcessInfo(res.content);
+        }
+      },
+      error: (err) => {
+        console.error('Error al cargar contenido de S3, usando copia local:', err);
+        this.fileContent = file.content || '';
+        this.cargarHistorial();
+        if (this.isProcessInfoFile) {
+          this.parseProcessInfo(this.fileContent);
+        }
+      }
+    });
+
+    // Conectar WebSocket para colaboración en tiempo real
+    if (file.name !== 'historial_bitacora.txt') {
+      this.docSocketSubscription = this.documentSocketService.connect(s3Path).subscribe({
+        next: (update) => {
+          this.fileContent = update.content;
+          file.content = update.content;
+          if (this.isProcessInfoFile) {
+            this.parseProcessInfo(update.content);
+          }
+        }
+      });
+    }
 
     // Simular colaboradores en línea en tiempo real para co-edición activa
     const todosColaboradores = [
@@ -490,27 +706,239 @@ export class DocumentDriveComponent implements OnInit {
       { nombre: 'Carlos Cliente', iniciales: 'CC', rol: 'Cliente (Acme Corp)', color: '#f59e0b' }
     ];
 
-    const cantidad = Math.floor(Math.random() * 2) + 1; // 1 o 2 colaboradores en línea
-    this.colaboradoresActivos = todosColaboradores
-      .sort(() => 0.5 - Math.random())
-      .slice(0, cantidad);
+    const miNombre = this.getCurrentUser();
+    this.colaboradoresActivos = todosColaboradores.filter(c => c.nombre !== miNombre);
+  }
+
+  onContentChange(newVal: string) {
+    this.fileContent = newVal;
+
+    if (this.editingFile && this.editingFile.name !== 'historial_bitacora.txt') {
+      const s3Path = this.resolverS3Path(this.editingFile);
+      this.documentSocketService.sendUpdate(s3Path, this.getCurrentUser(), newVal);
+    }
+
+    this.triggerAutoSave();
+
+    if (this.isProcessInfoFile) {
+      this.parseProcessInfo(newVal);
+    }
+  }
+
+  triggerAutoSave() {
+    this.savingStatus = 'saving';
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
+
+    this.autoSaveTimer = setTimeout(() => {
+      this.autoSaveSilently();
+    }, 2000);
+  }
+
+  autoSaveSilently() {
+    if (!this.editingFile || this.editingFile.name === 'historial_bitacora.txt') {
+      this.savingStatus = 'saved';
+      return;
+    }
+
+    const s3Path = this.resolverS3Path(this.editingFile);
+    this.documentService.saveFileContent(
+      this.editingFile.tenantId, 
+      s3Path, 
+      this.fileContent, 
+      this.getCurrentUser()
+    ).subscribe({
+      next: () => {
+        this.savingStatus = 'saved';
+        this.editingFile!.content = this.fileContent;
+        this.editingFile!.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
+        this.editingFile!.date = new Date();
+        this.cargarHistorial();
+      },
+      error: (err) => {
+        console.error('Error al guardar automáticamente:', err);
+        this.savingStatus = 'offline';
+      }
+    });
   }
 
   guardarDocumento() {
     if (this.editingFile) {
-      this.editingFile.content = this.fileContent;
-      this.editingFile.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
-      this.editingFile.date = new Date();
-      this.cerrarEditor();
+      this.cargandoIA = true;
+      const s3Path = this.resolverS3Path(this.editingFile);
+      
+      this.documentService.saveFileContent(
+        this.editingFile.tenantId, 
+        s3Path, 
+        this.fileContent, 
+        this.getCurrentUser()
+      ).subscribe({
+        next: () => {
+          this.editingFile!.content = this.fileContent;
+          this.editingFile!.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
+          this.editingFile!.date = new Date();
+          this.cargandoIA = false;
+          this.cerrarEditor();
+        },
+        error: (err) => {
+          console.error('Error al guardar documento en S3:', err);
+          this.cargandoIA = false;
+          this.editingFile!.content = this.fileContent;
+          this.editingFile!.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
+          this.editingFile!.date = new Date();
+          this.cerrarEditor();
+        }
+      });
     }
   }
 
   cerrarEditor() {
+    if (this.docSocketSubscription) {
+      this.docSocketSubscription.unsubscribe();
+      this.docSocketSubscription = null;
+    }
+    this.documentSocketService.disconnect();
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
     this.isEditing = false;
     this.editingFile = null;
     this.fileContent = '';
+    this.isProcessInfoFile = false;
+    this.processInfoParsed = null;
     this.actualizarRepositorio();
   }
+
+  parseProcessInfo(content: string) {
+    this.isProcessInfoFile = true;
+    const parsed: any = {
+      cliente: '',
+      flujo: '',
+      instanciaId: '',
+      proyecto: '',
+      iniciadoPor: '',
+      fechaInicio: '',
+      estado: '',
+      variables: {},
+      actividades: []
+    };
+
+    const lines = content.split('\n');
+    let inVariables = false;
+    let variablesJson = '';
+    let inActividades = false;
+
+    for (let line of lines) {
+      const trimmed = line.trim();
+      
+      if (trimmed.startsWith('Cliente:')) {
+        parsed.cliente = trimmed.replace('Cliente:', '').trim();
+      } else if (trimmed.startsWith('Diseño/Flujo:')) {
+        parsed.flujo = trimmed.replace('Diseño/Flujo:', '').trim();
+      } else if (trimmed.startsWith('ID de Instancia:')) {
+        parsed.instanciaId = trimmed.replace('ID de Instancia:', '').trim();
+      } else if (trimmed.startsWith('Proyecto:')) {
+        parsed.proyecto = trimmed.replace('Proyecto:', '').trim();
+      } else if (trimmed.startsWith('Iniciado por:')) {
+        parsed.iniciadoPor = trimmed.replace('Iniciado por:', '').trim();
+      } else if (trimmed.startsWith('Fecha de Inicio:')) {
+        parsed.fechaInicio = trimmed.replace('Fecha de Inicio:', '').trim();
+      } else if (trimmed.startsWith('Estado:')) {
+        parsed.estado = trimmed.replace('Estado:', '').trim();
+      } else if (trimmed === 'VARIABLES DEL PROCESO:') {
+        inVariables = true;
+        inActividades = false;
+        continue;
+      } else if (trimmed === 'HOJA DE RUTA / ACTIVIDADES:') {
+        inVariables = false;
+        inActividades = true;
+        continue;
+      }
+
+      if (inVariables) {
+        variablesJson += line + '\n';
+      }
+
+      if (inActividades && trimmed.startsWith('•')) {
+        const match = trimmed.match(/•\s*(.+?)\s*(?:\((.+?)\))?\s*->\s*\[(.+?)\]/);
+        if (match) {
+          parsed.actividades.push({
+            label: match[1].trim(),
+            type: match[2] ? match[2].trim() : 'activity',
+            status: match[3].trim()
+          });
+        } else {
+          const parts = trimmed.substring(1).split('->');
+          if (parts.length >= 2) {
+            parsed.actividades.push({
+              label: parts[0].trim(),
+              type: 'activity',
+              status: parts[1].replace('[', '').replace(']', '').trim()
+            });
+          }
+        }
+      }
+    }
+
+    if (variablesJson.trim()) {
+      try {
+        parsed.variables = JSON.parse(variablesJson.trim());
+      } catch (e) {
+        parsed.variables = {};
+      }
+    }
+
+    this.processInfoParsed = parsed;
+  }
+
+  seleccionarHistorial(h: any) {
+    if (!h.contenido) {
+      this.historyPreviewContent = '(Esta versión no tiene captura de contenido registrada)';
+    } else {
+      this.historyPreviewContent = h.contenido;
+    }
+    this.previewingHistoryItem = h;
+    this.isPreviewingHistory = true;
+  }
+
+  cerrarPreviewHistorial() {
+    this.isPreviewingHistory = false;
+    this.previewingHistoryItem = null;
+    this.historyPreviewContent = '';
+  }
+
+  restaurarHistorial(h: any) {
+    if (!this.editingFile) return;
+
+    this.documentService.restaurarVersion(
+      h.id, 
+      this.getCurrentUser(), 
+      this.getCurrentUser().includes('Funcionario') ? 'FUNCIONARIO' : 'DISENADOR'
+    ).subscribe({
+      next: (res) => {
+        this.fileContent = res.content;
+        this.editingFile!.content = res.content;
+        this.editingFile!.size = `${(res.content.length / 1024).toFixed(1)} KB`;
+        this.editingFile!.date = new Date();
+        
+        const s3Path = this.resolverS3Path(this.editingFile!);
+        this.documentSocketService.sendUpdate(s3Path, this.getCurrentUser(), res.content);
+
+        this.cargarHistorial();
+        this.cerrarPreviewHistorial();
+        
+        if (this.isProcessInfoFile) {
+          this.parseProcessInfo(res.content);
+        }
+      },
+      error: (err) => {
+        console.error('Error al restaurar versión:', err);
+      }
+    });
+  }
+
 
   autocompletarConIA() {
     if (!this.fileContent.trim()) return;
@@ -539,18 +967,111 @@ export class DocumentDriveComponent implements OnInit {
     });
   }
 
-  downloadFile(fileName: string) {
-    const file = this.allItems.find(item => item.name === fileName);
-    const content = file ? (file.content || '') : 'Documento vacío';
+  downloadFile(item: DriveItem) {
+    const s3Path = this.resolverS3Path(item);
     
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", fileName);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Log download/read access to history
+    this.documentService.getFileContent(item.tenantId, s3Path, this.getCurrentUser()).subscribe({
+      next: () => {
+        this.documentService.downloadFile(item.tenantId, s3Path).subscribe({
+          next: (blob) => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", item.name);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          },
+          error: (err) => console.error('Error downloading from S3:', err)
+        });
+      },
+      error: () => {
+        // Fallback for mock items
+        const content = item.content || 'Documento vacío';
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", item.name);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    });
+  }
+
+  visualizarElemento(item: DriveItem) {
+    if (item.name.endsWith('.txt')) {
+      this.abrirEditor(item);
+      return;
+    }
+
+    const s3Path = this.resolverS3Path(item);
+    const viewUrl = `http://localhost:8080/api/documentos/view?tenantId=${item.tenantId}&fileName=${s3Path}`;
+    
+    this.documentService.getPresignedUrl(item.tenantId, s3Path, this.getCurrentUser()).subscribe({
+      next: () => {
+        this.previewItem = item;
+        this.previewUrl = viewUrl;
+        if (item.name.toLowerCase().endsWith('.pdf')) {
+          this.previewPdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(viewUrl);
+        } else {
+          this.previewPdfUrl = null;
+        }
+        this.isPreviewVisible = true;
+      },
+      error: (err) => {
+        console.error('Error al registrar lectura en el historial:', err);
+        this.previewItem = item;
+        this.previewUrl = viewUrl;
+        if (item.name.toLowerCase().endsWith('.pdf')) {
+          this.previewPdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(viewUrl);
+        } else {
+          this.previewPdfUrl = null;
+        }
+        this.isPreviewVisible = true;
+      }
+    });
+  }
+
+  cerrarPreview() {
+    this.isPreviewVisible = false;
+    this.previewItem = null;
+    this.previewUrl = '';
+    this.previewPdfUrl = null;
+  }
+
+  solicitarEliminar(item: DriveItem) {
+    this.deletingItem = item;
+    this.isDeleteModalVisible = true;
+  }
+
+  cerrarDeleteModal() {
+    this.isDeleteModalVisible = false;
+    this.deletingItem = null;
+  }
+
+  confirmarEliminar() {
+    if (!this.deletingItem) return;
+
+    const s3Path = this.resolverS3Path(this.deletingItem);
+    this.documentService.deleteFile(this.deletingItem.tenantId, s3Path, this.getCurrentUser()).subscribe({
+      next: () => {
+        // Remove from local list
+        this.allItems = this.allItems.filter(i => i.id !== this.deletingItem!.id);
+        this.actualizarRepositorio();
+        this.cerrarDeleteModal();
+      },
+      error: (err) => {
+        console.error('Error al eliminar archivo de S3:', err);
+        // Fallback for mocked items
+        this.allItems = this.allItems.filter(i => i.id !== this.deletingItem!.id);
+        this.actualizarRepositorio();
+        this.cerrarDeleteModal();
+      }
+    });
   }
 }

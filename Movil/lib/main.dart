@@ -25,16 +25,45 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Procesos Móvil',
+      title: 'Procesos de Negocio',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.light,
-        ),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF4F46E5), // Indigo vibrante premium
+          brightness: Brightness.light,
+          primary: const Color(0xFF4F46E5),
+          secondary: const Color(0xFF06B6D4), // Cyan dinámico
+          background: const Color(0xFFF8FAFC), // Slate 50 ultra limpio
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.grey.shade100, width: 1),
+          ),
+        ),
         appBarTheme: const AppBarTheme(
-          elevation: 2,
-          centerTitle: true,
+          elevation: 0,
+          centerTitle: false,
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          foregroundColor: Color(0xFF0F172A),
+          titleTextStyle: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+            letterSpacing: -0.5,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 2,
+            shadowColor: const Color(0xFF4F46E5).withOpacity(0.2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
         ),
       ),
       home: const AuthScreen(),

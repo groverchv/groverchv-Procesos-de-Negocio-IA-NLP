@@ -221,12 +221,40 @@ Tu respuesta debe ser estrictamente en formato JSON con los siguientes campos ex
         context_section = proceso_context or "No se proporcionó contexto de procesos del usuario."
 
         system_prompt = f"""Eres BPMN Asesor, el asistente virtual inteligente integrado en la aplicación móvil de BPMNFlow.
-Tu función es actuar como un agente de atención al cliente y asesor de procesos, respondiendo preguntas de los usuarios
-sobre los trámites disponibles, cómo iniciarlos, cuál es la opción más rápida, el estado de sus solicitudes,
-y también funcionas como manual interactivo de la aplicación.
+Tu función principal es ser el GUÍA DE DECISIONES del proceso BPM activo del usuario.
+Cuando el usuario pregunta por su proceso, sus opciones o qué camino tomar, DEBES analizar el flujo y guiarlo con decisiones claras y justificadas.
 
 === CONTEXTO DE DATOS DEL USUARIO (actualizado en tiempo real) ===
 {context_section}
+
+=== CAPACIDAD PRINCIPAL: ANÁLISIS DE DECISIONES EN FLUJOS BPM ===
+Cuando el contexto del usuario muestre un proceso ACTIVO con una CONDICIÓN (gateway / punto de decisión / compuerta),
+debes actuar como un asesor experto que:
+
+1. IDENTIFICA EL PUNTO DE DECISIÓN: Detecta si hay una condición pendiente (ej. "Condición?", "¿Aprueba?", "¿Requiere revisión?").
+
+2. ANALIZA AMBOS CAMINOS y los describe con claridad:
+   - Camino SI (ruta corta/rápida): qué actividades quedan, cuánto tarda aproximadamente, ventajas.
+   - Camino NO (ruta larga): qué actividades extra se ejecutan, cuánto tarda más, implicaciones.
+
+3. RECOMIENDA el camino más conveniente con razones específicas:
+   - Basándose en el estado actual (pasos completados, tiempo transcurrido, urgencia).
+   - Explica POR QUÉ ese camino es mejor para el usuario en su situación concreta.
+   - Explica QUÉ PASARÍA si elige la otra opción (consecuencias, pasos adicionales, tiempo extra).
+
+4. Responde a CUALQUIER PREGUNTA del usuario sobre el proceso, las actividades, el flujo, o dudas generales.
+
+=== ESTRUCTURA DEL FLUJO BPM GENÉRICO (para procesos con condición SI/NO) ===
+Cuando detectes un proceso con gateway/condición en el contexto, interpreta así:
+- CAMINO SI → Ruta corta: menos actividades, termina más rápido. Ideal cuando se cumplen los requisitos base.
+- CAMINO NO → Ruta larga: pasa por actividades adicionales de revisión/verificación antes de llegar al fin.
+  Activa este camino cuando hay documentación incompleta, aprobaciones pendientes, o se requiere validación extra.
+
+Ejemplo de respuesta para análisis de decisión:
+"En este momento estás en la Condición del proceso [Nombre]. 
+Te recomiendo elegir SÍ porque [razón concreta basada en tu estado actual].
+Si eliges SÍ: el proceso terminará pronto pasando solo por [actividades restantes], en aproximadamente [tiempo estimado].
+Si eliges NO: el proceso continuará por [actividades extras], lo que tomará [tiempo adicional] más, porque [explicación del por qué ese camino existe]."
 
 === INFORMACIÓN DEL SISTEMA BPMNFLOW ===
 BPMNFlow es una plataforma de gestión de procesos de negocio. Los usuarios (clientes) pueden:
@@ -243,11 +271,12 @@ BPMNFlow es una plataforma de gestión de procesos de negocio. Los usuarios (cli
 - Soporte Técnico: Rápido (~3.4 horas), bien procedimentado
 - Compras Corporativas: Lento (~72 horas), depende de proveedores externos
 
-- Las respuestas DEBEN ser extremadamente cortas, sintéticas y muy fáciles de entender (máximo 20 frases simples y directas).
-- Recuerda que la respuesta se leerá en voz alta: evita viñetas, listas o explicaciones largas. Ve al grano inmediatamente.
-- Si no sabes algo, responde brevemente sugiriendo qué sí puedes hacer.
-- NUNCA respondas con código o JSON, solo texto conversacional corto.
-"""
+=== REGLAS DE RESPUESTA (MUY IMPORTANTES) ===
+- Responde SIEMPRE en español.
+- MÁXIMO 4 oraciones cortas. Sé directo, claro y fácil de entender.
+- Para decisiones (¿sí o no?, ¿qué camino?): Di qué recomiendas en 1 oración, luego explica el camino SI y el camino NO en 1 oración cada uno.
+- Para otras preguntas: 1-2 oraciones directas. Sin saludos, sin introducciones, sin relleno.
+- Escribe como si hablaras a alguien con poco tiempo. Sin viñetas ni listas. Sin código ni JSON."""
 
         full_messages = [{"role": "system", "content": system_prompt}] + messages
 
@@ -259,8 +288,8 @@ BPMNFlow es una plataforma de gestión de procesos de negocio. Los usuarios (cli
         body = {
             "model": "llama-3.3-70b-versatile",
             "messages": full_messages,
-            "temperature": 0.7,
-            "max_tokens": 800
+            "temperature": 0.5,
+            "max_tokens": 400
         }
 
         async with httpx.AsyncClient() as client:
@@ -274,5 +303,239 @@ BPMNFlow es una plataforma de gestión de procesos de negocio. Los usuarios (cli
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
+    async def analizar_documento(self, doc_id: str, user_name: str, texto: str):
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return {"has_alert": False}
+
+        system_prompt = """Analiza el siguiente texto de un documento de BPM o contrato de negocio redactado de forma colaborativa.
+Busca cualquier riesgo o conflicto de políticas de negocio (conflictos de interés, cláusulas dudosas, falta de autorización, urgencia inusual, retrasos, etc.).
+Debes responder estrictamente en formato JSON con la siguiente estructura. Si NO se detecta ningún riesgo o alerta relevante, establece 'has_alert' en false y deja el resto de campos vacíos.
+
+Estructura JSON esperada:
+{
+  "has_alert": true o false,
+  "severity": "high" o "medium" o "low" o "",
+  "message": "Descripción corta del riesgo detectado" o "",
+  "suggestion": "Acción correctiva sugerida" o ""
+}"""
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        body = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": f"Usuario editando: {user_name}\nContenido del documento:\n{texto}" }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 512,
+            "response_format": { "type": "json_object" }
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=20.0)
+                response.raise_for_status()
+                data = response.json()
+                import json
+                result = json.loads(data["choices"][0]["message"]["content"])
+                return result
+            except Exception as e:
+                print(f"Error analizando documento con IA: {e}")
+                return {"has_alert": False}
+
+    async def validar_documento_con_politica(self, texto: str, politica: str) -> dict:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return {"valido": True, "mensaje": "Falta API Key de Groq. Validación omitida."}
+
+        system_prompt = f"""Analiza el siguiente texto de un documento cargado en el sistema y verifica si cumple estrictamente con la Política de Negocio provista.
+Política de Negocio a validar:
+"{politica}"
+
+Debes responder estrictamente en formato JSON con la siguiente estructura.
+Estructura JSON esperada:
+{{
+  "valido": true o false,
+  "mensaje": "Mensaje detallado explicando si cumple o por qué no cumple la política",
+  "sugerencia": "Acción correctiva sugerida si valido es false, o vacío si es true"
+}}"""
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        body = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": f"Texto del documento a validar:\n{texto}" }
+            ],
+            "temperature": 0.15,
+            "max_tokens": 512,
+            "response_format": { "type": "json_object" }
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=20.0)
+                response.raise_for_status()
+                data = response.json()
+                import json
+                result = json.loads(data["choices"][0]["message"]["content"])
+                return result
+            except Exception as e:
+                print(f"Error en validar_documento_con_politica con IA: {e}")
+                return {"valido": False, "mensaje": f"Error del motor de IA al validar: {str(e)}", "sugerencia": "Reintente la validación."}
+
+    async def transcribir_audio_whisper(self, audio_bytes: bytes, filename: str) -> str:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Falta la API Key de Groq en la variable de entorno GROQ_API_KEY")
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+        
+        # Groq espera multipart/form-data
+        files = {
+            "file": (filename, audio_bytes, "audio/mpeg" if filename.endswith(".mp3") else "audio/wav")
+        }
+        data = {
+            "model": "whisper-large-v3",
+            "response_format": "json"
+        }
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers=headers,
+                    files=files,
+                    data=data,
+                    timeout=60.0
+                )
+                response.raise_for_status()
+                res_json = response.json()
+                return res_json.get("text", "")
+            except Exception as e:
+                print(f"[WHISPER ERROR] {e}")
+                raise HTTPException(status_code=500, detail=f"Error en la transcripción de Whisper: {str(e)}")
+
+    async def chat_movil_con_rag(self, messages: list, tenant_id: str):
+        # Tomamos el último mensaje del usuario para la búsqueda semántica
+        last_user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_message = msg.get("content", "")
+                break
+        
+        from services.vector_store import vector_store
+        contexto_recuperado = vector_store.recuperar_contexto(tenant_id, last_user_message)
+        
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Falta la API Key de Groq en la variable de entorno GROQ_API_KEY")
+
+        system_prompt = f"""Eres un Asistente Corporativo Avanzado (IA con Memoria de Cliente) integrado en BPMNFlow.
+Tu objetivo es responder de forma ultra-personalizada y precisa a las consultas del cliente.
+Posees acceso a documentos privados e históricos del repositorio S3 correspondientes únicamente al tenant: {tenant_id}.
+
+=== CONTEXTO SEMÁNTICO RECUPERADO DE S3 (AISLAMIENTO TENANT: {tenant_id}) ===
+{contexto_recuperado or "No hay documentos previos indexados en S3 para este tenant. Responde usando tu conocimiento general del negocio pero aclara que no encontraste archivos específicos del tenant para esta duda."}
+
+=== REGLAS DE COMPORTAMIENTO Y PRIVACIDAD ===
+1. Responde de manera sumamente atenta y corporativa.
+2. Utiliza el contexto semántico recuperado para personalizar tus respuestas. Si el usuario pregunta por fechas, plazos, responsables o cláusulas de contratos que subió, búscalo en el contexto y dile de qué documento proviene.
+3. Si el contexto no contiene la respuesta, explica de forma amable y sugiere qué documentos podría subir a su repositorio S3 para que puedas recordarlo.
+4. NUNCA menciones otros TenantID o información de otros clientes. Mantén la confidencialidad de los datos.
+5. Responde con un tono proactivo y de agente. Si identificas algún trámite estancado o un documento faltante (ej. Falta el contrato firmado), sugiere redactar un correo recordatorio o generar la plantilla.
+6. Mantén tus respuestas claras y profesionales (máximo 4 párrafos cortos).
+"""
+
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        body = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": full_messages,
+            "temperature": 0.4,
+            "max_tokens": 1024
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=30.0)
+                response.raise_for_status()
+                data = response.json()
+                return {
+                    "reply": data["choices"][0]["message"]["content"],
+                    "context_retrieved": contexto_recuperado
+                }
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=f"Error de Groq: {e.response.text}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    async def procesar_intencion_politica(self, texto: str) -> dict:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return {
+                "politica_recomendada": f"Política estándar: {texto[:30]}...",
+                "tipo": "General",
+                "descripcion": "Falta la API Key de Groq para procesamiento cognitivo."
+            }
+            
+        system_prompt = """Eres un Agente de Asignación de Políticas de Negocio para BPMNFlow.
+Tu tarea es interpretar la solicitud en lenguaje natural del usuario y sugerir o formular la política o restricción de negocio correspondiente más adecuada en una sola frase breve y concisa.
+
+Ejemplos:
+- Entrada: "Quiero que los menores de edad no puedan firmar contratos"
+  Respuesta: { "politica_recomendada": "Restricción de edad: prohibido firmar a menores de 18 años", "tipo": "Restricción", "descripcion": "Validar que la fecha de nacimiento indique mayoría de edad." }
+- Entrada: "Si la compra supera los 5000 dólares necesita aprobación del gerente de finanzas"
+  Respuesta: { "politica_recomendada": "Aprobación de gerencia para compras > 5000 USD", "tipo": "Aprobación", "descripcion": "Derivar automáticamente al carril del Gerente de Finanzas si el monto es mayor a 5000." }
+
+Debes responder estrictamente en formato JSON con los campos: 'politica_recomendada', 'tipo', y 'descripcion'. No agregues texto markdown antes o después."""
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        body = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": texto }
+            ],
+            "temperature": 0.2,
+            "max_tokens": 512,
+            "response_format": { "type": "json_object" }
+        }
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=20.0)
+                response.raise_for_status()
+                data = response.json()
+                import json
+                return json.loads(data["choices"][0]["message"]["content"])
+            except Exception as e:
+                print(f"[IA POLÍTICAS] Error al procesar intención: {e}")
+                return {
+                    "politica_recomendada": f"Política estándar para: {texto[:30]}...",
+                    "tipo": "General",
+                    "descripcion": "Asignado automáticamente por fallback debido a un error."
+                }
+
 motor_nlp = MotorNLP()
+
 

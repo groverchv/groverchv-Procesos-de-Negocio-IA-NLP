@@ -4,11 +4,12 @@ Microservicio de Inteligencia Artificial - BPM
 Backend en FastAPI que expone los endpoints de Deep Learning
 para el motor predictivo basado en TensorFlow.
 """
-from fastapi import FastAPI, Header, Request, HTTPException
+from fastapi import FastAPI, Header, Request, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 import uvicorn
+import httpx
 
 from services.predictive_engine import motor
 from services.nlp_engine import motor_nlp
@@ -68,6 +69,12 @@ class NLPChatRequest(BaseModel):
     nodes_context: Optional[str] = None
     edges_context: Optional[str] = None
     lanes_context: Optional[str] = None
+
+class NLPDocumentObservationRequest(BaseModel):
+    doc_id: str
+    user_id: str
+    user_name: str
+    texto: str
 
 class TTSRequest(BaseModel):
     text: str
@@ -164,6 +171,279 @@ async def chat_movil(requerimiento: NLPMovilRequest):
         proceso_context=requerimiento.proceso_context,
     )
     return {"reply": respuesta}
+
+
+class IndexarDocumentoRequest(BaseModel):
+    tenant_id: str
+    doc_id: str
+    filename: str
+    content: str
+
+
+class NLPRagRequest(BaseModel):
+    messages: list
+    tenant_id: str
+
+
+@app.post("/api/v1/nlp/indexar-documento")
+async def indexar_documento(requerimiento: IndexarDocumentoRequest):
+    """
+    Endpoint para indexar el texto de un documento subido a S3 en el Vector Store
+    segregado por tenant_id.
+    """
+    from services.vector_store import vector_store
+    vector_store.indexar_documento(
+        tenant_id=requerimiento.tenant_id,
+        doc_id=requerimiento.doc_id,
+        filename=requerimiento.filename,
+        content=requerimiento.content
+    )
+    return {"status": "success", "message": f"Documento {requerimiento.filename} indexado correctamente para el Tenant {requerimiento.tenant_id}."}
+
+
+class NLPIntencionRequest(BaseModel):
+    cliente_id: str
+    texto: str
+
+
+@app.post("/api/v1/nlp/procesar-intencion")
+async def procesar_intencion(requerimiento: NLPIntencionRequest):
+    """
+    Agente de Asignación de Políticas:
+    Interpreta el requerimiento del cliente y sugiere la política de negocios más adecuada.
+    """
+    return await motor_nlp.procesar_intencion_politica(requerimiento.texto)
+
+
+class ValidarDocumentoRequest(BaseModel):
+    texto: str
+    politica: str
+
+
+@app.post("/api/v1/nlp/validar-documento")
+async def validar_documento(requerimiento: ValidarDocumentoRequest):
+    """
+    Valida si el texto de un documento cumple con una determinada política de negocio.
+    """
+    return await motor_nlp.validar_documento_con_politica(
+        texto=requerimiento.texto,
+        politica=requerimiento.politica
+    )
+
+
+@app.post("/api/v1/nlp/chat-rag")
+async def chat_rag(requerimiento: NLPRagRequest):
+    """
+    Chat con memoria corporativa (RAG) segregado por TenantID.
+    Busca documentos específicos del tenant en el Vector Store local de SQLite.
+    """
+    return await motor_nlp.chat_movil_con_rag(
+        messages=requerimiento.messages,
+        tenant_id=requerimiento.tenant_id
+    )
+
+
+@app.post("/api/v1/nlp/transcribir-audio")
+async def transcribir_audio(
+    tenant_id: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Recibe un archivo de audio, lo transcribe mediante Whisper, genera un Acta de Reunión
+    formal con Llama 3 y la indexa de forma automática en el repositorio RAG de su tenant.
+    """
+    audio_bytes = await file.read()
+    filename = file.filename or "reunion.mp3"
+    
+    # 1. Transcribir
+    transcripcion = await motor_nlp.transcribir_audio_whisper(audio_bytes, filename)
+    if not transcripcion:
+        raise HTTPException(status_code=400, detail="No se pudo extraer transcripción de voz del audio.")
+        
+    # 2. Resumir y generar Acta
+    prompt_resumen = f"""Genera una acta de reunión ejecutiva profesional y formal basada en la siguiente transcripción de audio.
+Tu respuesta debe ser redactada directamente en formato de documento de texto, estructurada de la siguiente manera:
+- TÍTULO: Acta de Reunión
+- FECHA: (Usa la fecha actual del sistema o la que mencione el audio)
+- ASISTENTES: (Lista de nombres o roles identificados)
+- PUNTOS TRATADOS: (Breve resumen de los temas principales)
+- COMPROMISOS Y ACCIONES ACORDADAS: (Quién hace qué y plazos)
+
+TRANSCRIPCIÓN:
+"{transcripcion}"
+"""
+    api_key = os.getenv("GROQ_API_KEY")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    body = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            { "role": "system", "content": "Eres un redactor corporativo experto en actas de reunión y minutas corporativas." },
+            { "role": "user", "content": prompt_resumen }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 1500
+    }
+    
+    acta = ""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                json=body,
+                headers=headers,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            acta = response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"[ACTA GENERATION ERROR] {e}")
+            acta = f"Transcripción de la Reunión:\n\n{transcripcion}"
+            
+    # 3. Indexar en vector store
+    import uuid
+    from services.vector_store import vector_store
+    doc_id = f"acta-{uuid.uuid4().hex[:8]}"
+    doc_name = f"Acta_Reunion_{uuid.uuid4().hex[:4]}.txt"
+    vector_store.indexar_documento(
+        tenant_id=tenant_id,
+        doc_id=doc_id,
+        filename=doc_name,
+        content=acta
+    )
+    
+    return {
+        "status": "success",
+        "transcripcion": transcripcion,
+        "acta": acta,
+        "filename": doc_name,
+        "doc_id": doc_id
+    }
+
+
+@app.websocket("/api/v1/nlp/chat-stream")
+async def chat_stream_websocket(websocket: WebSocket):
+    """
+    WebSocket que realiza chat con streaming de tokens en tiempo real (estilo ChatGPT),
+    utilizando RAG de los documentos del tenant indicado.
+    """
+    await websocket.accept()
+    try:
+        while True:
+            # Recibir payload JSON
+            data = await websocket.receive_json()
+            messages = data.get("messages", [])
+            tenant_id = data.get("tenant_id", "")
+            
+            # Buscar último mensaje del usuario para RAG
+            last_user_message = ""
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    last_user_message = msg.get("content", "")
+                    break
+            
+            from services.vector_store import vector_store
+            contexto_recuperado = vector_store.recuperar_contexto(tenant_id, last_user_message)
+            
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                await websocket.send_json({"error": "Falta la API Key de Groq."})
+                continue
+                
+            system_prompt = f"""Eres un Asistente Corporativo Avanzado (IA con Memoria de Cliente) integrado en BPMNFlow.
+Tu objetivo es responder de forma ultra-personalizada y precisa a las consultas del cliente.
+Posees acceso a documentos privados e históricos del repositorio S3 correspondientes únicamente al tenant: {tenant_id}.
+
+=== CONTEXTO SEMÁNTICO RECUPERADO DE S3 (AISLAMIENTO TENANT: {tenant_id}) ===
+{contexto_recuperado or "No hay documentos previos indexados en S3 para este tenant."}
+
+=== REGLAS DE COMPORTAMIENTO ===
+1. Responde de manera concisa y clara.
+2. Usa el contexto recuperado para justificar tus respuestas.
+3. Envía respuestas estructuradas en texto plano y amigable.
+"""
+            full_messages = [{"role": "system", "content": system_prompt}] + messages
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+            body = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": full_messages,
+                "temperature": 0.4,
+                "max_tokens": 1024,
+                "stream": True
+            }
+            
+            # Enviar streaming de tokens
+            async with httpx.AsyncClient() as client:
+                async with client.stream("POST", "https://api.groq.com/openai/v1/chat/completions", json=body, headers=headers, timeout=60.0) as response:
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str.strip() == "[DONE]":
+                                break
+                            import json
+                            try:
+                                chunk_json = json.loads(data_str)
+                                delta = chunk_json["choices"][0]["delta"].get("content", "")
+                                if delta:
+                                    await websocket.send_json({"token": delta})
+                            except:
+                                pass
+            await websocket.send_json({"status": "done"})
+    except WebSocketDisconnect:
+        print("[WS CHAT] Cliente desconectado de chat-stream.")
+    except Exception as e:
+        print(f"[WS ERROR] {e}")
+        try:
+            await websocket.send_json({"error": str(e)})
+        except:
+            pass
+
+
+async def analizar_y_alertar_documento(doc_id: str, user_id: str, user_name: str, texto: str):
+    """
+    Función que corre en segundo plano. Analiza el documento y envía webhook a Spring Boot si hay alertas.
+    """
+    analisis = await motor_nlp.analizar_documento(doc_id=doc_id, user_name=user_name, texto=texto)
+    
+    if analisis and analisis.get("has_alert"):
+        webhook_url = "http://localhost:8080/api/ia/alertas"
+        payload = {
+            "docId": doc_id,
+            "payload": {
+                "severity": analisis.get("severity", "medium"),
+                "message": analisis.get("message", "Alerta de política de negocio detectada."),
+                "suggestion": analisis.get("suggestion", "Por favor, revise el texto redactado."),
+                "timestamp": "2026-06-07T00:00:00Z"
+            }
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(webhook_url, json=payload, timeout=5.0)
+                print(f"[IA OBSERVADOR] Alerta enviada a Spring Boot. Status: {response.status_code}")
+        except Exception as e:
+            print(f"[IA OBSERVADOR] Error enviando alerta al webhook: {e}")
+
+
+@app.post("/api/v1/nlp/observar-documento", status_code=202)
+async def observar_documento(requerimiento: NLPDocumentObservationRequest, background_tasks: BackgroundTasks):
+    """
+    Endpoint para observación pasiva y asíncrona de cambios en documentos.
+    Retorna 202 inmediatamente y delega el análisis de Deep Learning a BackgroundTasks.
+    """
+    background_tasks.add_task(
+        analizar_y_alertar_documento,
+        doc_id=requerimiento.doc_id,
+        user_id=requerimiento.user_id,
+        user_name=requerimiento.user_name,
+        texto=requerimiento.texto
+    )
+    return {"status": "Accepted", "message": "Análisis reactivo de IA en curso"}
 
 
 # ------------------------------------------------------------------

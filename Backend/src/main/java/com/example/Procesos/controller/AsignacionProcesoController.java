@@ -4,6 +4,7 @@ import com.example.Procesos.model.AsignacionProceso;
 import com.example.Procesos.repository.AsignacionProcesoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -21,6 +22,8 @@ import java.util.Map;
 public class AsignacionProcesoController {
 
     private final AsignacionProcesoRepository repository;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final com.example.Procesos.service.WorkflowEngineService workflowEngineService;
 
     // ─── GET: Todas las asignaciones de un cliente ───────────────────────────────
     @GetMapping("/cliente/{clienteId}")
@@ -42,19 +45,6 @@ public class AsignacionProcesoController {
         return repository.findByClienteIdAndProjectId(clienteId, projectId);
     }
 
-    // ─── POST: Crear o actualizar una asignación ─────────────────────────────────
-    /**
-     * Body esperado:
-     * {
-     *   "clienteId": "...",
-     *   "designId": "...",
-     *   "designNombre": "...",
-     *   "projectId": "...",
-     *   "projectNombre": "...",
-     *   "habilitado": true|false,
-     *   "asignadoPor": "funcionario@email.com"
-     * }
-     */
     @PostMapping
     public ResponseEntity<AsignacionProceso> crearOActualizar(
             @RequestBody AsignacionProceso request) {
@@ -79,6 +69,18 @@ public class AsignacionProcesoController {
         asignacion.setFechaAsignacion(LocalDateTime.now());
 
         AsignacionProceso saved = repository.save(asignacion);
+        broadcastUpdate(saved.getClienteId());
+
+        if (saved.isHabilitado()) {
+            workflowEngineService.createNotification(saved.getClienteId(), "Acceso Habilitado",
+                    "Se ha habilitado el acceso al proceso: " + saved.getDesignNombre(),
+                    "SUCCESS", saved.getId(), "ASSIGNMENT");
+        } else {
+            workflowEngineService.createNotification(saved.getClienteId(), "Acceso Revocado",
+                    "Se ha inhabilitado el acceso al proceso: " + saved.getDesignNombre(),
+                    "WARNING", saved.getId(), "ASSIGNMENT");
+        }
+
         return ResponseEntity.ok(saved);
     }
 
@@ -101,6 +103,7 @@ public class AsignacionProcesoController {
         asignacion.setFechaSolicitud(LocalDateTime.now());
 
         AsignacionProceso saved = repository.save(asignacion);
+        broadcastUpdate(saved.getClienteId());
         return ResponseEntity.ok(saved);
     }
 
@@ -122,6 +125,12 @@ public class AsignacionProcesoController {
         asignacion.setFechaAsignacion(LocalDateTime.now());
 
         AsignacionProceso saved = repository.save(asignacion);
+        broadcastUpdate(saved.getClienteId());
+
+        workflowEngineService.createNotification(saved.getClienteId(), "Solicitud Aprobada",
+                "Tu solicitud para el proceso '" + saved.getDesignNombre() + "' ha sido aprobada.",
+                "SUCCESS", saved.getId(), "ASSIGNMENT");
+
         return ResponseEntity.ok(saved);
     }
 
@@ -144,7 +153,14 @@ public class AsignacionProcesoController {
                     asignacion.setHabilitado(false);
                     asignacion.setSolicitado(false);
                     asignacion.setFechaAsignacion(LocalDateTime.now());
-                    return ResponseEntity.ok(repository.save(asignacion));
+                    AsignacionProceso saved = repository.save(asignacion);
+                    broadcastUpdate(saved.getClienteId());
+
+                    workflowEngineService.createNotification(saved.getClienteId(), "Acceso Deshabilitado",
+                            "Se ha deshabilitado el acceso al proceso: " + saved.getDesignNombre(),
+                            "INFO", saved.getId(), "ASSIGNMENT");
+
+                    return ResponseEntity.ok(saved);
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -152,11 +168,24 @@ public class AsignacionProcesoController {
     // ─── DELETE: Eliminar una asignación por ID ───────────────────────────────────
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@PathVariable String id) {
-        repository.deleteById(id);
+        repository.findById(id).ifPresent(asignacion -> {
+            repository.delete(asignacion);
+            broadcastUpdate(asignacion.getClienteId());
+        });
         return ResponseEntity.noContent().build();
     }
 
-    // ─── GET: Estado de un diseño específico para un cliente ─────────────────────
+    private void broadcastUpdate(String clienteId) {
+        try {
+            messagingTemplate.convertAndSend("/topic/asignaciones/" + clienteId, Map.of(
+                    "type", "ASSIGNMENTS_UPDATED",
+                    "clienteId", clienteId
+            ));
+        } catch (Exception e) {
+            System.err.println("Error enviando websocket de asignaciones: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/cliente/{clienteId}/design/{designId}")
     public ResponseEntity<AsignacionProceso> getEstado(
             @PathVariable String clienteId,

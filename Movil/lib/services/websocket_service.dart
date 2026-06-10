@@ -15,6 +15,7 @@ class WebSocketService {
   StompClient? _stompClient;
   String? _designId;
   String? _instanceId;
+  String? _clienteId;
   
   final StreamController<ProcessUpdate> _processUpdateController = 
       StreamController<ProcessUpdate>.broadcast();
@@ -25,17 +26,22 @@ class WebSocketService {
   final StreamController<bool> _connectionStateController = 
       StreamController<bool>.broadcast();
 
+  final StreamController<Map<String, dynamic>> _assignmentsUpdateController = 
+      StreamController<Map<String, dynamic>>.broadcast();
+
   Stream<ProcessUpdate> get processUpdates => _processUpdateController.stream;
   Stream<DiagramUpdate> get diagramUpdates => _diagramUpdateController.stream;
   Stream<bool> get connectionState => _connectionStateController.stream;
+  Stream<Map<String, dynamic>> get assignmentsUpdates => _assignmentsUpdateController.stream;
 
   bool get isConnected => _stompClient?.connected ?? false;
 
-  void connect(String designId, {String? instanceId}) {
-    if (isConnected && _designId == designId && _instanceId == instanceId) return;
+  void connect(String? designId, {String? instanceId, String? clienteId}) {
+    if (isConnected && _designId == designId && _instanceId == instanceId && _clienteId == clienteId) return;
     
     _designId = designId;
     _instanceId = instanceId;
+    _clienteId = clienteId;
 
     if (_stompClient != null) {
       _stompClient!.deactivate();
@@ -85,6 +91,22 @@ class WebSocketService {
               _processUpdateController.add(ProcessUpdate.fromJson(data));
             } catch (e) {
               print('Error parseando JSON de STOMP: $e');
+            }
+          }
+        },
+      );
+    }
+
+    if (_clienteId != null) {
+      _stompClient!.subscribe(
+        destination: '/topic/asignaciones/$_clienteId',
+        callback: (frame) {
+          if (frame.body != null) {
+            try {
+              final Map<String, dynamic> data = jsonDecode(frame.body!);
+              _assignmentsUpdateController.add(data);
+            } catch (e) {
+              print('Error parseando JSON de asignaciones STOMP: $e');
             }
           }
         },

@@ -25,7 +25,16 @@ class ChatMessage {
 
 // ─── Bottom Sheet / Modal View ─────────────────────────────────────────────
 class SugerenciasIAScreen extends StatefulWidget {
-  const SugerenciasIAScreen({Key? key}) : super(key: key);
+  final String? initialPrompt;
+  final String? extraContext;
+  final List<Map<String, dynamic>>? customSuggestions;
+
+  const SugerenciasIAScreen({
+    Key? key,
+    this.initialPrompt,
+    this.extraContext,
+    this.customSuggestions,
+  }) : super(key: key);
 
   @override
   State<SugerenciasIAScreen> createState() => _SugerenciasIAScreenState();
@@ -426,7 +435,7 @@ class _SugerenciasIAScreenState extends State<SugerenciasIAScreen>
                   gradient: LinearGradient(
                     colors: _hablandoVoz
                         ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                        : [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+                        : [const Color(0xFF4F46E5), const Color(0xFF06B6D4)],
                   ),
                 ),
                 child: Icon(
@@ -443,7 +452,7 @@ class _SugerenciasIAScreenState extends State<SugerenciasIAScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Asistente Inteligente',
+                  'Asesor IA',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -455,7 +464,7 @@ class _SugerenciasIAScreenState extends State<SugerenciasIAScreen>
                       ? 'Respondiendo por voz...'
                       : _cargando
                           ? 'IA pensando...'
-                          : 'Asistente de Voz · Online',
+                          : 'Asesor de Procesos · En línea',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
                     fontSize: 11,
@@ -538,7 +547,7 @@ class _SugerenciasIAScreenState extends State<SugerenciasIAScreen>
           height: 10,
           child: LinearProgressIndicator(
             backgroundColor: Colors.transparent,
-            color: Color(0xFF6366F1),
+            color: Color(0xFF4F46E5),
           ),
         ),
       ),
@@ -558,7 +567,7 @@ class _SugerenciasIAScreenState extends State<SugerenciasIAScreen>
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
           gradient: isUser
-              ? const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF4F46E5)])
+              ? const LinearGradient(colors: [Color(0xFF4F46E5), Color(0xFF3730A3)])
               : null,
           color: isUser ? null : Colors.white,
           borderRadius: BorderRadius.only(

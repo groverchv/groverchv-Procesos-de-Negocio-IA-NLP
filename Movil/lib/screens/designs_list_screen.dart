@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/websocket_service.dart';
 import '../models/types.dart';
 import 'design_processes_screen.dart';
+import 'sugerencias_ia_screen.dart';
 
 class DesignsListScreen extends StatefulWidget {
   final String projectId;
@@ -20,20 +23,55 @@ class DesignsListScreen extends StatefulWidget {
 
 class _DesignsListScreenState extends State<DesignsListScreen> {
   late Future<Map<String, dynamic>> _dataFuture;
+  StreamSubscription? _assignmentsSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _connectWebSocket();
   }
 
   void _loadData() {
     _dataFuture = _loadAllData();
   }
 
+  void _connectWebSocket() {
+    final user = ApiService.currentUser;
+    if (user != null && user.id != null) {
+      final ws = Provider.of<WebSocketService>(context, listen: false);
+      ws.connect(null, clienteId: user.id);
+      
+      _assignmentsSub?.cancel();
+      _assignmentsSub = ws.assignmentsUpdates.listen((event) {
+        print('DEBUG: WebSocket assignment update event received: $event');
+        if (mounted) {
+          setState(() {
+            _loadData();
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _assignmentsSub?.cancel();
+    final ws = Provider.of<WebSocketService>(context, listen: false);
+    ws.disconnect();
+    super.dispose();
+  }
+
   Future<Map<String, dynamic>> _loadAllData() async {
     final api = Provider.of<ApiService>(context, listen: false);
     final user = ApiService.currentUser;
+
+    // Safety check: ensure WebSocket is connected once user is available
+    if (user != null && user.id != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _connectWebSocket();
+      });
+    }
 
     print('DEBUG: _loadAllData user: $user');
     if (user != null) {
@@ -77,11 +115,11 @@ class _DesignsListScreenState extends State<DesignsListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: const Color(0xFFF8FAFC), // Slate 50
       appBar: AppBar(
         title: Text(
           widget.projectName,
-          style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+          style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.5),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -89,13 +127,84 @@ class _DesignsListScreenState extends State<DesignsListScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A)),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
+            child: GestureDetector(
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => SugerenciasIAScreen(
+                    initialPrompt: 'Estoy viendo las carpetas del proyecto "${widget.projectName}". ¿Qué procesos están disponibles para iniciar o solicitar?',
+                    extraContext: 'El usuario está explorando los diseños/carpetas del proyecto "${widget.projectName}".',
+                    customSuggestions: const [
+                      {
+                        'texto': '¿Cómo pido acceso a una carpeta bloqueada?',
+                        'icono': Icons.lock_open_rounded,
+                        'color': Color(0xFF4F46E5),
+                      },
+                      {
+                        'texto': '¿Cuáles son los requisitos de las licencias?',
+                        'icono': Icons.article_rounded,
+                        'color': Color(0xFF10B981),
+                      },
+                      {
+                        'texto': '¿Qué diferencia hay entre los procesos?',
+                        'icono': Icons.compare_arrows_rounded,
+                        'color': Color(0xFF8B5CF6),
+                      },
+                    ],
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4F46E5), Color(0xFF06B6D4)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4F46E5).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 14),
+                    SizedBox(width: 5),
+                    Text(
+                      'Asesor IA',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+        ],
       ),
       body: RefreshIndicator(
-        color: const Color(0xFF3B82F6),
+        color: const Color(0xFF4F46E5),
         onRefresh: () async {
           setState(() {
             _loadData();
           });
+          _connectWebSocket();
         },
         child: FutureBuilder<Map<String, dynamic>>(
           future: _dataFuture,
@@ -133,11 +242,11 @@ class _DesignsListScreenState extends State<DesignsListScreen> {
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                                color: const Color(0xFF4F46E5).withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(Icons.source_rounded,
-                                  color: Color(0xFF3B82F6), size: 20),
+                                  color: Color(0xFF4F46E5), size: 20),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -208,6 +317,7 @@ class _DesignsListScreenState extends State<DesignsListScreen> {
                             setState(() {
                               _loadData();
                             });
+                            _connectWebSocket();
                           },
                         );
                       },
@@ -440,11 +550,11 @@ class DesignFolderCard extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF3B82F6).withOpacity(0.1),
+                              color: const Color(0xFF4F46E5).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(Icons.send_rounded,
-                                size: 14, color: Color(0xFF3B82F6)),
+                                size: 14, color: Color(0xFF4F46E5)),
                           ),
                         )
                       else if (isHabilitado)
@@ -500,7 +610,7 @@ class DesignFolderCard extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: const [
-            Icon(Icons.folder_special_rounded, color: Color(0xFF3B82F6)),
+            Icon(Icons.folder_special_rounded, color: Color(0xFF4F46E5)),
             SizedBox(width: 8),
             Text('Solicitar Acceso', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
@@ -552,7 +662,7 @@ class DesignFolderCard extends StatelessWidget {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3B82F6),
+              backgroundColor: const Color(0xFF4F46E5),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),

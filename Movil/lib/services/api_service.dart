@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:http_parser/http_parser.dart';
 import '../models/types.dart';
 
 class ApiService {
@@ -22,7 +23,9 @@ class ApiService {
   }
 
   Future<http.Response> _get(String path) async {
-    final uri = Uri.parse('$baseUrl$path');
+    final separator = path.contains('?') ? '&' : '?';
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final uri = Uri.parse('$baseUrl$path${separator}cb=$timestamp');
     return http.get(uri).timeout(
       const Duration(seconds: 12),
       onTimeout: () => throw Exception('Timeout conectando a $uri'),
@@ -220,7 +223,7 @@ class ApiService {
   /// Envía texto al microservicio de IA local (Groq NLP) para procesar la intención del cliente
   Future<Map<String, dynamic>> nlpProcesarIntencion(String texto) async {
     // 10.0.2.2 es el alias IP para localhost del PC desde el emulador de Android
-    final String iaUrl = kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
+    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-asesor'),
@@ -251,7 +254,7 @@ class ApiService {
     required List<Map<String, String>> messages,
     String? procesoContext,
   }) async {
-    final String iaUrl = kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
+    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-movil'),
@@ -277,9 +280,37 @@ class ApiService {
     }
   }
 
+  /// Chat móvil con memoria corporativa (RAG) segregado por TenantID.
+  Future<String> nlpChatRag({
+    required List<Map<String, dynamic>> messages,
+    required String tenantId,
+  }) async {
+    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+    try {
+      final response = await http.post(
+        Uri.parse('$iaUrl/api/v1/nlp/chat-rag'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'messages': messages,
+          'tenant_id': tenantId,
+        }),
+      ).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return (data['reply'] as String?) ?? 'Sin respuesta del asistente RAG.';
+      } else {
+        throw Exception('Error en IA RAG: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('nlpChatRag error: $e');
+      return 'No hay conexión con el servidor de IA RAG. Verifica que el backend de IA esté activo en el puerto 8000.';
+    }
+  }
+
   /// Genera audio usando ElevenLabs a través del microservicio de IA
   Future<Uint8List?> ttsGenerarVoz(String texto) async {
-    final String iaUrl = kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
+    final String iaUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/tts/generar-voz'),
@@ -457,6 +488,101 @@ class ApiService {
     } catch (e) {
       debugPrint('Error getAllAsignacionesCliente: $e');
       return [];
+    }
+  }
+
+  Future<ProcessInstance> advanceActivity({
+    required String instanceId,
+    required String nodeId,
+    required String status,
+    required String userId,
+    required Map<String, dynamic> formData,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/instances/$instanceId/advance'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'nodeId': nodeId,
+          'status': status,
+          'userId': userId,
+          'formData': formData,
+        }),
+      ).timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        return ProcessInstance.fromJson(jsonDecode(response.body));
+      } else {
+        throw Exception('Error avanzando actividad: ${response.statusCode}');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadDocument({
+    required String tenantId,
+    required String fileName,
+    required Uint8List fileBytes,
+    required String contentType,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/documentos/upload');
+      final request = http.MultipartRequest('POST', uri);
+      request.fields['tenantId'] = tenantId;
+      request.fields['fileName'] = fileName;
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+        contentType: MediaType.parse(contentType),
+      ));
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 25));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      } else {
+        throw Exception('Error subiendo archivo: ${response.statusCode}');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadAndValidateDocument({
+    required String tenantId,
+    required String fileName,
+    required Uint8List fileBytes,
+    required String contentType,
+    String? policy,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/documentos/upload-and-validate');
+      final request = http.MultipartRequest('POST', uri);
+      request.fields['tenantId'] = tenantId;
+      request.fields['fileName'] = fileName;
+      if (policy != null) {
+        request.fields['policy'] = policy;
+      }
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+        contentType: MediaType.parse(contentType),
+      ));
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 25));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      } else {
+        throw Exception('Error subiendo y validando archivo: ${response.statusCode}');
+      }
+    } catch (e) {
+      rethrow;
     }
   }
 

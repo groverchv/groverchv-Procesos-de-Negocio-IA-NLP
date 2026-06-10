@@ -69,9 +69,10 @@ public class UsuarioController {
         
         // Crear carpeta de repositorio (S3) para el usuario
         try {
-            byte[] welcomeBytes = ("Repositorio privado de: " + usuario.getNombre()).getBytes(StandardCharsets.UTF_8);
+            String content = "Repositorio de " + usuario.getNombre() + "\n===============================================\nNo hay proyectos registrados en el sistema aún.";
+            byte[] welcomeBytes = content.getBytes(StandardCharsets.UTF_8);
             ByteArrayInputStream inputStream = new ByteArrayInputStream(welcomeBytes);
-            s3DocumentService.uploadDocument(tenantId, "welcome.txt", inputStream, welcomeBytes.length, "text/plain");
+            s3DocumentService.uploadDocument(tenantId, "bienvenida.txt", inputStream, welcomeBytes.length, "text/plain");
         } catch (Exception e) {
             System.err.println("Advertencia S3 al registrar: " + e.getMessage());
         }

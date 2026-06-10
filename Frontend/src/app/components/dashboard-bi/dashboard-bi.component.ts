@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { API_GLOBAL } from '../../services/api.global';
+import { Client, IMessage } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
 
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -25,7 +27,7 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
   templateUrl: './dashboard-bi.component.html',
   styleUrls: ['./dashboard-bi.component.css']
 })
-export class DashboardBiComponent implements OnInit {
+export class DashboardBiComponent implements OnInit, OnDestroy {
   activeTab: 'kpis' | 'usuarios' | 'ia-reports' = 'kpis';
   
   // Datos del Sistema (Cargados desde el Spring Boot Backend)
@@ -35,8 +37,13 @@ export class DashboardBiComponent implements OnInit {
   // Custom IA Reports
   promptQuery: string = '';
   reporteGenerado: any = null;
+  presignedReportUrl: string | null = null;
   cargandoReporte: boolean = false;
   errorReporte: string | null = null;
+
+  // Alertas IA en tiempo real
+  alertasIa: any[] = [];
+  private stompClient: Client | null = null;
 
   // Sugerencias rápidas para el Administrador
   sugerencias: string[] = [
@@ -63,6 +70,44 @@ export class DashboardBiComponent implements OnInit {
   ngOnInit() {
     this.cargarUsuarios();
     this.cargarDatosRealesBPM();
+    this.conectarWebSocket();
+  }
+
+  ngOnDestroy() {
+    this.desconectarWebSocket();
+  }
+
+  conectarWebSocket() {
+    this.stompClient = new Client({
+      webSocketFactory: () => new SockJS('http://localhost:8080/ws-bpmn'),
+      heartbeatIncoming: 0,
+      heartbeatOutgoing: 0,
+      reconnectDelay: 2000,
+    });
+
+    this.stompClient.onConnect = () => {
+      this.stompClient?.subscribe('/topic/dashboard/alertas-ia', (message: IMessage) => {
+        if (message.body) {
+          try {
+            const alert = JSON.parse(message.body);
+            this.alertasIa.unshift(alert); // Agregar al inicio
+            if (this.alertasIa.length > 5) {
+              this.alertasIa.pop(); // Mantener solo las últimas 5
+            }
+          } catch (e) {
+            console.error('Error al decodificar alerta de IA en el dashboard:', e);
+          }
+        }
+      });
+    };
+
+    this.stompClient.activate();
+  }
+
+  desconectarWebSocket() {
+    if (this.stompClient?.active) {
+      this.stompClient.deactivate();
+    }
   }
 
   cambiarTab(tab: 'kpis' | 'usuarios' | 'ia-reports') {
@@ -94,30 +139,45 @@ export class DashboardBiComponent implements OnInit {
     // Consumir el endpoint real de instancias de procesos de Spring Boot para calcular métricas
     this.http.get<any[]>('http://localhost:8080/api/instances').subscribe({
       next: (instances) => {
-        if (instances && instances.length > 0) {
-          // 1. Calcular KPI de eficiencia y anomalías basados en datos reales de la base de datos
-          const total = instances.length;
-          const completados = instances.filter(i => i.status === 'COMPLETED').length;
-          const activos = instances.filter(i => i.status === 'ACTIVE').length;
-          const anomalias = instances.filter(i => i.status === 'ANOMALY' || i.hasAnomalies === true).length;
+        const total = instances ? instances.length : 0;
+        if (total > 0) {
+          // 1. Calcular KPI de eficiencia y anomalías basados en datos reales de MongoDB
+          const completados = instances.filter(i => i.status === 'COMPLETED' || i.status === 'FINISHED').length;
+          const activos = instances.filter(i => i.status === 'ACTIVE' || i.status === 'IN_PROCESS' || i.status === 'PENDING').length;
+          const anomalias = instances.filter(i => i.status === 'ANOMALY' || i.hasAnomalies === true || i.anomalias > 0).length;
           
-          const tasaEficiencia = total > 0 ? ((completados + (activos * 0.8)) / total * 100).toFixed(1) : '94.2';
-          const tasaAnomalias = total > 0 ? (anomalias / total * 100).toFixed(1) : '2.4';
+          const tasaEficiencia = total > 0 ? (((completados + (activos * 0.8)) / total) * 100).toFixed(1) : '0.0';
+          const tasaAnomalias = total > 0 ? ((anomalias / total) * 100).toFixed(1) : '0.0';
           
           this.kpisLocales.eficienciaGeneral = `${tasaEficiencia}%`;
           this.kpisLocales.anomaliasPromedio = `${tasaAnomalias}%`;
-          this.kpisLocales.tiempoPromedioEjecucion = total > 2 ? '6.4 hrs' : '1.5 hrs';
+          
+          // Calcular promedio real de tiempos
+          let tiempoTotalHrs = 0;
+          let countConTiempo = 0;
+          instances.forEach(ins => {
+            if (ins.tiempoTranscurridoHrs || ins.duracion) {
+              tiempoTotalHrs += ins.tiempoTranscurridoHrs || ins.duracion || 0;
+              countConTiempo++;
+            }
+          });
+          const avgTiempo = countConTiempo > 0 ? (tiempoTotalHrs / countConTiempo).toFixed(1) : '1.5';
+          this.kpisLocales.tiempoPromedioEjecucion = `${avgTiempo} hrs`;
 
           // 2. Agrupar dinámicamente por flujo/diseño
           const agrupados: { [key: string]: any } = {};
           instances.forEach(ins => {
-            const name = ins.designName || 'Proceso de Negocio';
+            const name = ins.designNombre || ins.designName || 'Proceso de Negocio';
             if (!agrupados[name]) {
-              agrupados[name] = { total: 0, completados: 0, anomalias: 0, tiempoTotal: 0 };
+              agrupados[name] = { total: 0, completados: 0, anomalias: 0, tiempoTotal: 0, countTiempo: 0 };
             }
             agrupados[name].total += 1;
-            if (ins.status === 'COMPLETED') agrupados[name].completados += 1;
-            if (ins.status === 'ANOMALY' || ins.hasAnomalies) agrupados[name].anomalias += 1;
+            if (ins.status === 'COMPLETED' || ins.status === 'FINISHED') agrupados[name].completados += 1;
+            if (ins.status === 'ANOMALY' || ins.hasAnomalies || ins.anomalias > 0) agrupados[name].anomalias += 1;
+            if (ins.tiempoTranscurridoHrs || ins.duracion) {
+              agrupados[name].tiempoTotal += ins.tiempoTranscurridoHrs || ins.duracion || 0;
+              agrupados[name].countTiempo += 1;
+            }
           });
 
           // Convertir en listas dinámicas
@@ -126,55 +186,40 @@ export class DashboardBiComponent implements OnInit {
           
           Object.keys(agrupados).forEach(key => {
             const data = agrupados[key];
-            const pctExito = ((data.completados + 0.1) / data.total * 100).toFixed(1);
+            const pctExito = data.total > 0 ? ((data.completados / data.total) * 100).toFixed(1) : '0.0';
+            const avgTime = data.countTiempo > 0 ? (data.tiempoTotal / data.countTiempo).toFixed(1) : '2.0';
             
             this.tiemposEjecucion.push({
               nombre: key,
-              duracion: data.total > 2 ? '14.2 hrs' : '3.1 hrs',
+              duracion: `${avgTime} hrs`,
               anomalias: data.anomalias,
-              porcentajeBarra: data.total > 2 ? 80 : 35
+              porcentajeBarra: Math.min(100, Math.max(10, data.total * 25))
             });
 
             this.exitoFlujos.push({
               nombre: key,
-              porcentajeExito: `${pctExito}%`,
+              porcentajeExito: `${pctExito}% Éxito`,
               porcentajeBarra: parseFloat(pctExito)
             });
           });
         } else {
-          // Fallback dinámico si no hay instancias registradas en el MongoDB local
-          this.generarFallbackDinamico();
+          // Si no hay instancias en MongoDB, mostrar KPIs en cero
+          this.mostrarKpisVacios();
         }
       },
       error: (err) => {
-        console.warn('Conexión con base de datos de instancias en espera, generando datos dinámicos...');
-        this.generarFallbackDinamico();
+        console.warn('Conexión con base de datos de instancias en espera, mostrando KPIs vacíos...');
+        this.mostrarKpisVacios();
       }
     });
   }
 
-  generarFallbackDinamico() {
-    // Generación dinámica de telemetría calculada para evitar vistas vacías
-    const factorAleatorio = Math.random();
-    const eficiencia = (91.5 + (factorAleatorio * 4)).toFixed(1);
-    const anomalias = (1.2 + (factorAleatorio * 2)).toFixed(1);
-    
-    this.kpisLocales.eficienciaGeneral = `${eficiencia}%`;
-    this.kpisLocales.anomaliasPromedio = `${anomalias}%`;
-    this.kpisLocales.tiempoPromedioEjecucion = `${(7.5 + factorAleatorio * 5).toFixed(1)} hrs`;
-
-    this.tiemposEjecucion = [
-      { nombre: 'Aprobación de Créditos', duracion: '24.5 hrs', anomalias: 42, porcentajeBarra: 80 },
-      { nombre: 'Compras Corporativas', duracion: '72.8 hrs', anomalias: 18, porcentajeBarra: 100 },
-      { nombre: 'Onboarding de Personal', duracion: '12.0 hrs', anomalias: 5, porcentajeBarra: 45 },
-      { nombre: 'Soporte Técnico', duracion: '3.4 hrs', anomalias: 12, porcentajeBarra: 25 }
-    ];
-
-    this.exitoFlujos = [
-      { nombre: 'Solicitud de Vacaciones', porcentajeExito: '99.8% Éxito', porcentajeBarra: 99.8 },
-      { nombre: 'Soporte Técnico', porcentajeExito: '97.5% Éxito', porcentajeBarra: 97.5 },
-      { nombre: 'Aprobación de Créditos', porcentajeExito: '88.5% Éxito', porcentajeBarra: 88.5 }
-    ];
+  mostrarKpisVacios() {
+    this.kpisLocales.eficienciaGeneral = '0.0%';
+    this.kpisLocales.anomaliasPromedio = '0.0%';
+    this.kpisLocales.tiempoPromedioEjecucion = '0.0 hrs';
+    this.tiemposEjecucion = [];
+    this.exitoFlujos = [];
   }
 
   aplicarSugerencia(sug: string) {
@@ -188,19 +233,21 @@ export class DashboardBiComponent implements OnInit {
     this.cargandoReporte = true;
     this.errorReporte = null;
     this.reporteGenerado = null;
+    this.presignedReportUrl = null;
     this.activeTab = 'ia-reports';
 
-    this.http.post<any>(API_GLOBAL.ia.reporteDinamico, {
+    this.http.post<any>('http://localhost:8080/api/documentos/reporte-ia', {
       query: this.promptQuery,
-      tenant_id: 'tenant_default'
+      tenantId: 'tenant_default'
     }).subscribe({
       next: (res) => {
-        this.reporteGenerado = res;
+        this.reporteGenerado = res.reporte;
+        this.presignedReportUrl = res.presignedUrl;
         this.cargandoReporte = false;
       },
       error: (err) => {
         console.error('Error al generar reporte de IA dinámica:', err);
-        this.errorReporte = 'No se pudo conectar con el microservicio de IA local. Asegúrate de iniciar la IA en el puerto 8000.';
+        this.errorReporte = 'No se pudo conectar con el servidor Spring Boot para generar el reporte de IA.';
         this.cargandoReporte = false;
       }
     });

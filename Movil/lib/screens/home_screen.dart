@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'projects_list_screen.dart';
 import 'active_processes_screen.dart';
 import 'sugerencias_ia_screen.dart';
+import 'asistente_voz_cliente_screen.dart';
 import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -24,10 +25,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                color: const Color(0xFF4F46E5).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.account_tree_rounded, color: Color(0xFF3B82F6), size: 18),
+              child: const Icon(Icons.account_tree_rounded, color: Color(0xFF4F46E5), size: 18),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -35,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 20,
-                letterSpacing: -0.5,
+                letterSpacing: -0.8,
                 color: Color(0xFF0F172A),
               ),
             ),
@@ -60,14 +61,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    colors: [Color(0xFF4F46E5), Color(0xFF06B6D4)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6366F1).withOpacity(0.35),
+                      color: const Color(0xFF4F46E5).withOpacity(0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
@@ -79,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 14),
                     SizedBox(width: 5),
                     Text(
-                      'Sugerencias IA',
+                      'Asesor IA',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -97,12 +98,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Chip(
-                avatar: const Icon(Icons.person_rounded, size: 14, color: Color(0xFF3B82F6)),
+                avatar: const Icon(Icons.person_rounded, size: 14, color: Color(0xFF4F46E5)),
                 label: Text(
                   ApiService.currentUser!.nombre.split(' ').first,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF3730A3)),
                 ),
-                backgroundColor: const Color(0xFFEFF6FF),
+                backgroundColor: const Color(0xFFEEF2F6),
                 side: BorderSide.none,
                 padding: EdgeInsets.zero,
               ),
@@ -128,21 +129,22 @@ class _HomeScreenState extends State<HomeScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
+              color: const Color(0xFF0F172A).withOpacity(0.06),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
             ),
           ],
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(0, Icons.folder_copy_rounded, 'Proyectos'),
                 _buildNavItem(1, Icons.play_circle_filled_rounded, 'Activos'),
-                _buildNavItem(2, Icons.info_outline_rounded, 'Info'),
+                _buildNavItem(2, Icons.mic_rounded, 'Asistente'),
+                _buildNavItem(3, Icons.info_outline_rounded, 'Info'),
               ],
             ),
           ),
@@ -153,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
-    final color = isSelected ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8);
+    final color = isSelected ? const Color(0xFF4F46E5) : const Color(0xFF94A3B8);
 
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
@@ -162,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
+          color: isSelected ? color.withOpacity(0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -192,6 +194,8 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return const ActiveProcessesScreen();
       case 2:
+        return AsistenteVozClienteScreen();
+      case 3:
         return _buildInfoScreen();
       default:
         return const ProjectsListScreen();
