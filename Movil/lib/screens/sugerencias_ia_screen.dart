@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:js' as js;
+import '../utils/js_helper.dart' as jsHelper;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -345,12 +345,7 @@ class _SugerenciasIAScreenState extends State<SugerenciasIAScreen>
 
   void _playBytesWeb(Uint8List bytes, String texto) {
     try {
-      final base64String = base64Encode(bytes);
-      js.context.callMethod('eval', [
-        "window.speechSynthesis.cancel(); "
-        "var audio = new Audio('data:audio/mpeg;base64,' + '$base64String'); "
-        "audio.play().catch(function(e) { console.log('Audio playback failed: ' + e); });"
-      ]);
+      jsHelper.playBytesWeb(bytes, texto);
     } catch (e) {
       debugPrint('Web audio playback failed: $e');
     }
@@ -363,13 +358,7 @@ class _SugerenciasIAScreenState extends State<SugerenciasIAScreen>
 
   void _speakNativeWeb(String texto) {
     try {
-      js.context.callMethod('eval', [
-        "window.speechSynthesis.cancel(); "
-        "var utterance = new SpeechSynthesisUtterance(${jsonEncode(texto)}); "
-        "utterance.lang = 'es-ES'; "
-        "utterance.rate = 1.0; "
-        "window.speechSynthesis.speak(utterance);"
-      ]);
+      jsHelper.speakNativeWeb(texto);
     } catch (e) {
       debugPrint('Native Web TTS failed: $e');
     }

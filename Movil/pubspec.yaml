@@ -28,7 +28,7 @@ dependencies:
   connectivity_plus: ^5.0.2
 
   # Audios y NLP para el Asistente IA
-  speech_to_text: ^6.6.0
+  speech_to_text: ^7.4.0
   audioplayers: ^5.2.1
 
   # Firebase y Notificaciones Push
