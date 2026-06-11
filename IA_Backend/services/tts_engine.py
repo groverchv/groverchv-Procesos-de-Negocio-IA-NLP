@@ -15,7 +15,7 @@ from fastapi.responses import Response
 class MotorTTS:
     def __init__(self):
         self.elevenlabs_url = "https://api.elevenlabs.io/v1/text-to-speech"
-        self.default_voice_id = "21m00Tcm4TlvDq8ikWAM" # Rachel voice (Soporte técnico) o Tonny (Guía)
+        self.default_voice_id = "EXAVITQu4vr4xnSDxMaL" # Bella voice (pre-made, compatible con planes gratuitos)
 
     async def generar_voz(self, text: str, voice_id: str = None):
         api_key = os.getenv("ELEVENLABS_API_KEY")
