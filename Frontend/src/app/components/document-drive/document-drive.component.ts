@@ -136,6 +136,19 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.cargandoUsuarios = true;
     this.allItems = [];
 
+    // Primero sincronizar la estructura de carpetas en S3 con los datos de MongoDB
+    this.http.post(this.apiGlobalService.getEndpointUrl('documentos/sincronizar-estructura'), {}).subscribe({
+      next: () => {
+        this.cargarDatosDrive();
+      },
+      error: (err) => {
+        console.warn('Advertencia al sincronizar carpetas en S3:', err);
+        this.cargarDatosDrive(); // Cargar de todas formas
+      }
+    });
+  }
+
+  cargarDatosDrive() {
     // Load users, projects, and instances in parallel
     const users$ = this.http.get<any[]>(this.apiGlobalService.getEndpointUrl('usuarios'));
     const projects$ = this.http.get<any[]>(this.apiGlobalService.getEndpointUrl('projects'));

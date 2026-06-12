@@ -42,6 +42,10 @@ public class DocumentoController {
     private final S3DocumentService s3DocumentService;
     private final com.example.Procesos.service.FastApiClientService iaClient;
     private final DocumentoHistorialRepository documentoHistorialRepository;
+    private final com.example.Procesos.repository.UsuarioRepository usuarioRepository;
+    private final com.example.Procesos.repository.ProjectRepository projectRepository;
+    private final com.example.Procesos.repository.DesignRepository designRepository;
+    private final com.example.Procesos.repository.ProcessInstanceRepository processInstanceRepository;
 
     private String getClientIp(HttpServletRequest request) {
         String ip = request.getHeader("X-Forwarded-For");
@@ -49,6 +53,111 @@ public class DocumentoController {
             ip = request.getRemoteAddr();
         }
         return ip;
+    }
+
+    /**
+     * Endpoint para crear la estructura de carpetas físicas y archivos predeterminados en S3.
+     * Recrea en S3 la estructura exacta: [tenantId]/[Proyecto]/[Diseño]/[Instancia]/[archivos].
+     */
+    @PostMapping("/sincronizar-estructura")
+    public ResponseEntity<?> sincronizarEstructuraS3() {
+        try {
+            List<com.example.Procesos.model.Usuario> clientes = usuarioRepository.findByRol("CLIENTE");
+            List<com.example.Procesos.model.Project> proyectos = projectRepository.findAll();
+            List<com.example.Procesos.model.Design> disenos = designRepository.findAll();
+            List<com.example.Procesos.model.ProcessInstance> instancias = processInstanceRepository.findAll();
+
+            for (com.example.Procesos.model.Usuario cliente : clientes) {
+                String tenantId = cliente.getTenantId();
+                if (tenantId == null || tenantId.trim().isEmpty()) {
+                    tenantId = "tenant_default";
+                }
+
+                // 1. Crear carpeta del tenant
+                s3DocumentService.createFolder(tenantId, "");
+
+                // info.txt
+                String infoContent = "Tenant: " + tenantId + "\nUsuario: " + cliente.getNombre() + "\nEmail: " + cliente.getEmail() + "\nRol: CLIENTE";
+                byte[] infoBytes = infoContent.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                s3DocumentService.uploadDocument(tenantId, "info.txt", new java.io.ByteArrayInputStream(infoBytes), infoBytes.length, "text/plain");
+
+                // 2. Proyectos
+                for (com.example.Procesos.model.Project proyecto : proyectos) {
+                    String sanitizedProjectName = proyecto.getNombre().replaceAll("[^a-zA-Z0-9_.-]", "_");
+                    String projectPath = sanitizedProjectName;
+                    s3DocumentService.createFolder(tenantId, projectPath);
+
+                    // Filtrar instancias de este proyecto y cliente
+                    List<com.example.Procesos.model.ProcessInstance> instsProyecto = instancias.stream()
+                        .filter(i -> proyecto.getId().equals(i.getProjectId()) && cliente.getId().equals(i.getStartedBy()))
+                        .collect(java.util.stream.Collectors.toList());
+
+                    if (instsProyecto.isEmpty()) {
+                        // Subir README.txt
+                        String readmeContent = "Repositorio de " + proyecto.getNombre() + "\n===============================================\nEste proyecto aún no registra ejecuciones o solicitudes iniciadas para el cliente " + cliente.getNombre() + ".";
+                        byte[] readmeBytes = readmeContent.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                        s3DocumentService.uploadDocument(tenantId, projectPath + "/README.txt", new java.io.ByteArrayInputStream(readmeBytes), readmeBytes.length, "text/plain");
+                    } else {
+                        // 3. Diseños / Flujos
+                        java.util.Map<String, List<com.example.Procesos.model.ProcessInstance>> instsPorDiseno = instsProyecto.stream()
+                            .filter(i -> i.getDesignId() != null)
+                            .collect(java.util.stream.Collectors.groupingBy(com.example.Procesos.model.ProcessInstance::getDesignId));
+
+                        for (com.example.Procesos.model.Design diseno : disenos) {
+                            if (!proyecto.getId().equals(diseno.getProjectId())) {
+                                continue;
+                            }
+                            List<com.example.Procesos.model.ProcessInstance> instsDiseno = instsPorDiseno.get(diseno.getId());
+                            if (instsDiseno == null || instsDiseno.isEmpty()) {
+                                continue;
+                            }
+
+                            String sanitizedDesignName = diseno.getNombre().replaceAll("[^a-zA-Z0-9_.-]", "_");
+                            String designPath = projectPath + "/" + sanitizedDesignName;
+                            s3DocumentService.createFolder(tenantId, designPath);
+
+                            // 4. Instancias
+                            for (com.example.Procesos.model.ProcessInstance inst : instsDiseno) {
+                                String instPath = designPath + "/" + inst.getId();
+                                s3DocumentService.createFolder(tenantId, instPath);
+
+                                // Crear process_info.txt
+                                String fechaInicio = inst.getStartedAt() != null ? inst.getStartedAt() : "N/A";
+                                String variablesJson = "{}";
+                                try {
+                                    variablesJson = new com.fasterxml.jackson.databind.ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(inst.getVariables());
+                                } catch (Exception e) {}
+
+                                StringBuilder activitiesStr = new StringBuilder();
+                                if (inst.getActivities() != null) {
+                                    for (var act : inst.getActivities()) {
+                                        activitiesStr.append("  • ").append(act.getNodeLabel()).append(" (").append(act.getNodeType()).append(") -> [").append(act.getStatus()).append("]\n");
+                                    }
+                                }
+
+                                String processInfoContent = "BPMNFLOW - REPORTE DE PROCESO EN DRIVE\n===============================================\n"
+                                        + "Cliente: " + cliente.getNombre() + "\n"
+                                        + "Diseño/Flujo: " + diseno.getNombre() + "\n"
+                                        + "ID de Instancia: " + inst.getId() + "\n"
+                                        + "Proyecto: " + proyecto.getNombre() + "\n"
+                                        + "Iniciado por: " + inst.getStartedBy() + "\n"
+                                        + "Fecha de Inicio: " + fechaInicio + "\n"
+                                        + "Estado: " + inst.getStatus() + "\n\n"
+                                        + "VARIABLES DEL PROCESO:\n" + variablesJson + "\n\n"
+                                        + "HOJA DE RUTA / ACTIVIDADES:\n" + activitiesStr.toString();
+
+                                byte[] infoTxtBytes = processInfoContent.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                                s3DocumentService.uploadDocument(tenantId, instPath + "/process_info.txt", new java.io.ByteArrayInputStream(infoTxtBytes), infoTxtBytes.length, "text/plain");
+                            }
+                        }
+                    }
+                }
+            }
+            return ResponseEntity.ok(java.util.Map.of("message", "Estructura de carpetas y archivos en S3 sincronizada exitosamente."));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().body(java.util.Map.of("error", e.getMessage()));
+        }
     }
 
     /**
