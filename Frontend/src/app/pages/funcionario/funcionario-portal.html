@@ -1,67 +1,94 @@
 <div class="fp-root">
 
   <!-- ══════════════════════════════════════════════════════ HEADER ══ -->
-  <div class="fp-header">
-    <div class="fp-header-left">
-      <button class="fp-back-btn" (click)="volverAlInicio()">
-        <span nz-icon nzType="arrow-left" nzTheme="outline"></span>
-      </button>
-      <div>
-        <h1 class="fp-title">Portal del Funcionario</h1>
-        <p class="fp-subtitle">Gestiona qué procesos puede ver cada cliente</p>
-      </div>
-    </div>
-    <div class="fp-header-badge" *ngIf="clienteSeleccionado">
-      <div class="fp-client-badge">
-        <div class="fp-avatar" [style.background]="getAvatarColor(clienteSeleccionado.id)">
-          {{ getInitials(clienteSeleccionado.nombre) }}
-        </div>
+  <div class="fp-header-wrapper">
+    <div class="fp-header">
+      <div class="fp-header-left">
+        <button class="fp-back-btn" (click)="volverAlInicio()" title="Volver al Inicio">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
         <div>
-          <span class="fp-badge-name">{{ clienteSeleccionado.nombre }}</span>
-          <span class="fp-badge-email">{{ clienteSeleccionado.email }}</span>
+          <h1 class="fp-title">Portal del Funcionario</h1>
+          <p class="fp-subtitle">Asignación inteligente y gestión de accesos a procesos para clientes</p>
+        </div>
+      </div>
+      
+      <div class="fp-header-badge" *ngIf="clienteSeleccionado">
+        <div class="fp-client-badge">
+          <div class="fp-avatar" [style.background]="getAvatarColor(clienteSeleccionado.id)">
+            {{ getInitials(clienteSeleccionado.nombre) }}
+          </div>
+          <div class="fp-client-badge-text">
+            <span class="fp-badge-name">{{ clienteSeleccionado.nombre }}</span>
+            <span class="fp-badge-email">{{ clienteSeleccionado.email }}</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- ══════════════════════════════════════════════════════ STEPPER ══ -->
-  <div class="fp-stepper">
-    <div class="fp-step" [class.active]="currentStep === 0" [class.done]="currentStep > 0" (click)="irAPaso(0)">
-      <div class="fp-step-circle">
-        <span nz-icon [nzType]="currentStep > 0 ? 'check' : 'user'" nzTheme="outline"></span>
+  <div class="fp-stepper-container">
+    <div class="fp-stepper">
+      <!-- Step 0: Cliente -->
+      <div class="fp-step" [class.active]="currentStep === 0" [class.done]="currentStep > 0" (click)="irAPaso(0)">
+        <div class="fp-step-circle">
+          <span *ngIf="currentStep > 0" nz-icon nzType="check" nzTheme="outline"></span>
+          <span *ngIf="currentStep <= 0" nz-icon nzType="user" nzTheme="outline"></span>
+        </div>
+        <div class="fp-step-text">
+          <span class="fp-step-label">Paso 1</span>
+          <span class="fp-step-title">Cliente</span>
+          <span class="fp-step-value" *ngIf="clienteSeleccionado">{{ clienteSeleccionado.nombre }}</span>
+        </div>
       </div>
-      <span class="fp-step-label">Cliente</span>
-      <span class="fp-step-value" *ngIf="clienteSeleccionado">{{ clienteSeleccionado.nombre }}</span>
-    </div>
 
-    <div class="fp-step-line" [class.active]="currentStep >= 1"></div>
+      <div class="fp-step-line" [class.active]="currentStep >= 1"></div>
 
-    <div class="fp-step" [class.active]="currentStep === 1" [class.done]="currentStep > 1" [class.disabled]="currentStep < 1" (click)="irAPaso(1)">
-      <div class="fp-step-circle">
-        <span nz-icon [nzType]="currentStep > 1 ? 'check' : 'project'" nzTheme="outline"></span>
+      <!-- Step 1: Proyecto -->
+      <div class="fp-step" [class.active]="currentStep === 1" [class.done]="currentStep > 1" [class.disabled]="currentStep < 1" (click)="irAPaso(1)">
+        <div class="fp-step-circle">
+          <span *ngIf="currentStep > 1" nz-icon nzType="check" nzTheme="outline"></span>
+          <span *ngIf="currentStep <= 1" nz-icon nzType="project" nzTheme="outline"></span>
+        </div>
+        <div class="fp-step-text">
+          <span class="fp-step-label">Paso 2</span>
+          <span class="fp-step-title">Proyecto</span>
+          <span class="fp-step-value" *ngIf="proyectoSeleccionado">{{ proyectoSeleccionado.nombre }}</span>
+        </div>
       </div>
-      <span class="fp-step-label">Proyecto</span>
-      <span class="fp-step-value" *ngIf="proyectoSeleccionado">{{ proyectoSeleccionado.nombre }}</span>
-    </div>
 
-    <div class="fp-step-line" [class.active]="currentStep >= 2"></div>
+      <div class="fp-step-line" [class.active]="currentStep >= 2"></div>
 
-    <div class="fp-step" [class.active]="currentStep === 2" [class.done]="currentStep > 2" [class.disabled]="currentStep < 2" (click)="irAPaso(2)">
-      <div class="fp-step-circle">
-        <span nz-icon [nzType]="currentStep > 2 ? 'check' : 'branches'" nzTheme="outline"></span>
+      <!-- Step 2: Diseño -->
+      <div class="fp-step" [class.active]="currentStep === 2" [class.done]="currentStep > 2" [class.disabled]="currentStep < 2" (click)="irAPaso(2)">
+        <div class="fp-step-circle">
+          <span *ngIf="currentStep > 2" nz-icon nzType="check" nzTheme="outline"></span>
+          <span *ngIf="currentStep <= 2" nz-icon nzType="branches" nzTheme="outline"></span>
+        </div>
+        <div class="fp-step-text">
+          <span class="fp-step-label">Paso 3</span>
+          <span class="fp-step-title">Diseño</span>
+          <span class="fp-step-value" *ngIf="disenoSeleccionado">{{ disenoSeleccionado.nombre }}</span>
+        </div>
       </div>
-      <span class="fp-step-label">Diseño</span>
-      <span class="fp-step-value" *ngIf="disenoSeleccionado">{{ disenoSeleccionado.nombre }}</span>
-    </div>
 
-    <div class="fp-step-line" [class.active]="currentStep >= 3"></div>
+      <div class="fp-step-line" [class.active]="currentStep >= 3"></div>
 
-    <div class="fp-step" [class.active]="currentStep === 3" [class.disabled]="currentStep < 3">
-      <div class="fp-step-circle">
-        <span nz-icon nzType="safety" nzTheme="outline"></span>
+      <!-- Step 3: Habilitar -->
+      <div class="fp-step" [class.active]="currentStep === 3" [class.disabled]="currentStep < 3">
+        <div class="fp-step-circle">
+          <span nz-icon nzType="safety" nzTheme="outline"></span>
+        </div>
+        <div class="fp-step-text">
+          <span class="fp-step-label">Paso 4</span>
+          <span class="fp-step-title">Habilitar</span>
+          <span class="fp-step-value" *ngIf="currentStep === 3">{{ habilitadosCount }} activos</span>
+        </div>
       </div>
-      <span class="fp-step-label">Habilitar</span>
-      <span class="fp-step-value" *ngIf="currentStep === 3">{{ habilitadosCount }} activos</span>
     </div>
   </div>
 
@@ -71,34 +98,48 @@
     <!-- ──────────────────────── STEP 0: SELECCIONAR CLIENTE ──────────── -->
     <div class="fp-panel" *ngIf="currentStep === 0">
       <div class="fp-panel-header">
-        <span nz-icon nzType="team" nzTheme="outline" class="fp-panel-icon"></span>
-        <div>
-          <h2>Selecciona un Cliente</h2>
-          <p>Escoge el cliente al que deseas gestionar los accesos a procesos</p>
+        <div class="fp-panel-header-info">
+          <span nz-icon nzType="team" nzTheme="outline" class="fp-panel-icon"></span>
+          <div>
+            <h2>Seleccionar Cliente</h2>
+            <p>Escoge un cliente para configurar sus permisos de flujo de procesos</p>
+          </div>
         </div>
       </div>
 
-      <div *ngIf="cargandoClientes" class="fp-loading">
-        <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando clientes...
+      <div *ngIf="cargandoClientes" class="fp-loading-spinner">
+        <nz-spin nzSimple nzSize="large"></nz-spin>
+        <p>Cargando lista de clientes registrados...</p>
       </div>
 
-      <div class="fp-empty" *ngIf="!cargandoClientes && clientes.length === 0">
-        <span nz-icon nzType="inbox" nzTheme="outline"></span>
-        <p>No hay clientes registrados aún.</p>
+      <div class="fp-empty-state" *ngIf="!cargandoClientes && clientes.length === 0">
+        <div class="fp-empty-icon-wrap">
+          <span nz-icon nzType="user-add" nzTheme="outline"></span>
+        </div>
+        <h3>Sin clientes registrados</h3>
+        <p>No se encontraron cuentas de tipo cliente registradas en el sistema.</p>
       </div>
 
-      <div class="fp-cards-grid" *ngIf="!cargandoClientes && clientes.length > 0">
-        <div class="fp-client-card" *ngFor="let c of clientes" (click)="seleccionarCliente(c)">
-          <div class="fp-client-avatar" [style.background]="getAvatarColor(c.id)">
-            {{ getInitials(c.nombre) }}
+      <div class="fp-cards-grid-clients" *ngIf="!cargandoClientes && clientes.length > 0">
+        <div class="fp-client-card-new" *ngFor="let c of clientes" (click)="seleccionarCliente(c)">
+          <div class="fp-client-top">
+            <div class="fp-client-avatar-large" [style.background]="getAvatarColor(c.id)">
+              {{ getInitials(c.nombre) }}
+            </div>
+            <div class="fp-client-details">
+              <span class="fp-client-name-text">{{ c.nombre }}</span>
+              <span class="fp-client-email-text">{{ c.email }}</span>
+            </div>
           </div>
-          <div class="fp-client-info">
-            <span class="fp-client-name">{{ c.nombre }}</span>
-            <span class="fp-client-email">{{ c.email }}</span>
-            <span class="fp-client-tenant">{{ c.tenantId }}</span>
-          </div>
-          <div class="fp-client-arrow">
-            <span nz-icon nzType="right" nzTheme="outline"></span>
+          <div class="fp-client-bottom">
+            <div class="fp-client-tenant-badge">
+              <span class="tenant-dot"></span>
+              <span>ID: {{ c.tenantId || 'global' }}</span>
+            </div>
+            <div class="fp-client-action-btn">
+              <span>Gestionar</span>
+              <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -107,32 +148,43 @@
     <!-- ──────────────────────── STEP 1: SELECCIONAR PROYECTO ──────────── -->
     <div class="fp-panel" *ngIf="currentStep === 1">
       <div class="fp-panel-header">
-        <span nz-icon nzType="folder-open" nzTheme="outline" class="fp-panel-icon"></span>
-        <div>
-          <h2>Selecciona un Proyecto</h2>
-          <p>Elige el proyecto que contiene los diseños de proceso</p>
+        <div class="fp-panel-header-info">
+          <span nz-icon nzType="folder-open" nzTheme="outline" class="fp-panel-icon"></span>
+          <div>
+            <h2>Seleccionar Proyecto</h2>
+            <p>Elige el proyecto que contiene los diagramas y flujos de negocio</p>
+          </div>
         </div>
       </div>
 
-      <div *ngIf="cargandoProyectos" class="fp-loading">
-        <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando proyectos...
+      <div *ngIf="cargandoProyectos" class="fp-loading-spinner">
+        <nz-spin nzSimple nzSize="large"></nz-spin>
+        <p>Cargando proyectos del sistema...</p>
       </div>
 
-      <div class="fp-empty" *ngIf="!cargandoProyectos && proyectos.length === 0">
-        <span nz-icon nzType="inbox" nzTheme="outline"></span>
-        <p>No hay proyectos creados aún.</p>
+      <div class="fp-empty-state" *ngIf="!cargandoProyectos && proyectos.length === 0">
+        <div class="fp-empty-icon-wrap">
+          <span nz-icon nzType="folder-add" nzTheme="outline"></span>
+        </div>
+        <h3>No hay proyectos</h3>
+        <p>Aún no se han creado proyectos de procesos de negocio.</p>
       </div>
 
-      <div class="fp-cards-grid" *ngIf="!cargandoProyectos && proyectos.length > 0">
-        <div class="fp-project-card" *ngFor="let p of proyectos" (click)="seleccionarProyecto(p)">
-          <div class="fp-project-icon-wrap">
-            <span nz-icon nzType="folder" nzTheme="fill" class="fp-project-icon"></span>
+      <div class="fp-cards-grid-projects" *ngIf="!cargandoProyectos && proyectos.length > 0">
+        <div class="fp-project-card-new" *ngFor="let p of proyectos" (click)="seleccionarProyecto(p)">
+          <div class="fp-project-card-header">
+            <div class="fp-project-icon-circle">
+              <span nz-icon nzType="project" nzTheme="outline"></span>
+            </div>
+            <span nz-icon nzType="right" nzTheme="outline" class="fp-chevron"></span>
           </div>
-          <div class="fp-project-info">
-            <span class="fp-project-name">{{ p.nombre }}</span>
-            <span class="fp-project-desc">{{ p.descripcion }}</span>
+          <div class="fp-project-card-body">
+            <h3 class="fp-project-title-text">{{ p.nombre }}</h3>
+            <p class="fp-project-desc-text">{{ p.descripcion || 'Sin descripción detallada disponible.' }}</p>
           </div>
-          <span nz-icon nzType="right" nzTheme="outline" class="fp-arrow"></span>
+          <div class="fp-project-card-footer">
+            <span class="fp-project-tag">Workspace</span>
+          </div>
         </div>
       </div>
     </div>
@@ -140,40 +192,50 @@
     <!-- ──────────────────────── STEP 2: SELECCIONAR DISEÑO ────────────── -->
     <div class="fp-panel" *ngIf="currentStep === 2">
       <div class="fp-panel-header">
-        <span nz-icon nzType="branches" nzTheme="outline" class="fp-panel-icon"></span>
-        <div>
-          <h2>Selecciona un Diseño</h2>
-          <p>Proyecto: <strong>{{ proyectoSeleccionado?.nombre }}</strong> — Escoge el diseño de proceso a gestionar</p>
+        <div class="fp-panel-header-info">
+          <span nz-icon nzType="branches" nzTheme="outline" class="fp-panel-icon"></span>
+          <div>
+            <h2>Seleccionar Diseño de Proceso</h2>
+            <p>Proyecto: <span class="header-bold">{{ proyectoSeleccionado?.nombre }}</span> — Escoge un diagrama para configurar accesos individuales</p>
+          </div>
         </div>
       </div>
 
-      <div *ngIf="cargandoDisenos" class="fp-loading">
-        <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando diseños...
+      <div *ngIf="cargandoDisenos" class="fp-loading-spinner">
+        <nz-spin nzSimple nzSize="large"></nz-spin>
+        <p>Obteniendo diseños BPMN...</p>
       </div>
 
-      <div class="fp-empty" *ngIf="!cargandoDisenos && disenos.length === 0">
-        <span nz-icon nzType="inbox" nzTheme="outline"></span>
-        <p>Este proyecto no tiene diseños aún.</p>
+      <div class="fp-empty-state" *ngIf="!cargandoDisenos && disenos.length === 0">
+        <div class="fp-empty-icon-wrap">
+          <span nz-icon nzType="block" nzTheme="outline"></span>
+        </div>
+        <h3>Proyecto sin diseños</h3>
+        <p>Este proyecto no tiene flujos de procesos modelados aún.</p>
       </div>
 
-      <div class="fp-cards-grid fp-designs-grid" *ngIf="!cargandoDisenos && disenos.length > 0">
-        <div class="fp-design-card" *ngFor="let d of disenos" (click)="seleccionarDiseno(d)">
-          <!-- Mini BPMN preview -->
-          <div class="fp-design-preview">
-            <div class="fp-bpmn-node fp-start"></div>
-            <div class="fp-bpmn-line"></div>
-            <div class="fp-bpmn-node fp-task"></div>
-            <div class="fp-bpmn-line"></div>
-            <div class="fp-bpmn-node fp-end"></div>
-            <span nz-icon nzType="apartment" nzTheme="outline" class="fp-design-bg-icon"></span>
+      <div class="fp-cards-grid-designs" *ngIf="!cargandoDisenos && disenos.length > 0">
+        <div class="fp-design-card-new" *ngFor="let d of disenos" (click)="seleccionarDiseno(d)">
+          <div class="fp-design-card-preview">
+            <div class="preview-nodes-row">
+              <div class="p-node start"></div>
+              <div class="p-line"></div>
+              <div class="p-node task"></div>
+              <div class="p-line"></div>
+              <div class="p-node end"></div>
+            </div>
+            <div class="design-preview-overlay">
+              <span nz-icon nzType="eye" nzTheme="outline"></span>
+              <span>Configurar</span>
+            </div>
           </div>
-          <div class="fp-design-info">
-            <span class="fp-design-name">{{ d.nombre }}</span>
-            <div class="fp-design-meta">
-              <nz-tag [nzColor]="d.estado === 'Activo' ? 'green' : d.estado === 'Borrador' ? 'blue' : 'default'">
+          <div class="fp-design-card-content">
+            <h4 class="design-card-title">{{ d.nombre }}</h4>
+            <div class="design-card-badges">
+              <span class="status-badge" [class.activo]="d.estado === 'Activo'" [class.borrador]="d.estado === 'Borrador'">
                 {{ d.estado }}
-              </nz-tag>
-              <span class="fp-design-lock" *ngIf="d.locked">
+              </span>
+              <span class="lock-badge" *ngIf="d.locked">
                 <span nz-icon nzType="lock" nzTheme="fill"></span> En uso
               </span>
             </div>
@@ -184,139 +246,174 @@
 
     <!-- ──────────────────────── STEP 3: HABILITAR / GESTIONAR ─────────── -->
     <div class="fp-panel" *ngIf="currentStep === 3">
-      <div class="fp-panel-header">
-        <span nz-icon nzType="safety-certificate" nzTheme="outline" class="fp-panel-icon fp-panel-icon--green"></span>
-        <div>
-          <h2>Gestión de Acceso a Procesos</h2>
-          <p>
-            Cliente: <strong>{{ clienteSeleccionado?.nombre }}</strong> —
-            Proyecto: <strong>{{ proyectoSeleccionado?.nombre }}</strong>
-          </p>
-        </div>
-        <div class="fp-bulk-actions">
-          <button class="fp-btn fp-btn--outline" (click)="habilitarTodos()">
-            <span nz-icon nzType="check-circle" nzTheme="outline"></span> Habilitar todos
-          </button>
-          <button class="fp-btn fp-btn--danger" (click)="deshabilitarTodos()">
-            <span nz-icon nzType="close-circle" nzTheme="outline"></span> Deshabilitar todos
-          </button>
-        </div>
-      </div>
-
-      <div *ngIf="cargandoAsignaciones" class="fp-loading">
-        <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando estado de asignaciones...
-      </div>
-
-      <!-- Stats bar -->
-      <div class="fp-stats-bar" *ngIf="!cargandoAsignaciones">
-        <div class="fp-stat">
-          <span class="fp-stat-num fp-stat--green">{{ habilitadosCount }}</span>
-          <span class="fp-stat-label">Habilitados</span>
-        </div>
-        <div class="fp-stat-divider"></div>
-        <div class="fp-stat">
-          <span class="fp-stat-num fp-stat--amber">{{ solicitadosCount }}</span>
-          <span class="fp-stat-label">Pendientes</span>
-        </div>
-        <div class="fp-stat-divider"></div>
-        <div class="fp-stat">
-          <span class="fp-stat-num fp-stat--red">{{ asignaciones.length - habilitadosCount - solicitadosCount }}</span>
-          <span class="fp-stat-label">Bloqueados</span>
-        </div>
-        <div class="fp-stat-divider"></div>
-        <div class="fp-stat">
-          <span class="fp-stat-num">{{ asignaciones.length }}</span>
-          <span class="fp-stat-label">Total Procesos</span>
-        </div>
-      </div>
-
-      <!-- Assignment table -->
-      <div class="fp-assign-table" *ngIf="!cargandoAsignaciones && asignaciones.length > 0">
-        <div class="fp-assign-row fp-assign-header">
-          <span>Proceso / Diseño</span>
-          <span>Estado del Diseño</span>
-          <span>Flujo del Cliente</span>
-          <span>Acceso del Cliente</span>
-        </div>
-
-        <div class="fp-assign-row" *ngFor="let a of asignaciones"
-             [class.fp-assign-row--active]="a.habilitado"
-             [class.fp-assign-row--solicitado]="a.solicitado && !a.habilitado">
-          <div class="fp-assign-name">
-            <div class="fp-assign-icon" [class.fp-assign-icon--on]="a.habilitado" [class.fp-assign-icon--pending]="a.solicitado && !a.habilitado">
-              <span nz-icon [nzType]="a.habilitado ? 'unlock' : (a.solicitado ? 'clock-circle' : 'lock')" nzTheme="outline"></span>
-            </div>
-            <div>
-              <span class="fp-assign-title">
-                {{ a.designNombre }}
-                <nz-tag *ngIf="a.solicitado && !a.habilitado" nzColor="warning" style="margin-left: 8px;">Solicitado (Pendiente)</nz-tag>
-              </span>
-              <span class="fp-assign-id">ID: {{ a.designId.substring(0, 12) }}...</span>
-            </div>
-          </div>
-
+      <div class="fp-panel-header fp-panel-header--split">
+        <div class="fp-panel-header-info">
+          <span nz-icon nzType="safety-certificate" nzTheme="outline" class="fp-panel-icon fp-panel-icon--green"></span>
           <div>
-            <nz-tag [nzColor]="disenos.find(d => d.id === a.designId)?.estado === 'Activo' ? 'green' : 'blue'">
-              {{ disenos.find(d => d.id === a.designId)?.estado || '—' }}
-            </nz-tag>
+            <h2>Gestión de Accesos y Permisos</h2>
+            <p>
+              Cliente: <span class="header-bold">{{ clienteSeleccionado?.nombre }}</span> 
+              <span class="header-bullet">•</span> 
+              Proyecto: <span class="header-bold">{{ proyectoSeleccionado?.nombre }}</span>
+            </p>
           </div>
+        </div>
+        <div class="fp-bulk-actions-wrapper">
+          <button class="action-pill approve" (click)="habilitarTodos()">
+            <span nz-icon nzType="check-square" nzTheme="outline"></span> Habilitar Todo
+          </button>
+          <button class="action-pill reject" (click)="deshabilitarTodos()">
+            <span nz-icon nzType="stop" nzTheme="outline"></span> Bloquear Todo
+          </button>
+        </div>
+      </div>
 
-          <!-- Instancias de proceso del cliente -->
-          <div class="fp-instances-col">
-            <ng-container *ngIf="getInstanciasDeDiseno(a.designId).length > 0; else noInstancias">
-              <div *ngFor="let inst of getInstanciasDeDiseno(a.designId)" class="fp-instance-row">
-                <nz-tag [nzColor]="getStatusColor(inst.status)" style="font-size: 10px;">
-                  {{ getStatusLabel(inst.status) }}
-                </nz-tag>
-                <button nz-button nzType="default" nzSize="small"
-                        style="border-radius: 6px; font-size: 11px; font-weight: 600;"
-                        (click)="verFlujo(a.designId, inst.id)">
-                  <span nz-icon nzType="eye" nzTheme="outline"></span> Ver flujo
-                </button>
-              </div>
-            </ng-container>
-            <ng-template #noInstancias>
-              <span style="color: #94a3b8; font-size: 12px;">Sin procesos</span>
-            </ng-template>
+      <div *ngIf="cargandoAsignaciones" class="fp-loading-spinner">
+        <nz-spin nzSimple nzSize="large"></nz-spin>
+        <p>Cargando matriz de accesos y procesos activos...</p>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="fp-stats-grid" *ngIf="!cargandoAsignaciones">
+        <div class="fp-stat-card green">
+          <div class="stat-card-icon">
+            <span nz-icon nzType="unlock" nzTheme="outline"></span>
           </div>
-
-          <div class="fp-assign-toggle">
-            <button *ngIf="a.solicitado && !a.habilitado" nz-button nzType="primary" nzSize="default" class="fp-approve-btn" (click)="aprobarSolicitud(a)" [nzLoading]="guardando">
-              <span nz-icon nzType="check-circle" nzTheme="outline"></span> Aprobar
-            </button>
-            <nz-switch
-              [ngModel]="a.habilitado"
-              (ngModelChange)="toggleAsignacion(a)"
-              [nzLoading]="guardando"
-              [nzCheckedChildren]="checkedTpl"
-              [nzUnCheckedChildren]="uncheckedTpl">
-            </nz-switch>
-            <ng-template #checkedTpl>
-              <span nz-icon nzType="check"></span>
-            </ng-template>
-            <ng-template #uncheckedTpl>
-              <span nz-icon nzType="close"></span>
-            </ng-template>
-            <span class="fp-toggle-label" [class.fp-toggle-on]="a.habilitado" [class.fp-toggle-pending]="a.solicitado && !a.habilitado">
-              {{ a.habilitado ? 'Habilitado' : (a.solicitado ? 'Solicitado' : 'Bloqueado') }}
-            </span>
+          <div class="stat-card-data">
+            <span class="stat-number">{{ habilitadosCount }}</span>
+            <span class="stat-label">Habilitados</span>
+          </div>
+        </div>
+        <div class="fp-stat-card amber">
+          <div class="stat-card-icon">
+            <span nz-icon nzType="bell" nzTheme="outline"></span>
+          </div>
+          <div class="stat-card-data">
+            <span class="stat-number">{{ solicitadosCount }}</span>
+            <span class="stat-label">Pendientes IA</span>
+          </div>
+        </div>
+        <div class="fp-stat-card red">
+          <div class="stat-card-icon">
+            <span nz-icon nzType="lock" nzTheme="outline"></span>
+          </div>
+          <div class="stat-card-data">
+            <span class="stat-number">{{ asignaciones.length - habilitadosCount - solicitadosCount }}</span>
+            <span class="stat-label">Bloqueados</span>
+          </div>
+        </div>
+        <div class="fp-stat-card blue">
+          <div class="stat-card-icon">
+            <span nz-icon nzType="database" nzTheme="outline"></span>
+          </div>
+          <div class="stat-card-data">
+            <span class="stat-number">{{ asignaciones.length }}</span>
+            <span class="stat-label">Total Procesos</span>
           </div>
         </div>
       </div>
 
-      <div class="fp-empty" *ngIf="!cargandoAsignaciones && asignaciones.length === 0">
-        <span nz-icon nzType="inbox" nzTheme="outline"></span>
-        <p>No hay diseños en este proyecto.</p>
+      <!-- New Elegance Matrix/Table -->
+      <div class="fp-matrix-container" *ngIf="!cargandoAsignaciones && asignaciones.length > 0">
+        <div class="fp-matrix-header">
+          <span>Proceso / Flujo</span>
+          <span>Tipo / Estado</span>
+          <span>Instancia en Curso</span>
+          <span style="text-align: right; padding-right: 16px;">Acciones de Acceso</span>
+        </div>
+
+        <div class="fp-matrix-body">
+          <div class="fp-matrix-row" *ngFor="let a of asignaciones"
+               [class.row-active]="a.habilitado"
+               [class.row-solicitado]="a.solicitado && !a.habilitado">
+            
+            <!-- Proceso / Flujo -->
+            <div class="cell-process">
+              <div class="process-avatar" [class.active]="a.habilitado" [class.pending]="a.solicitado && !a.habilitado">
+                <span nz-icon [nzType]="a.habilitado ? 'unlock' : (a.solicitado ? 'sync' : 'lock')" nzTheme="outline"></span>
+              </div>
+              <div class="process-text-group">
+                <span class="process-title">{{ a.designNombre }}</span>
+                <span class="process-id">UUID: {{ a.designId.slice(0,18) }}...</span>
+              </div>
+            </div>
+
+            <!-- Estado del diseño -->
+            <div class="cell-status">
+              <span class="tag-status" [class.activo]="disenos.find(d => d.id === a.designId)?.estado === 'Activo'">
+                {{ disenos.find(d => d.id === a.designId)?.estado || 'Borrador' }}
+              </span>
+            </div>
+
+            <!-- Flujo del cliente / Instancias en curso -->
+            <div class="cell-instances">
+              <ng-container *ngIf="getInstanciasDeDiseno(a.designId).length > 0; else noInstancias">
+                <div *ngFor="let inst of getInstanciasDeDiseno(a.designId)" class="instance-row-pill">
+                  <span class="instance-indicator" [class.active]="inst.status === 'ACTIVE'" [class.completed]="inst.status === 'COMPLETED'"></span>
+                  <span class="instance-status-lbl">{{ getStatusLabel(inst.status) }}</span>
+                  <button class="btn-view-flow" (click)="verFlujo(a.designId, inst.id)">
+                    <span nz-icon nzType="eye" nzTheme="outline"></span>
+                    <span>Ver flujo</span>
+                  </button>
+                </div>
+              </ng-container>
+              <ng-template #noInstancias>
+                <span class="no-instances-text">Sin instancias activas</span>
+              </ng-template>
+            </div>
+
+            <!-- Acceso del cliente -->
+            <div class="cell-access">
+              <div class="access-action-layout">
+                <!-- Approve Button if requested -->
+                <button *ngIf="a.solicitado && !a.habilitado" class="approve-request-btn" (click)="aprobarSolicitud(a)" [disabled]="guardando">
+                  <span nz-icon nzType="check-circle" nzTheme="outline"></span>
+                  <span>Aprobar acceso</span>
+                </button>
+                
+                <div class="switch-access-group">
+                  <nz-switch
+                    [ngModel]="a.habilitado"
+                    (ngModelChange)="toggleAsignacion(a)"
+                    [nzLoading]="guardando"
+                    [nzCheckedChildren]="checkedTpl"
+                    [nzUnCheckedChildren]="uncheckedTpl">
+                  </nz-switch>
+                  <ng-template #checkedTpl><span nz-icon nzType="check"></span></ng-template>
+                  <ng-template #uncheckedTpl><span nz-icon nzType="close"></span></ng-template>
+                  
+                  <span class="access-label" [class.enabled]="a.habilitado" [class.requested]="a.solicitado && !a.habilitado">
+                    {{ a.habilitado ? 'Habilitado' : (a.solicitado ? 'Solicitado' : 'Bloqueado') }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
 
-      <!-- Confirmation info box -->
-      <div class="fp-info-box" *ngIf="!cargandoAsignaciones">
-        <span nz-icon nzType="info-circle" nzTheme="outline"></span>
-        Los cambios se guardan automáticamente al hacer clic en el switch. 
-        El cliente verá solo los procesos habilitados en su app móvil.
+      <div class="fp-empty-state" *ngIf="!cargandoAsignaciones && asignaciones.length === 0">
+        <div class="fp-empty-icon-wrap">
+          <span nz-icon nzType="folder" nzTheme="outline"></span>
+        </div>
+        <h3>No hay diseños disponibles</h3>
+        <p>No se encontraron diseños asociados a este proyecto.</p>
+      </div>
+
+      <!-- Info Footer -->
+      <div class="fp-info-box-new" *ngIf="!cargandoAsignaciones">
+        <div class="info-icon-circle">
+          <span nz-icon nzType="info" nzTheme="outline"></span>
+        </div>
+        <div class="info-text">
+          <p class="info-title">Cambios en tiempo real</p>
+          <p class="info-desc">Los accesos modificados se sincronizan instantáneamente con la base de datos. El cliente correspondiente visualizará de inmediato los flujos permitidos dentro de su aplicación móvil.</p>
+        </div>
       </div>
     </div>
 
   </div>
 </div>
+
 
