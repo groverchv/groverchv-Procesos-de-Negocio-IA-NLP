@@ -21,13 +21,7 @@ class MotorNLP:
         # Si se solicita 'groq' o si no hay ollama local configurado:
         if provider == "groq" or not ollama_base:
             url = "https://api.groq.com/openai/v1/chat/completions"
-            local_model = os.getenv("OLLAMA_MODEL", "gemma2")
-            if "gemma" in local_model.lower():
-                model = "llama3-8b-8192"
-            elif "llama" in local_model.lower():
-                model = "llama-3.1-8b-instant"
-            else:
-                model = "llama3-8b-8192"
+            model = "llama-3.1-8b-instant"
             return url, model
         else:
             url = f"{ollama_base}/v1/chat/completions"
