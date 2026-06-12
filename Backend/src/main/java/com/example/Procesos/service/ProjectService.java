@@ -12,6 +12,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ProjectService {
     private final ProjectRepository projectRepository;
+    private final S3DocumentService s3DocumentService;
 
     public List<Project> getAllProjects() {
         return projectRepository.findAll();
@@ -22,7 +23,15 @@ public class ProjectService {
     }
 
     public Project createProject(Project project) {
-        return projectRepository.save(project);
+        Project saved = projectRepository.save(project);
+
+        // Crear carpeta del proyecto en S3 si tiene tenantId y nombre
+        if (saved.getTenantId() != null && !saved.getTenantId().isEmpty() && saved.getNombre() != null) {
+            String safeProjectName = saved.getNombre().replaceAll("[^a-zA-Z0-9_\\-]", "_");
+            s3DocumentService.createFolder(saved.getTenantId(), safeProjectName);
+        }
+
+        return saved;
     }
 
     public void deleteProject(String id) {

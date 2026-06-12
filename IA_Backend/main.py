@@ -272,13 +272,16 @@ Tu respuesta debe ser redactada directamente en formato de documento de texto, e
 TRANSCRIPCIÓN:
 "{transcripcion}"
 """
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY", "ollama")
+    ollama_base = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+    ollama_url = f"{ollama_base}/v1/chat/completions"
+    ollama_model = os.getenv("OLLAMA_MODEL", "gemma2")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
     body = {
-        "model": "llama-3.3-70b-versatile",
+        "model": ollama_model,
         "messages": [
             { "role": "system", "content": "Eres un redactor corporativo experto en actas de reunión y minutas corporativas." },
             { "role": "user", "content": prompt_resumen }
@@ -291,7 +294,7 @@ TRANSCRIPCIÓN:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
+                ollama_url,
                 json=body,
                 headers=headers,
                 timeout=30.0
@@ -347,10 +350,10 @@ async def chat_stream_websocket(websocket: WebSocket):
             from services.vector_store import vector_store
             contexto_recuperado = vector_store.recuperar_contexto(tenant_id, last_user_message)
             
-            api_key = os.getenv("GROQ_API_KEY")
-            if not api_key:
-                await websocket.send_json({"error": "Falta la API Key de Groq."})
-                continue
+            api_key = os.getenv("GROQ_API_KEY", "ollama")
+            ollama_base = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+            ollama_url = f"{ollama_base}/v1/chat/completions"
+            ollama_model = os.getenv("OLLAMA_MODEL", "gemma2")
                 
             system_prompt = f"""Eres un Asistente Corporativo Avanzado (IA con Memoria de Cliente) integrado en BPMNFlow.
 Tu objetivo es responder de forma ultra-personalizada y precisa a las consultas del cliente.
@@ -371,7 +374,7 @@ Posees acceso a documentos privados e históricos del repositorio S3 correspondi
                 "Authorization": f"Bearer {api_key}"
             }
             body = {
-                "model": "llama-3.3-70b-versatile",
+                "model": ollama_model,
                 "messages": full_messages,
                 "temperature": 0.4,
                 "max_tokens": 1024,
@@ -380,7 +383,7 @@ Posees acceso a documentos privados e históricos del repositorio S3 correspondi
             
             # Enviar streaming de tokens
             async with httpx.AsyncClient() as client:
-                async with client.stream("POST", "https://api.groq.com/openai/v1/chat/completions", json=body, headers=headers, timeout=60.0) as response:
+                async with client.stream("POST", ollama_url, json=body, headers=headers, timeout=60.0) as response:
                     async for line in response.aiter_lines():
                         if line.startswith("data: "):
                             data_str = line[6:]
@@ -625,7 +628,7 @@ async def generar_reporte_dinamico(requerimiento: ReporteDinamicoRequest):
 
 @app.get("/api/v1/reportes/generar")
 def generar_reporte_bi(tenant_id: str):
-    bucket_name = os.getenv("AWS_S3_BUCKET", "gestion-procesos-203677519083-sa-east-1-an")
+    bucket_name = os.getenv("AWS_S3_BUCKET", "procesodegestion")
     return {
         "tenant_id": tenant_id,
         "reporte_url": f"https://s3.amazonaws.com/{bucket_name}/{tenant_id}/reporte_ia_mensual.pdf",

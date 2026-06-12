@@ -21,7 +21,7 @@ public class S3DocumentService {
     private final S3Presigner s3Presigner;
     private final String BUCKET_NAME = System.getenv("AWS_S3_BUCKET") != null && !System.getenv("AWS_S3_BUCKET").trim().isEmpty()
             ? System.getenv("AWS_S3_BUCKET")
-            : "gestion-procesos-203677519083-sa-east-1-an";
+            : "procesodegestion";
 
     public S3DocumentService(S3Client s3Client, S3Presigner s3Presigner) {
         this.s3Client = s3Client;
@@ -104,5 +104,28 @@ public class S3DocumentService {
                 .build();
 
         s3Client.deleteObject(deleteRequest);
+    }
+
+    /**
+     * Crea una carpeta virtual en S3 subiendo un archivo marcador vacío (.keep).
+     * Las "carpetas" en S3 son objetos cuya clave termina en "/".
+     * @param tenantId El ID del tenant raíz.
+     * @param folderPath La ruta de la carpeta relativa al tenant (e.g. "ProyectoA/Instancia1").
+     */
+    public void createFolder(String tenantId, String folderPath) {
+        try {
+            String cleanPath = folderPath.endsWith("/") ? folderPath : folderPath + "/";
+            String s3Key = tenantId + "/" + cleanPath + ".keep";
+
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(BUCKET_NAME)
+                    .key(s3Key)
+                    .contentType("application/x-directory")
+                    .build();
+
+            s3Client.putObject(putObjectRequest, RequestBody.empty());
+        } catch (Exception e) {
+            System.err.println("[S3] Advertencia al crear carpeta '" + folderPath + "': " + e.getMessage());
+        }
     }
 }

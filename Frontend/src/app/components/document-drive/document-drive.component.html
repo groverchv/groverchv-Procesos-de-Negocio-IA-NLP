@@ -53,7 +53,7 @@
         <span nz-icon nzType="file-add" nzTheme="outline"></span> Nuevo Formato
       </button>
       
-      <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)">
+      <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)" accept=".txt,.pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.svg,.csv">
       <label for="file-upload" class="upload-btn">
         <span nz-icon nzType="upload" nzTheme="outline"></span> Subir Documento
       </label>
@@ -107,7 +107,19 @@
           <tr *ngFor="let item of files" (dblclick)="abrirElemento(item)" class="drive-row">
             <td>
               <div class="file-name-cell">
-                <span nz-icon nzType="file-text" nzTheme="outline" class="file-icon-lead"></span>
+                <!-- Icono dinámico según extensión del archivo -->
+                <ng-container [ngSwitch]="getFileExtension(item.name)">
+                  <span *ngSwitchCase="'docx'" class="file-type-icon icon-word" title="Word">W</span>
+                  <span *ngSwitchCase="'doc'" class="file-type-icon icon-word" title="Word">W</span>
+                  <span *ngSwitchCase="'xlsx'" class="file-type-icon icon-excel" title="Excel">X</span>
+                  <span *ngSwitchCase="'xls'" class="file-type-icon icon-excel" title="Excel">X</span>
+                  <span *ngSwitchCase="'pdf'" class="file-type-icon icon-pdf" title="PDF">P</span>
+                  <span *ngSwitchCase="'png'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchCase="'jpg'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchCase="'jpeg'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchCase="'gif'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchDefault nz-icon nzType="file-text" nzTheme="outline" class="file-icon-lead"></span>
+                </ng-container>
                 <span class="file-name-text" (click)="abrirElemento(item)">{{ item.name }}</span>
               </div>
             </td>
@@ -115,7 +127,7 @@
             <td>{{ item.date | date:'short' }}</td>
             <td>
               <nz-space nzSize="small">
-                <button *ngIf="item.name.endsWith('.txt')" class="action-btn-download" (click)="abrirEditor(item)">
+                <button *ngIf="item.name.endsWith('.txt') || item.name.endsWith('.docx') || item.name.endsWith('.doc')" class="action-btn-download" (click)="abrirEditor(item)">
                   <span nz-icon nzType="edit" nzTheme="outline"></span> Editar
                 </button>
                 <button class="action-btn-download" (click)="visualizarElemento(item)">
@@ -237,7 +249,9 @@
             <div class="dashboard-divider"></div>
           </div>
 
+          <!-- Editor .txt: Textarea de texto plano -->
           <textarea 
+            *ngIf="!isDocxFile"
             [ngModel]="fileContent"
             (ngModelChange)="onContentChange($event)"
             placeholder="Escribe el contenido de tu documento o solicita ayuda a la IA de redacción..."
@@ -245,6 +259,28 @@
             [readonly]="editingFile.name === 'historial_bitacora.txt'"
             style="flex: 1; width: 100%; border: none; outline: none; resize: none; font-size: 1.1rem; line-height: 1.8; font-family: 'Georgia', 'Times New Roman', serif; color: #1e293b; background: transparent; min-height: 400px;"
           ></textarea>
+
+          <!-- Editor .docx: WYSIWYG contenteditable -->
+          <div *ngIf="isDocxFile" style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+            <!-- Barra de formato Word -->
+            <div class="wysiwyg-toolbar">
+              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('bold')" title="Negrita"><strong>B</strong></button>
+              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('italic')" title="Cursiva"><em>I</em></button>
+              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('underline')" title="Subrayado"><u>U</u></button>
+              <span class="wysiwyg-sep"></span>
+              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('insertUnorderedList')" title="Lista">≡</button>
+              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('justifyLeft')" title="Izq">⬅</button>
+              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('justifyCenter')" title="Centro">≡</button>
+            </div>
+            <div 
+              id="docx-wysiwyg-editor"
+              contenteditable="true"
+              [innerHTML]="fileContent"
+              (input)="onWysiwygChange($event)"
+              class="wysiwyg-body"
+              style="flex: 1; min-height: 400px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; font-size: 1.05rem; line-height: 1.8; font-family: 'Georgia', 'Times New Roman', serif; color: #1e293b; outline: none; overflow-y: auto;"
+            ></div>
+          </div>
         </div>
       </div>
       
@@ -346,24 +382,58 @@
 </div>
 
 <!-- ==================================================================== -->
-<!-- MODAL DE PREVISUALIZACIÓN DE ARCHIVOS (IMÁGENES / PDF / ETC) -->
+<!-- MODAL DE PREVISUALIZACIÓN DE ARCHIVOS (IMÁGENES / PDF / EXCEL / WORD) -->
 <!-- ==================================================================== -->
 <div class="custom-modal-overlay" *ngIf="isPreviewVisible && previewItem">
   <div class="custom-modal-card preview-modal-card">
     <div class="custom-modal-header">
-      <span nz-icon [nzType]="previewItem.name.endsWith('.pdf') ? 'file-pdf' : 'picture'" nzTheme="outline" class="modal-header-icon"></span>
+      <span nz-icon [nzType]="previewItem.name.endsWith('.pdf') ? 'file-pdf' : (previewItem.name.endsWith('.xlsx') || previewItem.name.endsWith('.xls')) ? 'table' : 'picture'" nzTheme="outline" class="modal-header-icon"></span>
       <h3>Previsualización: {{ previewItem.name }}</h3>
     </div>
     
     <div class="custom-modal-body preview-modal-body">
       <!-- Image Preview -->
-      <div *ngIf="!previewItem.name.endsWith('.pdf')" class="image-preview-container">
+      <div *ngIf="isImageFile(previewItem.name)" class="image-preview-container">
         <img [src]="previewUrl" alt="Previsualización de imagen" class="image-preview-element" />
       </div>
       
       <!-- PDF Preview -->
       <div *ngIf="previewItem.name.endsWith('.pdf')" class="pdf-preview-container">
         <iframe [src]="previewPdfUrl" class="pdf-preview-element"></iframe>
+      </div>
+
+      <!-- Excel Preview (.xlsx / .xls) -->
+      <div *ngIf="previewItem.name.endsWith('.xlsx') || previewItem.name.endsWith('.xls')" class="excel-preview-container">
+        <div *ngIf="cargandoPreview" class="preview-loading">
+          <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando hoja de cálculo...
+        </div>
+        <ng-container *ngIf="!cargandoPreview && xlsxSheets">
+          <div class="excel-sheet-tabs">
+            <button 
+              *ngFor="let sheet of xlsxSheets; let i = index" 
+              class="excel-tab" 
+              [class.active]="activeSheetIndex === i"
+              (click)="activeSheetIndex = i">
+              {{ sheet.name }}
+            </button>
+          </div>
+          <div class="excel-table-wrapper">
+            <table class="excel-preview-table" *ngIf="xlsxSheets[activeSheetIndex]">
+              <tr *ngFor="let row of xlsxSheets[activeSheetIndex].rows; let ri = index">
+                <th class="excel-row-num">{{ ri + 1 }}</th>
+                <td *ngFor="let cell of row" [class.excel-header-cell]="ri === 0">{{ cell }}</td>
+              </tr>
+            </table>
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Word / DOCX Preview as HTML -->
+      <div *ngIf="previewItem.name.endsWith('.docx') || previewItem.name.endsWith('.doc')" class="docx-preview-container">
+        <div *ngIf="cargandoPreview" class="preview-loading">
+          <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando documento Word...
+        </div>
+        <div *ngIf="!cargandoPreview && previewDocxHtml" class="docx-rendered" [innerHTML]="previewDocxHtml"></div>
       </div>
     </div>
 

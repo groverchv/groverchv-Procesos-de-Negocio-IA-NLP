@@ -63,6 +63,13 @@
 			<version>9.2.0</version>
 		</dependency>
 
+		<!-- Apache POI: Soporte para Word (.docx) y Excel (.xlsx) -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.2.5</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>

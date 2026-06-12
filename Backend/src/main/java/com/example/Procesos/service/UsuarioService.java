@@ -45,10 +45,10 @@ public class UsuarioService {
 
             // Crear carpeta S3 para Carlos
             try {
-                String content = "Repositorio de " + carlos.getNombre() + "\n===============================================\nNo hay proyectos registrados en el sistema aún.";
-                byte[] welcomeBytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(welcomeBytes);
-                s3DocumentService.uploadDocument("tenant_acme", "bienvenida.txt", inputStream, welcomeBytes.length, "text/plain");
+                s3DocumentService.createFolder("tenant_acme", "");
+                String info = "Tenant: tenant_acme\nUsuario: " + carlos.getNombre() + "\nEmail: " + carlos.getEmail() + "\nRol: CLIENTE";
+                byte[] infoBytes = info.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                s3DocumentService.uploadDocument("tenant_acme", "info.txt", new java.io.ByteArrayInputStream(infoBytes), infoBytes.length, "text/plain");
             } catch (Exception e) {
                 System.err.println("Advertencia S3 al seedear Carlos: " + e.getMessage());
             }
@@ -93,10 +93,10 @@ public class UsuarioService {
         // Crear carpeta S3 automáticamente para el nuevo usuario cliente
         if ("CLIENTE".equals(saved.getRol())) {
             try {
-                String content = "Repositorio de " + saved.getNombre() + "\n===============================================\nNo hay proyectos registrados en el sistema aún.";
-                byte[] welcomeBytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(welcomeBytes);
-                s3DocumentService.uploadDocument(saved.getTenantId(), "bienvenida.txt", inputStream, welcomeBytes.length, "text/plain");
+                s3DocumentService.createFolder(saved.getTenantId(), "");
+                String info = "Tenant: " + saved.getTenantId() + "\nUsuario: " + saved.getNombre() + "\nEmail: " + saved.getEmail() + "\nRol: CLIENTE";
+                byte[] infoBytes = info.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                s3DocumentService.uploadDocument(saved.getTenantId(), "info.txt", new java.io.ByteArrayInputStream(infoBytes), infoBytes.length, "text/plain");
             } catch (Exception e) {
                 System.err.println("Advertencia S3 al crear usuario: " + e.getMessage());
             }

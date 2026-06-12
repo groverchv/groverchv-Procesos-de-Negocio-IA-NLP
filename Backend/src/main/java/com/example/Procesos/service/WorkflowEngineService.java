@@ -551,6 +551,12 @@ public class WorkflowEngineService {
 
             byte[] infoBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
             ByteArrayInputStream inputStream = new ByteArrayInputStream(infoBytes);
+
+            // Crear carpetas virtuales S3 para la jerarquía Proyecto > Diseño > Instancia
+            s3DocumentService.createFolder(tenantId, sanitizedProjectName);
+            s3DocumentService.createFolder(tenantId, sanitizedProjectName + "/" + sanitizedDesignName);
+            s3DocumentService.createFolder(tenantId, sanitizedProjectName + "/" + sanitizedDesignName + "/" + instanceId);
+
             s3DocumentService.uploadDocument(tenantId, path, inputStream, infoBytes.length, "text/plain");
             
             // Log to history

@@ -9,10 +9,24 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpServletRequest;
 
+// Apache POI – Word (.docx)
+import org.apache.poi.xwpf.usermodel.*;
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+// Apache POI – Excel (.xlsx)
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFRow;
+import org.apache.poi.xssf.usermodel.XSSFCell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
+
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.util.Map;
 import java.util.List;
 import java.util.Date;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -541,6 +555,140 @@ public class DocumentoController {
                     .body(bytes);
         } catch (Exception e) {
             return ResponseEntity.status(404).body(null);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ENDPOINTS MULTIFORMATO: Word (.docx) y Excel (.xlsx)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Convierte un archivo .docx de S3 a HTML editable para el editor WYSIWYG.
+     * GET /api/documentos/docx-to-html?tenantId=...&fileName=...
+     */
+    @GetMapping("/docx-to-html")
+    public ResponseEntity<?> docxToHtml(
+            @RequestParam String tenantId,
+            @RequestParam String fileName) {
+        try {
+            byte[] bytes = s3DocumentService.downloadDocument(tenantId, fileName);
+            try (XWPFDocument doc = new XWPFDocument(new java.io.ByteArrayInputStream(bytes))) {
+                StringBuilder html = new StringBuilder();
+                html.append("<div class=\"docx-content\">");
+                for (XWPFParagraph para : doc.getParagraphs()) {
+                    if (para.getText().isBlank()) {
+                        html.append("<p>&nbsp;</p>");
+                        continue;
+                    }
+                    String style = para.getStyle() != null ? para.getStyle().toLowerCase() : "";
+                    String tag = style.startsWith("heading") || style.startsWith("t") ? "h" + (style.contains("1") ? "2" : style.contains("2") ? "3" : "4") : "p";
+                    html.append("<").append(tag).append(">");
+                    for (XWPFRun run : para.getRuns()) {
+                        String text = run.getText(0);
+                        if (text == null) continue;
+                        text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+                        if (run.isBold()) text = "<strong>" + text + "</strong>";
+                        if (run.isItalic()) text = "<em>" + text + "</em>";
+                        if (run.getUnderline() != UnderlinePatterns.NONE) text = "<u>" + text + "</u>";
+                        html.append(text);
+                    }
+                    html.append("</").append(tag).append(">");
+                }
+                html.append("</div>");
+                return ResponseEntity.ok(Map.of("html", html.toString()));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Convierte HTML (del editor WYSIWYG) a .docx y lo guarda en S3.
+     * POST /api/documentos/html-to-docx  { tenantId, fileName, html, usuario, rol }
+     */
+    @PostMapping("/html-to-docx")
+    public ResponseEntity<?> htmlToDocx(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        String tenantId = body.get("tenantId");
+        String fileName = body.get("fileName");
+        String html = body.getOrDefault("html", "");
+        String usuario = body.getOrDefault("usuario", "Desconocido");
+        String rol = body.getOrDefault("rol", "CLIENTE");
+
+        try {
+            // Strip HTML tags into plain-text paragraphs and write to a new XWPFDocument
+            String plainText = html.replaceAll("<[^>]+>", "\n").replaceAll("&nbsp;", " ")
+                    .replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">")
+                    .replaceAll("\n{3,}", "\n\n").trim();
+
+            try (XWPFDocument doc = new XWPFDocument();
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                for (String line : plainText.split("\n")) {
+                    XWPFParagraph para = doc.createParagraph();
+                    XWPFRun run = para.createRun();
+                    run.setText(line.trim());
+                }
+                doc.write(out);
+                byte[] docxBytes = out.toByteArray();
+                s3DocumentService.uploadDocument(tenantId, fileName,
+                        new java.io.ByteArrayInputStream(docxBytes), docxBytes.length,
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+
+                documentoHistorialRepository.save(DocumentoHistorial.builder()
+                        .tenantId(tenantId).nombreArchivo(fileName).usuario(usuario).rol(rol)
+                        .ip(getClientIp(request)).accion("EDICION")
+                        .detalle("Guardó el archivo Word desde el editor WYSIWYG").fecha(new Date()).build());
+
+                return ResponseEntity.ok(Map.of("message", "Documento Word guardado exitosamente en S3", "fileName", fileName));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Convierte un archivo .xlsx de S3 a JSON con estructura de hojas/celdas para visualización.
+     * GET /api/documentos/xlsx-to-json?tenantId=...&fileName=...
+     */
+    @GetMapping("/xlsx-to-json")
+    public ResponseEntity<?> xlsxToJson(
+            @RequestParam String tenantId,
+            @RequestParam String fileName) {
+        try {
+            byte[] bytes = s3DocumentService.downloadDocument(tenantId, fileName);
+            try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
+                List<Map<String, Object>> sheets = new ArrayList<>();
+                for (int si = 0; si < workbook.getNumberOfSheets(); si++) {
+                    XSSFSheet sheet = workbook.getSheetAt(si);
+                    List<List<String>> rows = new ArrayList<>();
+                    for (int ri = 0; ri <= sheet.getLastRowNum(); ri++) {
+                        XSSFRow row = sheet.getRow(ri);
+                        List<String> cells = new ArrayList<>();
+                        if (row != null) {
+                            for (int ci = 0; ci < row.getLastCellNum(); ci++) {
+                                XSSFCell cell = row.getCell(ci);
+                                if (cell == null) { cells.add(""); continue; }
+                                switch (cell.getCellType()) {
+                                    case NUMERIC -> cells.add(DateUtil.isCellDateFormatted(cell)
+                                            ? cell.getLocalDateTimeCellValue().toLocalDate().toString()
+                                            : String.valueOf(cell.getNumericCellValue()));
+                                    case BOOLEAN -> cells.add(String.valueOf(cell.getBooleanCellValue()));
+                                    case FORMULA -> cells.add(cell.getCachedFormulaResultType() == CellType.NUMERIC
+                                            ? String.valueOf(cell.getNumericCellValue()) : cell.getStringCellValue());
+                                    default -> cells.add(cell.getStringCellValue());
+                                }
+                            }
+                        }
+                        rows.add(cells);
+                    }
+                    Map<String, Object> sheetData = new LinkedHashMap<>();
+                    sheetData.put("name", workbook.getSheetName(si));
+                    sheetData.put("rows", rows);
+                    sheets.add(sheetData);
+                }
+                return ResponseEntity.ok(Map.of("sheets", sheets));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
 }

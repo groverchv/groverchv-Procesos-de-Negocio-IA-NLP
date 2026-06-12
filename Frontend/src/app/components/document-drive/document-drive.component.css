@@ -1156,3 +1156,160 @@
   color: #1e293b;
   box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
 }
+
+/* ═══ ICONOS DE TIPO DE ARCHIVO ═══ */
+.file-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: -0.5px;
+  margin-right: 10px;
+}
+.icon-word  { background: linear-gradient(135deg, #1e40af, #3b82f6); }
+.icon-excel { background: linear-gradient(135deg, #166534, #22c55e); }
+.icon-pdf   { background: linear-gradient(135deg, #991b1b, #ef4444); }
+.icon-image { background: linear-gradient(135deg, #6d28d9, #a78bfa); font-size: 14px; }
+
+/* ═══ VISOR DE EXCEL ═══ */
+.excel-preview-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.preview-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 14px;
+  padding: 20px;
+}
+.excel-sheet-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 4px;
+}
+.excel-tab {
+  padding: 6px 16px;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid #e2e8f0;
+  border-bottom: none;
+  background: #f8fafc;
+  font-size: 13px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+}
+.excel-tab.active {
+  background: #fff;
+  color: #1e293b;
+  font-weight: 700;
+  border-color: #6366f1;
+  color: #4f46e5;
+}
+.excel-table-wrapper {
+  overflow: auto;
+  max-height: 420px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.excel-preview-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+.excel-preview-table td, .excel-preview-table th {
+  border: 1px solid #e2e8f0;
+  padding: 6px 12px;
+  white-space: nowrap;
+  color: #334155;
+}
+.excel-preview-table .excel-row-num {
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: center;
+}
+.excel-preview-table .excel-header-cell {
+  background: #e0f2fe;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+/* ═══ PREVISUALIZACIÓN DOCX ═══ */
+.docx-preview-container {
+  width: 100%;
+}
+.docx-rendered {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px 32px;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1e293b;
+  max-height: 480px;
+  overflow-y: auto;
+}
+.docx-rendered h2, .docx-rendered h3, .docx-rendered h4 {
+  color: #0f172a;
+  margin-top: 1.2em;
+}
+
+/* ═══ EDITOR WYSIWYG WORD ═══ */
+.wysiwyg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.wysiwyg-btn {
+  padding: 4px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #334155;
+}
+.wysiwyg-btn:hover {
+  background: #4f46e5;
+  color: #fff;
+  border-color: #4f46e5;
+}
+.wysiwyg-sep {
+  width: 1px;
+  height: 20px;
+  background: #e2e8f0;
+  margin: 0 4px;
+}
+.wysiwyg-body:focus {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* ═══ PREVIEW MODAL GRANDE ═══ */
+.preview-modal-card {
+  max-width: 880px !important;
+  width: 95vw !important;
+}
+.preview-modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}

@@ -92,6 +92,12 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   previewItem: DriveItem | null = null;
   previewUrl: string = '';
   previewPdfUrl: SafeResourceUrl | null = null;
+  cargandoPreview: boolean = false;
+  // Excel preview
+  xlsxSheets: { name: string; rows: string[][] }[] | null = null;
+  activeSheetIndex: number = 0;
+  // Word / DOCX preview
+  previewDocxHtml: string = '';
 
   // Modal de confirmación de eliminación
   isDeleteModalVisible: boolean = false;
@@ -652,8 +658,15 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   }
 
   // EDITOR INLINE
+  // isDocxFile: indica si el archivo que se edita es .docx (modo WYSIWYG)
+  isDocxFile: boolean = false;
+
   abrirEditor(file: DriveItem) {
-    if (!file.name.endsWith('.txt')) {
+    const ext = this.getFileExtension(file.name);
+    const isDocx = ext === 'docx' || ext === 'doc';
+    const isTxt = ext === 'txt';
+
+    if (!isDocx && !isTxt) {
       this.visualizarElemento(file);
       return;
     }
@@ -663,42 +676,60 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.fileContent = 'Cargando contenido desde S3...';
     this.historialDocumento = [];
     this.savingStatus = 'saved';
+    this.isDocxFile = isDocx;
 
     // Verificar si es process_info.txt
     this.isProcessInfoFile = file.name === 'process_info.txt';
     this.processInfoParsed = null;
 
     const s3Path = this.resolverS3Path(file);
-    this.documentService.getFileContent(file.tenantId, s3Path, this.getCurrentUser()).subscribe({
-      next: (res) => {
-        this.fileContent = res.content;
-        file.content = res.content;
-        this.cargarHistorial();
-        if (this.isProcessInfoFile) {
-          this.parseProcessInfo(res.content);
-        }
-      },
-      error: (err) => {
-        console.error('Error al cargar contenido de S3, usando copia local:', err);
-        this.fileContent = file.content || '';
-        this.cargarHistorial();
-        if (this.isProcessInfoFile) {
-          this.parseProcessInfo(this.fileContent);
-        }
-      }
-    });
 
-    // Conectar WebSocket para colaboración en tiempo real
-    if (file.name !== 'historial_bitacora.txt') {
-      this.docSocketSubscription = this.documentSocketService.connect(s3Path).subscribe({
-        next: (update) => {
-          this.fileContent = update.content;
-          file.content = update.content;
+    if (isDocx) {
+      // Cargar el documento Word como HTML editable
+      const docxUrl = `${this.apiGlobalService.getEndpointUrl('documentos/docx-to-html')}?tenantId=${file.tenantId}&fileName=${s3Path}`;
+      this.http.get<{ html: string }>(docxUrl).subscribe({
+        next: (res) => {
+          this.fileContent = res.html;
+          file.content = res.html;
+          this.cargarHistorial();
+        },
+        error: () => {
+          this.fileContent = '<p>No se pudo cargar el contenido Word. Escribe aquí.</p>';
+          this.cargarHistorial();
+        }
+      });
+    } else {
+      this.documentService.getFileContent(file.tenantId, s3Path, this.getCurrentUser()).subscribe({
+        next: (res) => {
+          this.fileContent = res.content;
+          file.content = res.content;
+          this.cargarHistorial();
           if (this.isProcessInfoFile) {
-            this.parseProcessInfo(update.content);
+            this.parseProcessInfo(res.content);
+          }
+        },
+        error: (err) => {
+          console.error('Error al cargar contenido de S3, usando copia local:', err);
+          this.fileContent = file.content || '';
+          this.cargarHistorial();
+          if (this.isProcessInfoFile) {
+            this.parseProcessInfo(this.fileContent);
           }
         }
       });
+
+      // Conectar WebSocket para colaboración en tiempo real
+      if (file.name !== 'historial_bitacora.txt') {
+        this.docSocketSubscription = this.documentSocketService.connect(s3Path).subscribe({
+          next: (update) => {
+            this.fileContent = update.content;
+            file.content = update.content;
+            if (this.isProcessInfoFile) {
+              this.parseProcessInfo(update.content);
+            }
+          }
+        });
+      }
     }
 
     // Simular colaboradores en línea en tiempo real para co-edición activa
@@ -725,6 +756,13 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     if (this.isProcessInfoFile) {
       this.parseProcessInfo(newVal);
     }
+  }
+
+  /** Captura el HTML del editor contenteditable (modo DOCX) */
+  onWysiwygChange(event: Event) {
+    const el = event.target as HTMLElement;
+    this.fileContent = el.innerHTML;
+    this.triggerAutoSave();
   }
 
   triggerAutoSave() {
@@ -769,29 +807,51 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     if (this.editingFile) {
       this.cargandoIA = true;
       const s3Path = this.resolverS3Path(this.editingFile);
-      
-      this.documentService.saveFileContent(
-        this.editingFile.tenantId, 
-        s3Path, 
-        this.fileContent, 
-        this.getCurrentUser()
-      ).subscribe({
-        next: () => {
-          this.editingFile!.content = this.fileContent;
-          this.editingFile!.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
-          this.editingFile!.date = new Date();
-          this.cargandoIA = false;
-          this.cerrarEditor();
-        },
-        error: (err) => {
-          console.error('Error al guardar documento en S3:', err);
-          this.cargandoIA = false;
-          this.editingFile!.content = this.fileContent;
-          this.editingFile!.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
-          this.editingFile!.date = new Date();
-          this.cerrarEditor();
-        }
-      });
+
+      if (this.isDocxFile) {
+        // Guardar el contenido HTML como .docx en S3
+        const docxSaveUrl = this.apiGlobalService.getEndpointUrl('documentos/html-to-docx');
+        this.http.post(docxSaveUrl, {
+          tenantId: this.editingFile.tenantId,
+          fileName: s3Path,
+          html: this.fileContent,
+          usuario: this.getCurrentUser(),
+          rol: 'CLIENTE'
+        }).subscribe({
+          next: () => {
+            this.cargandoIA = false;
+            this.cerrarEditor();
+          },
+          error: (err) => {
+            console.error('Error al guardar Word:', err);
+            this.cargandoIA = false;
+            this.cerrarEditor();
+          }
+        });
+      } else {
+        this.documentService.saveFileContent(
+          this.editingFile.tenantId, 
+          s3Path, 
+          this.fileContent, 
+          this.getCurrentUser()
+        ).subscribe({
+          next: () => {
+            this.editingFile!.content = this.fileContent;
+            this.editingFile!.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
+            this.editingFile!.date = new Date();
+            this.cargandoIA = false;
+            this.cerrarEditor();
+          },
+          error: (err) => {
+            console.error('Error al guardar documento en S3:', err);
+            this.cargandoIA = false;
+            this.editingFile!.content = this.fileContent;
+            this.editingFile!.size = `${(this.fileContent.length / 1024).toFixed(1)} KB`;
+            this.editingFile!.date = new Date();
+            this.cerrarEditor();
+          }
+        });
+      }
     }
   }
 
@@ -810,6 +870,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.fileContent = '';
     this.isProcessInfoFile = false;
     this.processInfoParsed = null;
+    this.isDocxFile = false;
     this.actualizarRepositorio();
   }
 
@@ -1005,6 +1066,16 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     });
   }
 
+  // ── Helpers de tipo de archivo ──
+  getFileExtension(name: string): string {
+    const parts = name.split('.');
+    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+  }
+
+  isImageFile(name: string): boolean {
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(this.getFileExtension(name));
+  }
+
   visualizarElemento(item: DriveItem) {
     if (item.name.endsWith('.txt')) {
       this.abrirEditor(item);
@@ -1013,30 +1084,56 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
 
     const s3Path = this.resolverS3Path(item);
     const viewUrl = `${this.apiGlobalService.getEndpointUrl('documentos/view')}?tenantId=${item.tenantId}&fileName=${s3Path}`;
-    
-    this.documentService.getPresignedUrl(item.tenantId, s3Path, this.getCurrentUser()).subscribe({
-      next: () => {
-        this.previewItem = item;
-        this.previewUrl = viewUrl;
-        if (item.name.toLowerCase().endsWith('.pdf')) {
-          this.previewPdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(viewUrl);
-        } else {
-          this.previewPdfUrl = null;
+    const ext = this.getFileExtension(item.name);
+
+    // Reset preview state
+    this.previewItem = item;
+    this.previewUrl = '';
+    this.previewPdfUrl = null;
+    this.xlsxSheets = null;
+    this.previewDocxHtml = '';
+    this.cargandoPreview = false;
+    this.isPreviewVisible = true;
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      // Excel: fetch JSON representation
+      this.cargandoPreview = true;
+      this.activeSheetIndex = 0;
+      const xlsxUrl = `${this.apiGlobalService.getEndpointUrl('documentos/xlsx-to-json')}?tenantId=${item.tenantId}&fileName=${s3Path}`;
+      this.http.get<{ sheets: { name: string; rows: string[][] }[] }>(xlsxUrl).subscribe({
+        next: (resp) => {
+          this.xlsxSheets = resp.sheets;
+          this.cargandoPreview = false;
+        },
+        error: () => {
+          this.xlsxSheets = [{ name: 'Error', rows: [['No se pudo cargar el archivo Excel']] }];
+          this.cargandoPreview = false;
         }
-        this.isPreviewVisible = true;
-      },
-      error: (err) => {
-        console.error('Error al registrar lectura en el historial:', err);
-        this.previewItem = item;
-        this.previewUrl = viewUrl;
-        if (item.name.toLowerCase().endsWith('.pdf')) {
-          this.previewPdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(viewUrl);
-        } else {
-          this.previewPdfUrl = null;
+      });
+    } else if (ext === 'docx' || ext === 'doc') {
+      // Word: fetch HTML representation
+      this.cargandoPreview = true;
+      const docxUrl = `${this.apiGlobalService.getEndpointUrl('documentos/docx-to-html')}?tenantId=${item.tenantId}&fileName=${s3Path}`;
+      this.http.get<{ html: string }>(docxUrl).subscribe({
+        next: (resp) => {
+          this.previewDocxHtml = resp.html;
+          this.cargandoPreview = false;
+        },
+        error: () => {
+          this.previewDocxHtml = '<p>No se pudo cargar la previsualización del documento Word.</p>';
+          this.cargandoPreview = false;
         }
-        this.isPreviewVisible = true;
-      }
-    });
+      });
+    } else if (this.isImageFile(item.name)) {
+      // Image: proxy via /view endpoint
+      this.previewUrl = viewUrl;
+    } else if (ext === 'pdf') {
+      // PDF: iframe
+      this.previewPdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(viewUrl);
+    } else {
+      // Fallback: try to open as raw
+      this.previewUrl = viewUrl;
+    }
   }
 
   cerrarPreview() {
@@ -1044,6 +1141,9 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.previewItem = null;
     this.previewUrl = '';
     this.previewPdfUrl = null;
+    this.xlsxSheets = null;
+    this.previewDocxHtml = '';
+    this.cargandoPreview = false;
   }
 
   solicitarEliminar(item: DriveItem) {
