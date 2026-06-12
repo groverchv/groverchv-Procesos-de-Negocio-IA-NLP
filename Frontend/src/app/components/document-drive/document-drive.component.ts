@@ -10,6 +10,10 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { API_GLOBAL } from '../../services/api.global';
 import { ApiGlobalService } from '../../services/api-global.service';
+import { Editor } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import Collaboration from '@tiptap/extension-collaboration';
+import * as Y from 'yjs';
 
 interface DriveItem {
   id: string;
@@ -51,6 +55,8 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   editingFile: DriveItem | null = null;
   fileContent: string = '';
   cargandoIA: boolean = false;
+  tiptapEditor: Editor | null = null;
+  ydoc: Y.Doc | null = null;
 
   // Modal Personalizado de Creación (Sin Alerts/Prompts en el sistema)
   isCreateModalVisible: boolean = false;
@@ -640,31 +646,56 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       const parentPath = activeParent ? this.resolverS3Path(activeParent) : '';
       const s3Path = parentPath ? `${parentPath}/${file.name}` : file.name;
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('tenantId', tenantId);
-      formData.append('fileName', s3Path);
-      formData.append('usuario', this.getCurrentUser());
+      const presignedUrlEndpoint = `${this.apiGlobalService.getEndpointUrl('documentos/presigned-upload-url')}?tenantId=${tenantId}&fileName=${encodeURIComponent(s3Path)}&contentType=${encodeURIComponent(file.type)}`;
+      
+      this.http.get<{ url: string }>(presignedUrlEndpoint).subscribe({
+        next: (res) => {
+          const s3Url = res.url;
+          // PUT directo a S3 sin restricciones de tamaño
+          this.http.put(s3Url, file, {
+            headers: {
+              'Content-Type': file.type
+            }
+          }).subscribe({
+            next: () => {
+              // Confirmar la subida exitosa en el backend
+              const confirmPayload = {
+                tenantId: tenantId,
+                fileName: s3Path,
+                usuario: this.getCurrentUser(),
+                rol: 'CLIENTE',
+                contentType: file.type
+              };
+              
+              this.http.post(this.apiGlobalService.getEndpointUrl('documentos/confirm-upload'), confirmPayload).subscribe({
+                next: () => {
+                  const nuevoDocumento: DriveItem = {
+                    id: `file_${Date.now()}`,
+                    name: file.name,
+                    type: 'file',
+                    parentId: this.currentFolderId,
+                    size: this.formatBytes(file.size),
+                    date: new Date(),
+                    content: `DOCUMENTO CARGADO EN S3: ${file.name}\n==============================================\nContenido del archivo subido localmente por el usuario.`,
+                    tenantId: tenantId,
+                    s3Path: s3Path
+                  };
 
-      this.http.post(this.apiGlobalService.getEndpointUrl('documentos/upload'), formData).subscribe({
-        next: () => {
-          const nuevoDocumento: DriveItem = {
-            id: `file_${Date.now()}`,
-            name: file.name,
-            type: 'file',
-            parentId: this.currentFolderId,
-            size: (file.size / 1024).toFixed(1) + ' KB',
-            date: new Date(),
-            content: `DOCUMENTO CARGADO EN S3: ${file.name}\n==============================================\nContenido del archivo subido localmente por el usuario.`,
-            tenantId: tenantId,
-            s3Path: s3Path
-          };
-
-          this.allItems.push(nuevoDocumento);
-          this.actualizarRepositorio();
+                  this.allItems.push(nuevoDocumento);
+                  this.actualizarRepositorio();
+                },
+                error: (err) => {
+                  console.error('Error al confirmar subida:', err);
+                }
+              });
+            },
+            error: (err) => {
+              console.error('Error al subir directamente a S3:', err);
+            }
+          });
         },
         error: (err) => {
-          console.error('Error al subir archivo a S3:', err);
+          console.error('Error al obtener URL pre-firmada:', err);
         }
       });
     }
@@ -673,6 +704,76 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   // EDITOR INLINE
   // isDocxFile: indica si el archivo que se edita es .docx (modo WYSIWYG)
   isDocxFile: boolean = false;
+
+  // Helpers for Yjs Uint8Array / Base64 conversions
+  arrayBufferToBase64(buffer: Uint8Array): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  base64ToArrayBuffer(base64: string): Uint8Array {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  initTiptap(initialContent: string) {
+    if (this.tiptapEditor) {
+      this.tiptapEditor.destroy();
+      this.tiptapEditor = null;
+    }
+
+    this.ydoc = new Y.Doc();
+    
+    // Bind local updates to WebSocket broadcast
+    this.ydoc.on('update', (update: Uint8Array, origin: any) => {
+      if (origin !== this && this.editingFile) {
+        const base64Update = this.arrayBufferToBase64(update);
+        const s3Path = this.resolverS3Path(this.editingFile);
+        this.documentSocketService.sendUpdate(s3Path, this.getCurrentUser(), this.fileContent, base64Update);
+      }
+    });
+
+    setTimeout(() => {
+      // Find editor element in DOM
+      const editorElement = document.querySelector('#docx-wysiwyg-editor');
+      if (!editorElement) {
+        console.error('Tiptap container element not found in DOM');
+        return;
+      }
+
+      this.tiptapEditor = new Editor({
+        element: editorElement,
+        extensions: [
+          StarterKit,
+          Collaboration.configure({
+            document: this.ydoc!,
+          }),
+        ],
+        onUpdate: ({ editor }) => {
+          this.fileContent = editor.getHTML();
+          this.triggerAutoSave();
+        },
+      });
+
+      // Populate initial content if Yjs document is empty
+      if (initialContent) {
+        const type = this.ydoc!.getXmlFragment('default');
+        if (type.toString().trim() === '') {
+          this.tiptapEditor.commands.setContent(initialContent);
+        }
+      }
+    }, 150);
+  }
 
   abrirEditor(file: DriveItem) {
     const ext = this.getFileExtension(file.name);
@@ -705,10 +806,12 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           this.fileContent = res.html;
           file.content = res.html;
           this.cargarHistorial();
+          this.initTiptap(res.html);
         },
         error: () => {
           this.fileContent = '<p>No se pudo cargar el contenido Word. Escribe aquí.</p>';
           this.cargarHistorial();
+          this.initTiptap(this.fileContent);
         }
       });
     } else {
@@ -720,6 +823,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           if (this.isProcessInfoFile) {
             this.parseProcessInfo(res.content);
           }
+          this.initTiptap(res.content);
         },
         error: (err) => {
           console.error('Error al cargar contenido de S3, usando copia local:', err);
@@ -728,21 +832,31 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           if (this.isProcessInfoFile) {
             this.parseProcessInfo(this.fileContent);
           }
+          this.initTiptap(this.fileContent);
         }
       });
+    }
 
-      // Conectar WebSocket para colaboración en tiempo real
-      if (file.name !== 'historial_bitacora.txt') {
-        this.docSocketSubscription = this.documentSocketService.connect(s3Path).subscribe({
-          next: (update) => {
+    // Conectar WebSocket para colaboración en tiempo real
+    if (file.name !== 'historial_bitacora.txt') {
+      this.docSocketSubscription = this.documentSocketService.connect(s3Path).subscribe({
+        next: (update) => {
+          if (update.update && this.ydoc) {
+            try {
+              const updateBytes = this.base64ToArrayBuffer(update.update);
+              Y.applyUpdate(this.ydoc, updateBytes, this);
+            } catch (e) {
+              console.error('Error al aplicar delta de Yjs:', e);
+            }
+          } else if (update.content) {
             this.fileContent = update.content;
             file.content = update.content;
             if (this.isProcessInfoFile) {
               this.parseProcessInfo(update.content);
             }
           }
-        });
-      }
+        }
+      });
     }
 
     // Simular colaboradores en línea en tiempo real para co-edición activa
@@ -779,7 +893,16 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   }
 
   execFormatCommand(command: string) {
-    document.execCommand(command, false, '');
+    if (this.tiptapEditor) {
+      if (command === 'bold') this.tiptapEditor.chain().focus().toggleBold().run();
+      else if (command === 'italic') this.tiptapEditor.chain().focus().toggleItalic().run();
+      else if (command === 'underline') this.tiptapEditor.chain().focus().toggleStrike().run();
+      else if (command === 'insertUnorderedList') this.tiptapEditor.chain().focus().toggleBulletList().run();
+      else if (command === 'justifyLeft') document.execCommand('justifyLeft', false, '');
+      else if (command === 'justifyCenter') document.execCommand('justifyCenter', false, '');
+    } else {
+      document.execCommand(command, false, '');
+    }
   }
 
   triggerAutoSave() {
@@ -873,6 +996,10 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   }
 
   cerrarEditor() {
+    if (this.tiptapEditor) {
+      this.tiptapEditor.destroy();
+      this.tiptapEditor = null;
+    }
     if (this.docSocketSubscription) {
       this.docSocketSubscription.unsubscribe();
       this.docSocketSubscription = null;

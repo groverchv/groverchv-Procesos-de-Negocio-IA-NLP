@@ -579,27 +579,49 @@ class ApiService {
     String? policy,
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl/documentos/upload-and-validate');
-      final request = http.MultipartRequest('POST', uri);
-      request.fields['tenantId'] = tenantId;
-      request.fields['fileName'] = fileName;
-      if (policy != null) {
-        request.fields['policy'] = policy;
+      // 1. Solicitar la URL pre-firmada al backend
+      final presignedUrl = '$baseUrl/documentos/presigned-upload-url?tenantId=$tenantId&fileName=${Uri.encodeComponent(fileName)}&contentType=${Uri.encodeComponent(contentType)}';
+      final presignedResponse = await http.get(Uri.parse(presignedUrl)).timeout(const Duration(seconds: 15));
+      
+      if (presignedResponse.statusCode != 200) {
+        throw Exception('Error al obtener URL pre-firmada: ${presignedResponse.statusCode}');
       }
-      request.files.add(http.MultipartFile.fromBytes(
-        'file',
-        fileBytes,
-        filename: fileName,
-        contentType: MediaType.parse(contentType),
-      ));
+      
+      final presignedData = jsonDecode(presignedResponse.body) as Map<String, dynamic>;
+      final s3Url = presignedData['url'] as String;
 
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 25));
-      final response = await http.Response.fromStream(streamedResponse);
+      // 2. HTTP PUT directo a AWS S3 (sin pasar por el backend)
+      final s3Response = await http.put(
+        Uri.parse(s3Url),
+        headers: {
+          'Content-Type': contentType,
+        },
+        body: fileBytes,
+      ).timeout(const Duration(minutes: 10)); // Tiempo de espera largo para archivos grandes
 
-      if (response.statusCode == 200) {
-        return Map<String, dynamic>.from(jsonDecode(response.body));
+      if (s3Response.statusCode != 200) {
+        throw Exception('Error al subir directamente a S3: ${s3Response.statusCode}');
+      }
+
+      // 3. Confirmar la subida al backend y gatillar la validación
+      final confirmUrl = Uri.parse('$baseUrl/documentos/confirm-upload');
+      final confirmResponse = await http.post(
+        confirmUrl,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'tenantId': tenantId,
+          'fileName': fileName,
+          'usuario': currentUser?.nombre ?? 'Usuario Móvil',
+          'rol': currentUser?.rol ?? 'CLIENTE',
+          'contentType': contentType,
+          if (policy != null) 'policy': policy,
+        }),
+      ).timeout(const Duration(seconds: 45));
+
+      if (confirmResponse.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(confirmResponse.body));
       } else {
-        throw Exception('Error subiendo y validando archivo: ${response.statusCode}');
+        throw Exception('Error al confirmar subida en el backend: ${confirmResponse.statusCode}');
       }
     } catch (e) {
       rethrow;

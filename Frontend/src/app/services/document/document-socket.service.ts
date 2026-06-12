@@ -58,12 +58,13 @@ export class DocumentSocketService {
     return this.updatesSubject.asObservable();
   }
 
-  sendUpdate(docId: string, userName: string, content: string): void {
+  sendUpdate(docId: string, userName: string, content: string, yjsUpdate?: string): void {
     if (this.stompClient?.connected) {
       const payload: ColaboracionUpdate = {
         userId: this.currentUserId,
         userName: userName,
         content: content,
+        update: yjsUpdate,
         timestamp: Date.now()
       };
       this.stompClient.publish({

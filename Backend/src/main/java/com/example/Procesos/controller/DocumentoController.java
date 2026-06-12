@@ -196,6 +196,91 @@ public class DocumentoController {
     }
 
     /**
+     * Endpoint para obtener una URL pre-firmada para subir archivos directamente a S3.
+     * GET /api/documentos/presigned-upload-url?tenantId=...&fileName=...&contentType=...
+     */
+    @GetMapping("/presigned-upload-url")
+    public ResponseEntity<?> getPresignedUploadUrl(
+            @RequestParam String tenantId,
+            @RequestParam String fileName,
+            @RequestParam String contentType) {
+        try {
+            String url = s3DocumentService.generatePresignedUploadUrl(tenantId, fileName, contentType, 15);
+            return ResponseEntity.ok(Map.of("url", url));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Endpoint para confirmar que un archivo ha sido subido directamente a S3 con éxito.
+     * Registra el historial de base de datos e indexa en RAG si corresponde.
+     * POST /api/documentos/confirm-upload
+     */
+    @PostMapping("/confirm-upload")
+    public ResponseEntity<?> confirmUpload(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        String tenantId = body.get("tenantId");
+        String fileName = body.get("fileName");
+        String usuario = body.getOrDefault("usuario", "Cliente/Funcionario");
+        String rol = body.getOrDefault("rol", "CLIENTE");
+        String contentType = body.get("contentType");
+        String policy = body.get("policy");
+
+        try {
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("CREACION")
+                    .detalle("Subió archivo " + fileName + " directamente a S3")
+                    .fecha(new Date())
+                    .build());
+
+            String textContent = null;
+            if (fileName.endsWith(".txt") || fileName.endsWith(".json") || "text/plain".equals(contentType)) {
+                try {
+                    byte[] bytes = s3DocumentService.downloadDocument(tenantId, fileName);
+                    textContent = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                    String docId = "doc-" + System.currentTimeMillis();
+                    iaClient.indexarDocumento(tenantId, docId, fileName, textContent).subscribe(
+                        null,
+                        err -> System.err.println("[SPRING S3 RAG] Error al indexar documento confirmado: " + err.getMessage())
+                    );
+                } catch (Exception e) {
+                    System.err.println("[SPRING S3 RAG] Error al descargar/indexar documento: " + e.getMessage());
+                }
+            }
+
+            java.util.Map<String, Object> validationResult = new java.util.HashMap<>();
+            if (policy != null && !policy.trim().isEmpty()) {
+                if (textContent == null) {
+                    try {
+                        byte[] bytes = s3DocumentService.downloadDocument(tenantId, fileName);
+                        textContent = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (Exception e) {
+                        textContent = "";
+                    }
+                }
+                validationResult = iaClient.validarDocumentoConPolitica(textContent, policy).block();
+            } else {
+                validationResult.put("valido", true);
+                validationResult.put("mensaje", "No hay reglas de negocio definidas para este paso. El archivo se acepta automáticamente.");
+                validationResult.put("sugerencia", "");
+            }
+
+            return ResponseEntity.ok(Map.of(
+                "message", "Archivo confirmado e indexado exitosamente",
+                "fileName", fileName,
+                "validation", validationResult
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * Genera un reporte de telemetría dinámica por IA, lo sube a S3 y retorna una URL pre-firmada.
      * POST /api/documentos/reporte-ia
      */

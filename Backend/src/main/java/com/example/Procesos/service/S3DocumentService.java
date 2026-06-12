@@ -10,6 +10,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 
 import java.io.InputStream;
 import java.time.Duration;
@@ -133,5 +135,26 @@ public class S3DocumentService {
         } catch (Exception e) {
             System.err.println("[S3] Advertencia al crear carpeta '" + folderPath + "': " + e.getMessage());
         }
+    }
+
+    /**
+     * Genera una URL pre-firmada para subir archivos directamente a S3 con PUT.
+     */
+    public String generatePresignedUploadUrl(String tenantId, String fileName, String contentType, int expirationMinutes) {
+        String s3Key = tenantId + "/" + fileName;
+
+        PutObjectRequest putRequest = PutObjectRequest.builder()
+                .bucket(BUCKET_NAME)
+                .key(s3Key)
+                .contentType(contentType)
+                .build();
+
+        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMinutes(expirationMinutes))
+                .putObjectRequest(putRequest)
+                .build();
+
+        PresignedPutObjectRequest presignedPutObjectRequest = s3Presigner.presignPutObject(presignRequest);
+        return presignedPutObjectRequest.url().toString();
     }
 }

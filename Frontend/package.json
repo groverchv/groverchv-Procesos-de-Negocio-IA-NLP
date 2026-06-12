@@ -21,10 +21,14 @@
     "@angular/router": "^21.2.0",
     "@ant-design/icons-angular": "^21.0.0",
     "@stomp/stompjs": "^7.3.0",
+    "@tiptap/core": "^3.26.1",
+    "@tiptap/extension-collaboration": "^3.26.1",
+    "@tiptap/starter-kit": "^3.26.1",
     "ng-zorro-antd": "^21.2.1",
     "rxjs": "~7.8.0",
     "sockjs-client": "^1.6.1",
     "tslib": "^2.3.0",
+    "yjs": "^13.6.31",
     "zone.js": "^0.16.1"
   },
   "devDependencies": {
