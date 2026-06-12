@@ -10,6 +10,7 @@ export interface ColaboracionUpdate {
   update?: string;
   content: string;
   timestamp: number;
+  type: 'JOIN' | 'SYNC' | 'UPDATE';
 }
 
 @Injectable({
@@ -58,14 +59,15 @@ export class DocumentSocketService {
     return this.updatesSubject.asObservable();
   }
 
-  sendUpdate(docId: string, userName: string, content: string, yjsUpdate?: string): void {
+  sendUpdate(docId: string, userName: string, content: string, yjsUpdate?: string, type: 'JOIN' | 'SYNC' | 'UPDATE' = 'UPDATE'): void {
     if (this.stompClient?.connected) {
       const payload: ColaboracionUpdate = {
         userId: this.currentUserId,
         userName: userName,
         content: content,
         update: yjsUpdate,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        type: type
       };
       this.stompClient.publish({
         destination: `/app/colaboracion/${docId}`,

@@ -21,6 +21,12 @@ const PRODUCTION_BACKEND_URL = 'https://backend-principal.up.railway.app';
 export class ApiGlobalService {
 
   get baseUrl(): string {
+    if (typeof window !== 'undefined') {
+      const storedUrl = localStorage.getItem('BACKEND_URL');
+      if (storedUrl) {
+        return storedUrl;
+      }
+    }
     return PRODUCTION_BACKEND_URL;
   }
 

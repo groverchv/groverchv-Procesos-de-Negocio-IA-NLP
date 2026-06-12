@@ -223,6 +223,54 @@ public class DocumentoController {
     }
 
     /**
+     * Endpoint para crear una carpeta virtual en S3.
+     * POST /api/documentos/folder
+     */
+    @PostMapping("/folder")
+    public ResponseEntity<?> createFolder(@RequestBody Map<String, String> body) {
+        String tenantId = body.get("tenantId");
+        String folderPath = body.get("folderPath");
+        try {
+            s3DocumentService.createFolder(tenantId, folderPath);
+            return ResponseEntity.ok(Map.of("message", "Carpeta creada exitosamente"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Endpoint para renombrar un archivo o carpeta en S3.
+     * POST /api/documentos/rename
+     */
+    @PostMapping("/rename")
+    public ResponseEntity<?> renameDocument(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        String tenantId = body.get("tenantId");
+        String oldName = body.get("oldName");
+        String newName = body.get("newName");
+        String usuario = body.getOrDefault("usuario", "Cliente/Funcionario");
+        String rol = body.getOrDefault("rol", "CLIENTE");
+        try {
+            s3DocumentService.renameDocument(tenantId, oldName, newName);
+            
+            // Log rename to history
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(newName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("EDICION")
+                    .detalle("Renombró archivo/carpeta de " + oldName + " a " + newName)
+                    .fecha(new Date())
+                    .build());
+                    
+            return ResponseEntity.ok(Map.of("message", "Renombrado exitoso"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * Endpoint para confirmar que un archivo ha sido subido directamente a S3 con éxito.
      * Registra el historial de base de datos e indexa en RAG si corresponde.
      * POST /api/documentos/confirm-upload

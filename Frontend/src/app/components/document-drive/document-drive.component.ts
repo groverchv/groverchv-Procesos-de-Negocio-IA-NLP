@@ -109,6 +109,11 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   isDeleteModalVisible: boolean = false;
   deletingItem: DriveItem | null = null;
 
+  // Modal de renombrar
+  isRenameModalVisible: boolean = false;
+  renamingItem: DriveItem | null = null;
+  renameNewName: string = '';
+
   constructor(
     private http: HttpClient, 
     public documentService: DocumentService,
@@ -417,10 +422,6 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       this.documentService.listS3Files(currentFolder.tenantId, s3Path).subscribe({
         next: (s3Files) => {
           const folders = localItems.filter(item => item.type === 'folder');
-          const virtualFiles = localItems.filter(item => 
-            item.type === 'file' && 
-            (item.id.startsWith('file_bitacora_') || item.id.startsWith('file_placeholder_') || item.id.startsWith('file_empty_'))
-          );
           const mappedS3Files = s3Files
             .filter(file => {
               // Filtrar para mostrar solo los archivos en el directorio actual
@@ -449,7 +450,14 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
                 content: localFile?.content || ''
               } as DriveItem;
             });
-          this.visibleItems = [...folders, ...virtualFiles, ...mappedS3Files];
+          
+          // Obtener los archivos locales reales que no están en mappedS3Files para no duplicarlos
+          const actualLocalFiles = localItems.filter(item => 
+            item.type === 'file' && 
+            !mappedS3Files.some(s3File => s3File.name === item.name)
+          );
+
+          this.visibleItems = [...folders, ...actualLocalFiles, ...mappedS3Files];
         },
         error: (err) => {
           console.error('Error al listar archivos de S3:', err);
@@ -572,33 +580,45 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     const tenantId = activeParent ? activeParent.tenantId : 'tenant_default';
 
     if (this.createModalType === 'folder') {
-      const newFolder: DriveItem = {
-        id: `folder_${Date.now()}`,
-        name: this.newItemName.trim(),
-        type: 'folder',
-        parentId: this.currentFolderId,
-        date: new Date(),
-        tenantId: tenantId
-      };
-      this.allItems.push(newFolder);
-    } else {
-      const baseName = this.newItemName.trim();
-      const finalName = baseName.endsWith('.docx') ? baseName : `${baseName}.docx`;
-      
-      const newFile: DriveItem = {
-        id: `file_${Date.now()}`,
-        name: finalName,
-        type: 'file',
-        parentId: this.currentFolderId,
-        size: '0.1 KB',
-        date: new Date(),
-        content: `<h3>DOCUMENTO BPM - ${finalName.toUpperCase()}</h3><p>==============================================</p><p>Fecha de Creación: ${new Date().toLocaleDateString()}</p><p>Escribe el contenido de tu formato o proceso aquí...</p>`,
-        tenantId: tenantId
-      };
-      this.allItems.push(newFile);
+      const newFolderName = this.newItemName.trim();
+      const parentPath = activeParent ? this.resolverS3Path(activeParent) : '';
+      const folderPath = parentPath ? `${parentPath}/${newFolderName}` : newFolderName;
+
+      this.http.post(this.apiGlobalService.getEndpointUrl('documentos/folder'), {
+        tenantId: tenantId,
+        folderPath: folderPath
+      }).subscribe({
+        next: () => {
+          const newFolder: DriveItem = {
+            id: `folder_${Date.now()}`,
+            name: newFolderName,
+            type: 'folder',
+            parentId: this.currentFolderId,
+            date: new Date(),
+            tenantId: tenantId,
+            s3Path: folderPath
+          };
+          this.allItems.push(newFolder);
+          this.actualizarRepositorio();
+        },
+        error: (err) => {
+          console.error('Error al crear carpeta en S3:', err);
+          // Fallback local
+          const newFolder: DriveItem = {
+            id: `folder_${Date.now()}`,
+            name: newFolderName,
+            type: 'folder',
+            parentId: this.currentFolderId,
+            date: new Date(),
+            tenantId: tenantId,
+            s3Path: folderPath
+          };
+          this.allItems.push(newFolder);
+          this.actualizarRepositorio();
+        }
+      });
     }
 
-    this.actualizarRepositorio();
     this.cerrarModalCreacion();
   }
 
@@ -637,6 +657,26 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     });
   }
 
+  getContentType(fileName: string, fileType: string): string {
+    if (fileType && fileType.trim().length > 0) return fileType;
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'txt': return 'text/plain';
+      case 'pdf': return 'application/pdf';
+      case 'png': return 'image/png';
+      case 'jpg':
+      case 'jpeg': return 'image/jpeg';
+      case 'gif': return 'image/gif';
+      case 'svg': return 'image/svg+xml';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'doc': return 'application/msword';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'xls': return 'application/vnd.ms-excel';
+      case 'json': return 'application/json';
+      default: return 'application/octet-stream';
+    }
+  }
+
   onFileSelected(event: any) {
     const file: File = event.target.files[0];
     if (file) {
@@ -645,8 +685,9 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       
       const parentPath = activeParent ? this.resolverS3Path(activeParent) : '';
       const s3Path = parentPath ? `${parentPath}/${file.name}` : file.name;
+      const resolvedContentType = this.getContentType(file.name, file.type);
 
-      const presignedUrlEndpoint = `${this.apiGlobalService.getEndpointUrl('documentos/presigned-upload-url')}?tenantId=${tenantId}&fileName=${encodeURIComponent(s3Path)}&contentType=${encodeURIComponent(file.type)}`;
+      const presignedUrlEndpoint = `${this.apiGlobalService.getEndpointUrl('documentos/presigned-upload-url')}?tenantId=${tenantId}&fileName=${encodeURIComponent(s3Path)}&contentType=${encodeURIComponent(resolvedContentType)}`;
       
       this.http.get<{ url: string }>(presignedUrlEndpoint).subscribe({
         next: (res) => {
@@ -654,7 +695,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           // PUT directo a S3 sin restricciones de tamaño
           this.http.put(s3Url, file, {
             headers: {
-              'Content-Type': file.type
+              'Content-Type': resolvedContentType
             }
           }).subscribe({
             next: () => {
@@ -664,7 +705,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
                 fileName: s3Path,
                 usuario: this.getCurrentUser(),
                 rol: 'CLIENTE',
-                contentType: file.type
+                contentType: resolvedContentType
               };
               
               this.http.post(this.apiGlobalService.getEndpointUrl('documentos/confirm-upload'), confirmPayload).subscribe({
@@ -732,7 +773,9 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       this.tiptapEditor = null;
     }
 
-    this.ydoc = new Y.Doc();
+    if (!this.ydoc) {
+      this.ydoc = new Y.Doc();
+    }
     
     // Bind local updates to WebSocket broadcast
     this.ydoc.on('update', (update: Uint8Array, origin: any) => {
@@ -740,7 +783,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
         const base64Update = this.arrayBufferToBase64(update);
         const s3Path = this.resolverS3Path(this.editingFile);
         const docId = s3Path.replace(/\//g, '_');
-        this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), this.fileContent, base64Update);
+        this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), this.fileContent, base64Update, 'UPDATE');
       }
     });
 
@@ -755,7 +798,9 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       this.tiptapEditor = new Editor({
         element: editorElement,
         extensions: [
-          StarterKit,
+          StarterKit.configure({
+            history: false
+          }),
           Collaboration.configure({
             document: this.ydoc!,
           }),
@@ -798,6 +843,75 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.processInfoParsed = null;
 
     const s3Path = this.resolverS3Path(file);
+    const docId = s3Path.replace(/\//g, '_');
+    this.ydoc = new Y.Doc();
+
+    let syncReceived = false;
+    let fallbackTimer: any = null;
+
+    const handleWebsocketAndInit = (s3Content: string) => {
+      if (file.name !== 'historial_bitacora.txt') {
+        this.docSocketSubscription = this.documentSocketService.connect(docId).subscribe({
+          next: (update) => {
+            if (update.type === 'JOIN') {
+              if (this.tiptapEditor && this.ydoc) {
+                try {
+                  const stateUpdate = Y.encodeStateAsUpdate(this.ydoc);
+                  const base64State = this.arrayBufferToBase64(stateUpdate);
+                  this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), this.fileContent, base64State, 'SYNC');
+                } catch (e) {
+                  console.error('Error al codificar estado Yjs completo:', e);
+                }
+              }
+            } else if (update.type === 'SYNC') {
+              if (!syncReceived) {
+                syncReceived = true;
+                if (fallbackTimer) clearTimeout(fallbackTimer);
+                this.initTiptap('');
+                setTimeout(() => {
+                  if (update.update && this.ydoc) {
+                    try {
+                      const updateBytes = this.base64ToArrayBuffer(update.update);
+                      Y.applyUpdate(this.ydoc, updateBytes, this);
+                    } catch (e) {
+                      console.error('Error al aplicar SYNC de Yjs:', e);
+                    }
+                  }
+                }, 200);
+              }
+            } else if (update.type === 'UPDATE') {
+              if (this.ydoc && update.update) {
+                try {
+                  const updateBytes = this.base64ToArrayBuffer(update.update);
+                  Y.applyUpdate(this.ydoc, updateBytes, this);
+                } catch (e) {
+                  console.error('Error al aplicar delta de Yjs:', e);
+                }
+              }
+              if (update.content) {
+                if (this.isProcessInfoFile) {
+                  this.parseProcessInfo(update.content);
+                }
+              }
+            }
+          }
+        });
+
+        // Broadcast JOIN signal
+        setTimeout(() => {
+          this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), '', undefined, 'JOIN');
+        }, 100);
+
+        // Start fallback timer
+        fallbackTimer = setTimeout(() => {
+          if (!syncReceived) {
+            this.initTiptap(s3Content);
+          }
+        }, 500);
+      } else {
+        this.initTiptap(s3Content);
+      }
+    };
 
     if (isDocx) {
       // Cargar el documento Word como HTML editable
@@ -807,12 +921,12 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           this.fileContent = res.html;
           file.content = res.html;
           this.cargarHistorial();
-          this.initTiptap(res.html);
+          handleWebsocketAndInit(res.html);
         },
         error: () => {
           this.fileContent = '<p>No se pudo cargar el contenido Word. Escribe aquí.</p>';
           this.cargarHistorial();
-          this.initTiptap(this.fileContent);
+          handleWebsocketAndInit(this.fileContent);
         }
       });
     } else {
@@ -824,7 +938,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           if (this.isProcessInfoFile) {
             this.parseProcessInfo(res.content);
           }
-          this.initTiptap(res.content);
+          handleWebsocketAndInit(res.content);
         },
         error: (err) => {
           console.error('Error al cargar contenido de S3, usando copia local:', err);
@@ -833,30 +947,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           if (this.isProcessInfoFile) {
             this.parseProcessInfo(this.fileContent);
           }
-          this.initTiptap(this.fileContent);
-        }
-      });
-    }
-
-    // Conectar WebSocket para colaboración en tiempo real
-    if (file.name !== 'historial_bitacora.txt') {
-      const docId = s3Path.replace(/\//g, '_');
-      this.docSocketSubscription = this.documentSocketService.connect(docId).subscribe({
-        next: (update) => {
-          if (update.update && this.ydoc) {
-            try {
-              const updateBytes = this.base64ToArrayBuffer(update.update);
-              Y.applyUpdate(this.ydoc, updateBytes, this);
-            } catch (e) {
-              console.error('Error al aplicar delta de Yjs:', e);
-            }
-          } else if (update.content) {
-            this.fileContent = update.content;
-            file.content = update.content;
-            if (this.isProcessInfoFile) {
-              this.parseProcessInfo(update.content);
-            }
-          }
+          handleWebsocketAndInit(this.fileContent);
         }
       });
     }
@@ -1334,6 +1425,53 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
         this.allItems = this.allItems.filter(i => i.id !== this.deletingItem!.id);
         this.actualizarRepositorio();
         this.cerrarDeleteModal();
+      }
+    });
+  }
+
+  solicitarRenombrar(item: DriveItem) {
+    this.renamingItem = item;
+    this.renameNewName = item.name;
+    this.isRenameModalVisible = true;
+  }
+
+  cerrarRenameModal() {
+    this.isRenameModalVisible = false;
+    this.renamingItem = null;
+    this.renameNewName = '';
+  }
+
+  confirmarRenombrar() {
+    if (!this.renamingItem || !this.renameNewName.trim() || this.renameNewName.trim() === this.renamingItem.name) {
+      this.cerrarRenameModal();
+      return;
+    }
+
+    const tenantId = this.renamingItem.tenantId;
+    const oldName = this.resolverS3Path(this.renamingItem);
+    const newName = oldName.substring(0, oldName.lastIndexOf('/') + 1) + this.renameNewName.trim();
+
+    this.http.post(this.apiGlobalService.getEndpointUrl('documentos/rename'), {
+      tenantId: tenantId,
+      oldName: oldName,
+      newName: newName,
+      usuario: this.getCurrentUser(),
+      rol: 'CLIENTE'
+    }).subscribe({
+      next: () => {
+        // Actualizar en el modelo local
+        this.renamingItem!.name = this.renameNewName.trim();
+        this.renamingItem!.s3Path = newName;
+        this.actualizarRepositorio();
+        this.cerrarRenameModal();
+      },
+      error: (err) => {
+        console.error('Error al renombrar archivo/carpeta en S3:', err);
+        // Fallback local
+        this.renamingItem!.name = this.renameNewName.trim();
+        this.renamingItem!.s3Path = newName;
+        this.actualizarRepositorio();
+        this.cerrarRenameModal();
       }
     });
   }

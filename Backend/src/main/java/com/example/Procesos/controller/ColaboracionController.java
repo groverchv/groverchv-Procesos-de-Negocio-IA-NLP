@@ -32,8 +32,8 @@ public class ColaboracionController {
         // Broadcast a todos los usuarios suscritos a la sala
         messagingTemplate.convertAndSend("/topic/colaboracion/" + docId, payload);
 
-        // Si se provee contenido de texto plano, disparar análisis reactivo de IA asíncronamente
-        if (payload.getContent() != null && !payload.getContent().trim().isEmpty()) {
+        // Si se provee contenido de texto plano y el tipo es UPDATE, disparar análisis reactivo de IA asíncronamente
+        if ("UPDATE".equals(payload.getType()) && payload.getContent() != null && !payload.getContent().trim().isEmpty()) {
             iaClient.observarDocumento(docId, payload.getUserId(), payload.getUserName(), payload.getContent())
                     .subscribe(
                             success -> {},
@@ -42,11 +42,13 @@ public class ColaboracionController {
         }
 
         // Actualizar la última fecha de modificación en la base de datos de forma asíncrona
-        Optional<DocumentoMetadata> metadataOpt = documentoRepository.findById(docId);
-        if (metadataOpt.isPresent()) {
-            DocumentoMetadata metadata = metadataOpt.get();
-            metadata.setUltimaModificacion(new Date());
-            documentoRepository.save(metadata);
+        if ("UPDATE".equals(payload.getType())) {
+            Optional<DocumentoMetadata> metadataOpt = documentoRepository.findById(docId);
+            if (metadataOpt.isPresent()) {
+                DocumentoMetadata metadata = metadataOpt.get();
+                metadata.setUltimaModificacion(new Date());
+                documentoRepository.save(metadata);
+            }
         }
     }
 
@@ -59,8 +61,9 @@ public class ColaboracionController {
     public static class ColaboracionUpdate {
         private String userId;
         private String userName;
-        private String update;      // Delta de Yjs codificado en Base64
+        private String update;      // Delta de Yjs codificado en Base64/Yjs state update
         private String content;     // Texto plano actual del documento para NLP/Deep Learning
         private long timestamp;
+        private String type;        // Tipo de mensaje: JOIN, SYNC, UPDATE
     }
 }

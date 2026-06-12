@@ -157,4 +157,62 @@ public class S3DocumentService {
         PresignedPutObjectRequest presignedPutObjectRequest = s3Presigner.presignPutObject(presignRequest);
         return presignedPutObjectRequest.url().toString();
     }
+
+    /**
+     * Renombra un archivo o carpeta (prefijo) en S3 copiando y eliminando.
+     */
+    public void renameDocument(String tenantId, String oldName, String newName) {
+        String oldS3Key = tenantId + "/" + oldName;
+        String newS3Key = tenantId + "/" + newName;
+
+        // Intentar ver si es una carpeta
+        boolean isFolder = oldName.endsWith("/") || listObjects(oldS3Key + "/").size() > 0 || listObjects(oldS3Key).stream().anyMatch(obj -> obj.key().startsWith(oldS3Key + "/"));
+
+        if (isFolder) {
+            String cleanOldPath = oldS3Key.endsWith("/") ? oldS3Key : oldS3Key + "/";
+            String cleanNewPath = newS3Key.endsWith("/") ? newS3Key : newS3Key + "/";
+
+            java.util.List<software.amazon.awssdk.services.s3.model.S3Object> objects = listObjects(cleanOldPath);
+            for (software.amazon.awssdk.services.s3.model.S3Object obj : objects) {
+                String oldKey = obj.key();
+                String relativePath = oldKey.substring(cleanOldPath.length());
+                String newKey = cleanNewPath + relativePath;
+
+                // Copiar
+                software.amazon.awssdk.services.s3.model.CopyObjectRequest copyRequest = 
+                    software.amazon.awssdk.services.s3.model.CopyObjectRequest.builder()
+                        .sourceBucket(BUCKET_NAME)
+                        .sourceKey(oldKey)
+                        .destinationBucket(BUCKET_NAME)
+                        .destinationKey(newKey)
+                        .build();
+                s3Client.copyObject(copyRequest);
+
+                // Eliminar original
+                software.amazon.awssdk.services.s3.model.DeleteObjectRequest deleteRequest = 
+                    software.amazon.awssdk.services.s3.model.DeleteObjectRequest.builder()
+                        .bucket(BUCKET_NAME)
+                        .key(oldKey)
+                        .build();
+                s3Client.deleteObject(deleteRequest);
+            }
+        } else {
+            // Es un archivo individual
+            software.amazon.awssdk.services.s3.model.CopyObjectRequest copyRequest = 
+                software.amazon.awssdk.services.s3.model.CopyObjectRequest.builder()
+                    .sourceBucket(BUCKET_NAME)
+                    .sourceKey(oldS3Key)
+                    .destinationBucket(BUCKET_NAME)
+                    .destinationKey(newS3Key)
+                    .build();
+            s3Client.copyObject(copyRequest);
+
+            software.amazon.awssdk.services.s3.model.DeleteObjectRequest deleteRequest = 
+                software.amazon.awssdk.services.s3.model.DeleteObjectRequest.builder()
+                    .bucket(BUCKET_NAME)
+                    .key(oldS3Key)
+                    .build();
+            s3Client.deleteObject(deleteRequest);
+        }
+    }
 }

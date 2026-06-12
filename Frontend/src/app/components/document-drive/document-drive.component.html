@@ -46,17 +46,16 @@
         <span nz-icon [nzType]="cargandoUsuarios ? 'loading' : 'sync'" nzTheme="outline"></span>
         {{ cargandoUsuarios ? 'Cargando...' : 'Sincronizar' }}
       </button>
-      <button class="btn-action-outline" (click)="abrirModalCreacion('folder')">
+      <button *ngIf="currentFolderId !== null" class="btn-action-outline" (click)="abrirModalCreacion('folder')">
         <span nz-icon nzType="folder-add" nzTheme="outline"></span> Nueva Carpeta
       </button>
-      <button class="btn-action-outline" (click)="abrirModalCreacion('file')">
-        <span nz-icon nzType="file-add" nzTheme="outline"></span> Nuevo Formato
-      </button>
       
-      <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)" accept=".txt,.pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.svg,.csv">
-      <label for="file-upload" class="upload-btn">
-        <span nz-icon nzType="upload" nzTheme="outline"></span> Subir Documento
-      </label>
+      <ng-container *ngIf="currentFolderId !== null">
+        <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)" accept=".txt,.pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.svg,.csv">
+        <label for="file-upload" class="upload-btn">
+          <span nz-icon nzType="upload" nzTheme="outline"></span> Subir Documento
+        </label>
+      </ng-container>
     </div>
   </div>
 
@@ -84,7 +83,7 @@
               <span class="folder-card-name">{{ item.name }}</span>
             </div>
           </div>
-          <span nz-icon nzType="more" nzTheme="outline" class="folder-card-dots"></span>
+          <span nz-icon nzType="more" nzTheme="outline" class="folder-card-dots" (click)="$event.stopPropagation(); solicitarRenombrar(item)"></span>
         </div>
       </div>
     </div>
@@ -132,6 +131,9 @@
                 </button>
                 <button class="action-btn-download" (click)="visualizarElemento(item)">
                   <span nz-icon nzType="eye" nzTheme="outline"></span> Visualizar
+                </button>
+                <button class="action-btn-download" (click)="solicitarRenombrar(item)">
+                  <span nz-icon nzType="form" nzTheme="outline"></span> Renombrar
                 </button>
                 <button class="action-btn-download delete-btn-premium" (click)="solicitarEliminar(item)">
                   <span nz-icon nzType="delete" nzTheme="outline"></span> Eliminar
@@ -333,6 +335,35 @@
       >
         <span nz-icon nzType="undo" nzTheme="outline"></span> Restaurar esta versión
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- MODAL DE RENOMBRAR (ESTILO GOOGLE DRIVE) -->
+<!-- ==================================================================== -->
+<div class="custom-modal-overlay" *ngIf="isRenameModalVisible && renamingItem">
+  <div class="custom-modal-card">
+    <div class="custom-modal-header">
+      <span nz-icon nzType="edit" nzTheme="outline" class="modal-header-icon"></span>
+      <h3>Renombrar {{ renamingItem.type === 'folder' ? 'Carpeta' : 'Archivo' }}</h3>
+    </div>
+    
+    <div class="custom-modal-body">
+      <label class="modal-field-label">Nuevo nombre:</label>
+      <input 
+        type="text" 
+        [(ngModel)]="renameNewName" 
+        [placeholder]="renamingItem.name" 
+        class="modal-text-input" 
+        (keyup.enter)="confirmarRenombrar()"
+        autofocus
+      />
+    </div>
+
+    <div class="custom-modal-footer">
+      <button class="btn-modal-cancel" (click)="cerrarRenameModal()">Cancelar</button>
+      <button class="btn-modal-confirm" (click)="confirmarRenombrar()" [disabled]="!renameNewName.trim() || renameNewName.trim() === renamingItem.name">Guardar</button>
     </div>
   </div>
 </div>
