@@ -122,7 +122,8 @@ Carriles/Swimlanes actuales: [{lanes_context or 'Ninguno'}]
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "ngrok-skip-browser-warning": "true"
         }
 
         body = {
@@ -183,7 +184,8 @@ Tu respuesta debe ser estrictamente en formato JSON con los siguientes campos ex
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "ngrok-skip-browser-warning": "true"
         }
 
         body = {
@@ -273,7 +275,8 @@ BPMNFlow es una plataforma de gestión de procesos de negocio. Los usuarios (cli
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "ngrok-skip-browser-warning": "true"
         }
 
         body = {
@@ -311,7 +314,8 @@ Estructura JSON esperada:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "ngrok-skip-browser-warning": "true"
         }
 
         body = {
@@ -353,7 +357,8 @@ Estructura JSON esperada:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "ngrok-skip-browser-warning": "true"
         }
 
         body = {
@@ -445,7 +450,8 @@ Posees acceso a documentos privados e históricos del repositorio S3 correspondi
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "ngrok-skip-browser-warning": "true"
         }
 
         body = {

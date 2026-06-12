@@ -278,7 +278,8 @@ TRANSCRIPCIÓN:
     ollama_model = os.getenv("OLLAMA_MODEL", "gemma2")
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
+        "Authorization": f"Bearer {api_key}",
+        "ngrok-skip-browser-warning": "true"
     }
     body = {
         "model": ollama_model,
@@ -371,7 +372,8 @@ Posees acceso a documentos privados e históricos del repositorio S3 correspondi
             
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
+                "Authorization": f"Bearer {api_key}",
+                "ngrok-skip-browser-warning": "true"
             }
             body = {
                 "model": ollama_model,
