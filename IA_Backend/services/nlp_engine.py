@@ -48,8 +48,7 @@ FORMATO DE RESPUESTA ESPERADO:
                 { "role": "user", "content": user_message }
             ],
             "temperature": 0.1,
-            "max_tokens": 4096,
-            "response_format": { "type": "json_object" }
+            "max_tokens": 4096
         }
 
         async with httpx.AsyncClient() as client:
@@ -194,8 +193,7 @@ Tu respuesta debe ser estrictamente en formato JSON con los siguientes campos ex
                 { "role": "user", "content": f"Por favor genera el reporte dinámico para la consulta: {query}" }
             ],
             "temperature": 0.3,
-            "max_tokens": 2048,
-            "response_format": { "type": "json_object" }
+            "max_tokens": 2048
         }
 
         async with httpx.AsyncClient() as client:
@@ -323,8 +321,7 @@ Estructura JSON esperada:
                 { "role": "user", "content": f"Usuario editando: {user_name}\nContenido del documento:\n{texto}" }
             ],
             "temperature": 0.1,
-            "max_tokens": 512,
-            "response_format": { "type": "json_object" }
+            "max_tokens": 512
         }
 
         async with httpx.AsyncClient() as client:
@@ -366,8 +363,7 @@ Estructura JSON esperada:
                 { "role": "user", "content": f"Texto del documento a validar:\n{texto}" }
             ],
             "temperature": 0.15,
-            "max_tokens": 512,
-            "response_format": { "type": "json_object" }
+            "max_tokens": 512
         }
 
         async with httpx.AsyncClient() as client:
@@ -498,8 +494,7 @@ Debes responder estrictamente en formato JSON con los campos: 'politica_recomend
                 { "role": "user", "content": texto }
             ],
             "temperature": 0.2,
-            "max_tokens": 512,
-            "response_format": { "type": "json_object" }
+            "max_tokens": 512
         }
         
         async with httpx.AsyncClient() as client:
