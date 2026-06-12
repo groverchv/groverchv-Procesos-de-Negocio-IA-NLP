@@ -38,7 +38,8 @@ FORMATO DE RESPUESTA ESPERADO:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "ngrok-skip-browser-warning": "true"
         }
 
         body = {
