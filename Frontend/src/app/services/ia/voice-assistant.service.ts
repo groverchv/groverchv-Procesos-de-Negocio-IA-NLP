@@ -110,8 +110,10 @@ export class VoiceAssistantService {
     const lanes = (this.currentNodes || []).filter(n => n.type === 'swimlane');
     const lanesContext = lanes.map(l => `"${l.label}" (id=${l.id}, x=${Math.round(l.x)}, w=${l.width}, h=${l.height})`).join(', ');
 
+    const useLocal = this.config.useLocalIA !== false;
     const headers = new HttpHeaders({
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-Provider': useLocal ? 'local' : 'groq'
     });
 
     const body = {
@@ -148,8 +150,10 @@ export class VoiceAssistantService {
     const nodesContext = nodes.map(n => `[${n.type}: "${n.label || ''}"]`).join(', ');
     const auditPrompt = `Audita el diagrama BPMN brevemente en español. Máximo 3 puntos. Nodos actuales: ${nodesContext}`;
     
+    const useLocal = this.config.useLocalIA !== false;
     const headers = new HttpHeaders({
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-Provider': useLocal ? 'local' : 'groq'
     });
 
     const body = {
@@ -193,8 +197,10 @@ export class VoiceAssistantService {
   }
 
   private async playBackendTTS(text: string): Promise<void> {
+    const useLocal = this.config.useLocalIA !== false;
     const headers = new HttpHeaders({
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-Provider': useLocal ? 'local' : 'groq'
     });
 
     const voiceId = this.config.elevenLabsVoice || 'cjVigY5qzO86Huf0OWal';

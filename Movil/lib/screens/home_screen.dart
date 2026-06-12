@@ -252,44 +252,87 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.psychology_rounded, color: Colors.indigo, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Motor de IA (NLP)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF0F172A),
-                        ),
+                Row(
+                  children: [
+                    const Icon(Icons.psychology_rounded, color: Colors.indigo, size: 24),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Motor de IA (NLP)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        Provider.of<ApiService>(context, listen: false).useLocalIA
-                            ? 'Usando IA Local (LM Studio / Ollama)'
-                            : 'Usando IA en la Nube (Groq Cloud)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blueGrey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Elige la plataforma para procesar las consultas del asistente:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blueGrey.shade600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                Switch(
-                  value: Provider.of<ApiService>(context).useLocalIA,
-                  activeColor: const Color(0xFF4F46E5),
-                  onChanged: (val) {
-                    setState(() {
-                      Provider.of<ApiService>(context, listen: false).useLocalIA = val;
-                    });
-                  },
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Provider.of<ApiService>(context, listen: false).useLocalIA
+                          ? ElevatedButton.icon(
+                              onPressed: () {},
+                              icon: const Icon(Icons.laptop_rounded, size: 16),
+                              label: const Text('IA Local', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4F46E5),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            )
+                          : OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  Provider.of<ApiService>(context, listen: false).useLocalIA = true;
+                                });
+                              },
+                              icon: const Icon(Icons.laptop_rounded, size: 16),
+                              label: const Text('IA Local'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: !Provider.of<ApiService>(context, listen: false).useLocalIA
+                          ? ElevatedButton.icon(
+                              onPressed: () {},
+                              icon: const Icon(Icons.cloud_rounded, size: 16),
+                              label: const Text('IA GROQ', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4F46E5),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            )
+                          : OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  Provider.of<ApiService>(context, listen: false).useLocalIA = false;
+                                });
+                              },
+                              icon: const Icon(Icons.cloud_rounded, size: 16),
+                              label: const Text('IA GROQ'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                    ),
+                  ],
                 ),
               ],
             ),

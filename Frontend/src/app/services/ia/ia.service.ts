@@ -141,8 +141,20 @@ ACCIONES:
 - auto_layout, clear_all, zoom_fit
 FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`;
 
+    const configStr = localStorage.getItem('bpmnflow_config');
+    let useLocal = true;
+    if (configStr) {
+      try {
+        const config = JSON.parse(configStr);
+        if (config.useLocalIA === false) {
+          useLocal = false;
+        }
+      } catch {}
+    }
+
     const headers = new HttpHeaders({
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-Provider': useLocal ? 'local' : 'groq'
     });
 
     const body = {

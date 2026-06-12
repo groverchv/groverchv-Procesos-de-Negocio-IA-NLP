@@ -2,25 +2,47 @@ import os
 import base64
 import httpx
 from fastapi import HTTPException
+import contextvars
+
+provider_var = contextvars.ContextVar("provider", default=None)
 
 class MotorNLP:
     def __init__(self):
         ollama_base = os.getenv("OLLAMA_URL", "").rstrip("/")
         if ollama_base:
-            self.groq_url = f"{ollama_base}/v1/chat/completions"
-            self.model_name = os.getenv("OLLAMA_MODEL", "gemma-2-2b-it")
-            print(f"[MotorNLP] Configurado para usar local Ollama/LM Studio en: {self.groq_url} con modelo: {self.model_name}")
+            print(f"[MotorNLP] Configurado con soporte local Ollama/LM Studio en: {ollama_base}")
         else:
-            api_key = os.getenv("GROQ_API_KEY", "")
-            self.groq_url = "https://api.groq.com/openai/v1/chat/completions"
+            print(f"[MotorNLP] Configurado con soporte GROQ CLOUD por defecto.")
+
+    def _get_target(self):
+        provider = provider_var.get()
+        ollama_base = os.getenv("OLLAMA_URL", "").rstrip("/")
+        
+        # Si se solicita 'groq' o si no hay ollama local configurado:
+        if provider == "groq" or not ollama_base:
+            url = "https://api.groq.com/openai/v1/chat/completions"
             local_model = os.getenv("OLLAMA_MODEL", "gemma2")
             if "gemma" in local_model.lower():
-                self.model_name = "llama3-8b-8192"
+                model = "llama3-8b-8192"
             elif "llama" in local_model.lower():
-                self.model_name = "llama-3.1-8b-instant"
+                model = "llama-3.1-8b-instant"
             else:
-                self.model_name = "llama3-8b-8192"
-            print(f"[MotorNLP] Configurado para usar GROQ CLOUD en: {self.groq_url} con modelo: {self.model_name}")
+                model = "llama3-8b-8192"
+            return url, model
+        else:
+            url = f"{ollama_base}/v1/chat/completions"
+            model = os.getenv("OLLAMA_MODEL", "gemma-2-2b-it")
+            return url, model
+
+    @property
+    def groq_url(self) -> str:
+        url, model = self._get_target()
+        return url
+
+    @property
+    def model_name(self) -> str:
+        url, model = self._get_target()
+        return model
 
     async def procesar_comando_diagrama(self, user_message: str, nodes_context: str, edges_context: str, lanes_context: str):
         api_key = os.getenv("GROQ_API_KEY", "ollama")

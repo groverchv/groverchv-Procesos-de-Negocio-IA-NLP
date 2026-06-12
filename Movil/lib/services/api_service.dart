@@ -235,7 +235,10 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-asesor'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Provider': useLocalIA ? 'local' : 'groq',
+        },
         body: jsonEncode({
           'messages': [
             {'role': 'user', 'content': texto}
@@ -266,7 +269,10 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-movil'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Provider': useLocalIA ? 'local' : 'groq',
+        },
         body: jsonEncode({
           'messages': messages,
           if (procesoContext != null) 'proceso_context': procesoContext,
@@ -297,7 +303,10 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/nlp/chat-rag'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Provider': useLocalIA ? 'local' : 'groq',
+        },
         body: jsonEncode({
           'messages': messages,
           'tenant_id': tenantId,
@@ -322,7 +331,10 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$iaUrl/api/v1/tts/generar-voz'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Provider': useLocalIA ? 'local' : 'groq',
+        },
         body: jsonEncode({
           'text': texto
         }),

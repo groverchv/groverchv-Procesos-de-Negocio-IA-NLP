@@ -54,6 +54,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from services.nlp_engine import provider_var
+
+@app.middleware("http")
+async def set_provider_middleware(request: Request, call_next):
+    provider = request.headers.get("x-provider") or request.query_params.get("provider")
+    token = provider_var.set(provider)
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        provider_var.reset(token)
+
 # ====================================================================
 # MODELOS DE DATOS (Pydantic)
 # ====================================================================
@@ -339,6 +351,10 @@ async def chat_stream_websocket(websocket: WebSocket):
             data = await websocket.receive_json()
             messages = data.get("messages", [])
             tenant_id = data.get("tenant_id", "")
+            
+            # Resolver provider desde query params
+            provider = websocket.query_params.get("provider") or data.get("provider")
+            provider_var.set(provider)
             
             # Buscar último mensaje del usuario para RAG
             last_user_message = ""
