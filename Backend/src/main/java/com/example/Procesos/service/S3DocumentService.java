@@ -19,9 +19,15 @@ public class S3DocumentService {
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
-    private final String BUCKET_NAME = System.getenv("AWS_S3_BUCKET") != null && !System.getenv("AWS_S3_BUCKET").trim().isEmpty()
-            ? System.getenv("AWS_S3_BUCKET")
-            : "procesodegestion";
+    private final String BUCKET_NAME = getS3BucketName();
+
+    private String getS3BucketName() {
+        String bucket = System.getenv("AWS_S3_BUCKET");
+        if (bucket == null || bucket.trim().isEmpty()) {
+            bucket = System.getProperty("AWS_S3_BUCKET");
+        }
+        return (bucket != null && !bucket.trim().isEmpty()) ? bucket : "procesodegestion";
+    }
 
     public S3DocumentService(S3Client s3Client, S3Presigner s3Presigner) {
         this.s3Client = s3Client;

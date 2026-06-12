@@ -13,21 +13,57 @@ import java.net.URI;
 @Configuration
 public class S3Config {
 
+    static {
+        // Cargar variables de .env a System Properties al iniciar la clase
+        try {
+            java.io.File envFile = new java.io.File("../.env");
+            if (!envFile.exists()) {
+                envFile = new java.io.File(".env");
+            }
+            if (envFile.exists()) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(envFile))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (line.startsWith("#") || !line.contains("=")) {
+                            continue;
+                        }
+                        int eqIdx = line.indexOf("=");
+                        String envKey = line.substring(0, eqIdx).trim();
+                        String envVal = line.substring(eqIdx + 1).trim();
+                        // Remover comillas si existen
+                        if (envVal.startsWith("\"") && envVal.endsWith("\"")) {
+                            envVal = envVal.substring(1, envVal.length() - 1);
+                        } else if (envVal.startsWith("'") && envVal.endsWith("'")) {
+                            envVal = envVal.substring(1, envVal.length() - 1);
+                        }
+                        if (System.getProperty(envKey) == null) {
+                            System.setProperty(envKey, envVal);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[S3Config] Error cargando archivo .env: " + e.getMessage());
+        }
+    }
+
+    private String getEnvOrProperty(String key) {
+        String val = System.getenv(key);
+        if (val == null || val.trim().isEmpty()) {
+            val = System.getProperty(key);
+        }
+        return val;
+    }
+
     private String getS3Endpoint() {
-        String endpoint = System.getenv("S3_ENDPOINT");
-        if (endpoint == null || endpoint.trim().isEmpty()) {
-            return "http://127.0.0.1:9000";
-        }
-        if (endpoint.contains("localhost")) {
-            return endpoint.replace("localhost", "127.0.0.1");
-        }
-        return endpoint;
+        return getEnvOrProperty("S3_ENDPOINT");
     }
 
     private Region getS3Region() {
-        String region = System.getenv("AWS_REGION");
+        String region = getEnvOrProperty("AWS_REGION");
         if (region == null || region.trim().isEmpty()) {
-            return Region.SA_EAST_1; // us-east-1 -> sa-east-1 (São Paulo)
+            return Region.US_EAST_2; // Región por defecto si no está en .env
         }
         return Region.of(region);
     }
@@ -38,15 +74,26 @@ public class S3Config {
                 .region(getS3Region());
                 
         String endpoint = getS3Endpoint();
-        if (endpoint != null && !endpoint.isEmpty()) {
-            // MinIO Local o LocalStack en Docker
-            builder.endpointOverride(URI.create(endpoint))
-                   .forcePathStyle(true)
-                   .credentialsProvider(StaticCredentialsProvider.create(
-                       AwsBasicCredentials.create("awsaccesskey", "awssecretkey")
-                   ));
+        String accessKey = getEnvOrProperty("AWS_ACCESS_KEY_ID");
+        String secretKey = getEnvOrProperty("AWS_SECRET_ACCESS_KEY");
+
+        if (accessKey != null && !accessKey.trim().isEmpty() && secretKey != null && !secretKey.trim().isEmpty()) {
+            builder.credentialsProvider(StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(accessKey, secretKey)
+            ));
         } else {
-            builder.credentialsProvider(DefaultCredentialsProvider.create());
+            if (endpoint != null && !endpoint.trim().isEmpty()) {
+                builder.credentialsProvider(StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create("awsaccesskey", "awssecretkey")
+                ));
+            } else {
+                builder.credentialsProvider(DefaultCredentialsProvider.create());
+            }
+        }
+
+        if (endpoint != null && !endpoint.trim().isEmpty()) {
+            builder.endpointOverride(URI.create(endpoint))
+                   .forcePathStyle(true);
         }
         return builder.build();
     }
@@ -57,13 +104,25 @@ public class S3Config {
                 .region(getS3Region());
                 
         String endpoint = getS3Endpoint();
-        if (endpoint != null && !endpoint.isEmpty()) {
-            builder.endpointOverride(URI.create(endpoint))
-                   .credentialsProvider(StaticCredentialsProvider.create(
-                       AwsBasicCredentials.create("awsaccesskey", "awssecretkey")
-                   ));
+        String accessKey = getEnvOrProperty("AWS_ACCESS_KEY_ID");
+        String secretKey = getEnvOrProperty("AWS_SECRET_ACCESS_KEY");
+
+        if (accessKey != null && !accessKey.trim().isEmpty() && secretKey != null && !secretKey.trim().isEmpty()) {
+            builder.credentialsProvider(StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(accessKey, secretKey)
+            ));
         } else {
-            builder.credentialsProvider(DefaultCredentialsProvider.create());
+            if (endpoint != null && !endpoint.trim().isEmpty()) {
+                builder.credentialsProvider(StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create("awsaccesskey", "awssecretkey")
+                ));
+            } else {
+                builder.credentialsProvider(DefaultCredentialsProvider.create());
+            }
+        }
+
+        if (endpoint != null && !endpoint.trim().isEmpty()) {
+            builder.endpointOverride(URI.create(endpoint));
         }
         return builder.build();
     }
