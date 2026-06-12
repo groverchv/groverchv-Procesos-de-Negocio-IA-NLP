@@ -5,10 +5,22 @@ from fastapi import HTTPException
 
 class MotorNLP:
     def __init__(self):
-        ollama_base = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-        self.groq_url = f"{ollama_base}/v1/chat/completions"
-        self.model_name = os.getenv("OLLAMA_MODEL", "gemma2")
-        print(f"[MotorNLP] Configurado para usar Ollama en: {self.groq_url} con modelo: {self.model_name}")
+        ollama_base = os.getenv("OLLAMA_URL", "").rstrip("/")
+        if ollama_base:
+            self.groq_url = f"{ollama_base}/v1/chat/completions"
+            self.model_name = os.getenv("OLLAMA_MODEL", "gemma-2-2b-it")
+            print(f"[MotorNLP] Configurado para usar local Ollama/LM Studio en: {self.groq_url} con modelo: {self.model_name}")
+        else:
+            api_key = os.getenv("GROQ_API_KEY", "")
+            self.groq_url = "https://api.groq.com/openai/v1/chat/completions"
+            local_model = os.getenv("OLLAMA_MODEL", "gemma2")
+            if "gemma" in local_model.lower():
+                self.model_name = "llama3-8b-8192"
+            elif "llama" in local_model.lower():
+                self.model_name = "llama-3.1-8b-instant"
+            else:
+                self.model_name = "llama3-8b-8192"
+            print(f"[MotorNLP] Configurado para usar GROQ CLOUD en: {self.groq_url} con modelo: {self.model_name}")
 
     async def procesar_comando_diagrama(self, user_message: str, nodes_context: str, edges_context: str, lanes_context: str):
         api_key = os.getenv("GROQ_API_KEY", "ollama")
@@ -49,7 +61,8 @@ FORMATO DE RESPUESTA ESPERADO:
                 { "role": "user", "content": user_message }
             ],
             "temperature": 0.1,
-            "max_tokens": 4096
+            "max_tokens": 4096,
+            "stop": ["<unused", "<unused23>", "```"]
         }
 
         async with httpx.AsyncClient() as client:
@@ -57,7 +70,19 @@ FORMATO DE RESPUESTA ESPERADO:
                 response = await client.post(self.groq_url, json=body, headers=headers, timeout=60.0)
                 response.raise_for_status()
                 data = response.json()
-                return data["choices"][0]["message"]["content"]
+                content = data["choices"][0]["message"]["content"]
+                
+                # Limpiar bloques markdown si existen
+                import re
+                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
+                if match:
+                    content = match.group(1)
+                else:
+                    content = content.replace("```json", "").replace("```", "").strip()
+                
+                # Quitar tokens raros de LM Studio como <unused23>
+                content = re.sub(r'<unused\d+>', '', content)
+                return content.strip()
             except httpx.HTTPStatusError as e:
                 raise HTTPException(status_code=e.response.status_code, detail=f"Error de Ollama: {e.response.text}")
             except Exception as e:

@@ -273,9 +273,8 @@ TRANSCRIPCIÓN:
 "{transcripcion}"
 """
     api_key = os.getenv("GROQ_API_KEY", "ollama")
-    ollama_base = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-    ollama_url = f"{ollama_base}/v1/chat/completions"
-    ollama_model = os.getenv("OLLAMA_MODEL", "gemma2")
+    ollama_url = motor_nlp.groq_url
+    ollama_model = motor_nlp.model_name
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -352,9 +351,8 @@ async def chat_stream_websocket(websocket: WebSocket):
             contexto_recuperado = vector_store.recuperar_contexto(tenant_id, last_user_message)
             
             api_key = os.getenv("GROQ_API_KEY", "ollama")
-            ollama_base = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-            ollama_url = f"{ollama_base}/v1/chat/completions"
-            ollama_model = os.getenv("OLLAMA_MODEL", "gemma2")
+            ollama_url = motor_nlp.groq_url
+            ollama_model = motor_nlp.model_name
                 
             system_prompt = f"""Eres un Asistente Corporativo Avanzado (IA con Memoria de Cliente) integrado en BPMNFlow.
 Tu objetivo es responder de forma ultra-personalizada y precisa a las consultas del cliente.

@@ -17,6 +17,7 @@ export interface ApiKeysConfig {
   enableTTS: boolean;
   enableVoiceInput: boolean;
   language: string;
+  useLocalIA: boolean;
 }
 
 @Component({
@@ -75,6 +76,16 @@ export interface ApiKeysConfig {
                   <span class="pref-desc">Reconocimiento de voz para comandos</span>
                 </div>
                 <nz-switch [(ngModel)]="config.enableVoiceInput"></nz-switch>
+              </div>
+
+              <nz-divider></nz-divider>
+
+              <div class="pref-row">
+                <div class="pref-info">
+                  <span class="pref-label"><span nz-icon nzType="api" nzTheme="outline" style="margin-right: 6px;"></span>Motor de IA (NLP)</span>
+                  <span class="pref-desc">Usa IA Local (LM Studio) en lugar de Groq Cloud</span>
+                </div>
+                <nz-switch [(ngModel)]="config.useLocalIA"></nz-switch>
               </div>
 
               <nz-divider></nz-divider>
@@ -173,7 +184,8 @@ export class SettingsModalComponent {
     elevenLabsVoice: 'cjVigY5qzO86Huf0OWal',
     enableTTS: true,
     enableVoiceInput: true,
-    language: 'es-ES'
+    language: 'es-ES',
+    useLocalIA: true
   };
 
   constructor(private message: NzMessageService) {

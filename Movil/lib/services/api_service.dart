@@ -17,7 +17,12 @@ class ApiService {
     return 'https://backend-principal.up.railway.app/api';
   }
 
+  bool useLocalIA = true;
+
   String get iaUrl {
+    if (useLocalIA) {
+      return 'http://localhost:8000';
+    }
     if (_iaBaseEnv.isNotEmpty) {
       return _iaBaseEnv;
     }
@@ -236,7 +241,7 @@ class ApiService {
             {'role': 'user', 'content': texto}
           ]
         }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 180));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -266,7 +271,7 @@ class ApiService {
           'messages': messages,
           if (procesoContext != null) 'proceso_context': procesoContext,
         }),
-      ).timeout(const Duration(seconds: 20));
+      ).timeout(const Duration(seconds: 180));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;

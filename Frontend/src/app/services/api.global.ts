@@ -3,7 +3,16 @@ const getIaBaseUrl = (): string => {
   if (override && override.trim().length > 0) {
     return override.trim().replace(/\/+$/, '');
   }
-  return 'https://backend-ia-nlp.up.railway.app';
+  try {
+    const configStr = localStorage.getItem('bpmnflow_config');
+    if (configStr) {
+      const config = JSON.parse(configStr);
+      if (config.useLocalIA === false) {
+        return 'https://backend-ia-nlp.up.railway.app';
+      }
+    }
+  } catch {}
+  return 'http://127.0.0.1:8000';
 };
 
 export const API_GLOBAL = {

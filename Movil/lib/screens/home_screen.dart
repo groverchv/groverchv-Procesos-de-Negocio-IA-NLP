@@ -4,6 +4,7 @@ import 'active_processes_screen.dart';
 import 'sugerencias_ia_screen.dart';
 import 'asistente_voz_cliente_screen.dart';
 import '../services/api_service.dart';
+import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -236,6 +237,62 @@ class _HomeScreenState extends State<HomeScreen> {
             'WebSocket: ws://10.0.2.2:8080/ws-bpmn',
             Icons.lan_rounded,
             Colors.green,
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.psychology_rounded, color: Colors.indigo, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Motor de IA (NLP)',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        Provider.of<ApiService>(context, listen: false).useLocalIA
+                            ? 'Usando IA Local (LM Studio / Ollama)'
+                            : 'Usando IA en la Nube (Groq Cloud)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blueGrey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: Provider.of<ApiService>(context).useLocalIA,
+                  activeColor: const Color(0xFF4F46E5),
+                  onChanged: (val) {
+                    setState(() {
+                      Provider.of<ApiService>(context, listen: false).useLocalIA = val;
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
           Center(
