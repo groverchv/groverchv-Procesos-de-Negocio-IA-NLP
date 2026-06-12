@@ -134,7 +134,7 @@ Carriles/Swimlanes actuales: [{lanes_context or 'Ninguno'}]
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(self.groq_url, json=body, headers=headers, timeout=60.0)
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=180.0)
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
@@ -198,7 +198,7 @@ Tu respuesta debe ser estrictamente en formato JSON con los siguientes campos ex
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(self.groq_url, json=body, headers=headers, timeout=60.0)
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=180.0)
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
@@ -285,7 +285,7 @@ BPMNFlow es una plataforma de gestión de procesos de negocio. Los usuarios (cli
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(self.groq_url, json=body, headers=headers, timeout=60.0)
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=180.0)
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
@@ -326,7 +326,7 @@ Estructura JSON esperada:
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(self.groq_url, json=body, headers=headers, timeout=60.0)
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=180.0)
                 response.raise_for_status()
                 data = response.json()
                 import json
@@ -368,7 +368,7 @@ Estructura JSON esperada:
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(self.groq_url, json=body, headers=headers, timeout=60.0)
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=180.0)
                 response.raise_for_status()
                 data = response.json()
                 import json
@@ -457,7 +457,7 @@ Posees acceso a documentos privados e históricos del repositorio S3 correspondi
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(self.groq_url, json=body, headers=headers, timeout=60.0)
+                response = await client.post(self.groq_url, json=body, headers=headers, timeout=180.0)
                 response.raise_for_status()
                 data = response.json()
                 return {

@@ -297,7 +297,7 @@ TRANSCRIPCIÓN:
                 ollama_url,
                 json=body,
                 headers=headers,
-                timeout=30.0
+                timeout=180.0
             )
             response.raise_for_status()
             acta = response.json()["choices"][0]["message"]["content"]
@@ -383,7 +383,7 @@ Posees acceso a documentos privados e históricos del repositorio S3 correspondi
             
             # Enviar streaming de tokens
             async with httpx.AsyncClient() as client:
-                async with client.stream("POST", ollama_url, json=body, headers=headers, timeout=60.0) as response:
+                async with client.stream("POST", ollama_url, json=body, headers=headers, timeout=180.0) as response:
                     async for line in response.aiter_lines():
                         if line.startswith("data: "):
                             data_str = line[6:]
