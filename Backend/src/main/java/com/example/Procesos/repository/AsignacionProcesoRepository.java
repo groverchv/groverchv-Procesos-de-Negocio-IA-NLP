@@ -2,12 +2,11 @@ package com.example.Procesos.repository;
 
 import com.example.Procesos.model.AsignacionProceso;
 import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
-@Repository
+
 public interface AsignacionProcesoRepository extends MongoRepository<AsignacionProceso, String> {
 
     /** Todas las asignaciones de un cliente (habilitadas o no) */

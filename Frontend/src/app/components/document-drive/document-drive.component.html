@@ -233,7 +233,7 @@
             <div class="process-timeline-section">
               <h5>Hoja de Ruta e Hitos del Proceso</h5>
               <div class="timeline-flow">
-                <div class="timeline-node" *ngFor="let act of processInfoParsed.actividades" [ngClass]="act.status?.toLowerCase()">
+                <div class="timeline-node" *ngFor="let act of processInfoParsed.actividades" [ngClass]="act.status.toLowerCase()">
                   <div class="node-icon">
                     <span nz-icon [nzType]="act.status === 'FINISHED' ? 'check' : act.status === 'IN_REVIEW' ? 'sync' : 'hourglass'" nzTheme="outline"></span>
                   </div>
@@ -241,7 +241,7 @@
                     <div class="node-label">{{ act.label }}</div>
                     <div class="node-type">{{ act.type }}</div>
                   </div>
-                  <span class="node-status-badge" [ngClass]="act.status?.toLowerCase()">{{ act.status }}</span>
+                  <span class="node-status-badge" [ngClass]="act.status.toLowerCase()">{{ act.status }}</span>
                 </div>
               </div>
             </div>
@@ -264,13 +264,13 @@
           <div *ngIf="isDocxFile" style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
             <!-- Barra de formato Word -->
             <div class="wysiwyg-toolbar">
-              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('bold')" title="Negrita"><strong>B</strong></button>
-              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('italic')" title="Cursiva"><em>I</em></button>
-              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('underline')" title="Subrayado"><u>U</u></button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('bold')" title="Negrita"><strong>B</strong></button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('italic')" title="Cursiva"><em>I</em></button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('underline')" title="Subrayado"><u>U</u></button>
               <span class="wysiwyg-sep"></span>
-              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('insertUnorderedList')" title="Lista">≡</button>
-              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('justifyLeft')" title="Izq">⬅</button>
-              <button type="button" class="wysiwyg-btn" (click)="document.execCommand('justifyCenter')" title="Centro">≡</button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('insertUnorderedList')" title="Lista">≡</button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('justifyLeft')" title="Izq">⬅</button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('justifyCenter')" title="Centro">≡</button>
             </div>
             <div 
               id="docx-wysiwyg-editor"

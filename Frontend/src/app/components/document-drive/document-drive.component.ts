@@ -765,6 +765,10 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.triggerAutoSave();
   }
 
+  execFormatCommand(command: string) {
+    document.execCommand(command, false, '');
+  }
+
   triggerAutoSave() {
     this.savingStatus = 'saving';
     if (this.autoSaveTimer) {
