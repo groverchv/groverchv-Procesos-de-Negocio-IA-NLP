@@ -53,6 +53,18 @@ export class DocumentSocketService {
           }
         }
       });
+
+      // Enviar señal de JOIN automáticamente una vez establecida la conexión de STOMP
+      const userName = typeof window !== 'undefined' && (window.location.href.includes('/staff') || window.location.href.includes('/funcionario')) 
+         ? 'Maria Funcionario' 
+         : 'Juan Diseñador';
+      this.sendUpdate(docId, userName, '', undefined, 'JOIN');
+    };
+
+    this.stompClient.onWebSocketError = (error) => {
+    };
+
+    this.stompClient.onStompError = (frame) => {
     };
 
     this.stompClient.activate();

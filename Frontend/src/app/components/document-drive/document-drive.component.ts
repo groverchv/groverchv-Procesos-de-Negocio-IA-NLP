@@ -62,6 +62,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   isCreateModalVisible: boolean = false;
   createModalType: 'folder' | 'file' = 'folder';
   newItemName: string = '';
+  createFileType: 'docx' | 'xlsx' | 'txt' = 'docx';
 
   // Colaboradores en línea en tiempo real
   colaboradoresActivos: { nombre: string; iniciales: string; rol: string; color: string }[] = [];
@@ -472,6 +473,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
   // SISTEMA DE NAVEGACIÓN LIBRE (ATRÁS / ADELANTE)
   abrirElemento(item: DriveItem) {
     if (item.type === 'folder') {
+      if (item.id === this.currentFolderId) return;
       // Guardar el estado actual en el historial de Atrás
       this.backHistory.push(this.currentFolderId);
       // Limpiar el historial de Adelante al hacer una nueva navegación directa
@@ -563,12 +565,15 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
 
   // MODALES PERSONALIZADOS (REEMPLAZAN PROMPT DE NAVEGADOR)
   abrirModalCreacion(type: 'folder' | 'file') {
+    console.log('>>> abrirModalCreacion llamado con tipo:', type);
     this.isCreateModalVisible = true;
     this.createModalType = type;
     this.newItemName = '';
+    console.log('>>> isCreateModalVisible set to true:', this.isCreateModalVisible);
   }
 
   cerrarModalCreacion() {
+    console.log('>>> cerrarModalCreacion llamado');
     this.isCreateModalVisible = false;
     this.newItemName = '';
   }
@@ -614,6 +619,58 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
             s3Path: folderPath
           };
           this.allItems.push(newFolder);
+          this.actualizarRepositorio();
+        }
+      });
+    } else if (this.createModalType === 'file') {
+      let fileName = this.newItemName.trim();
+      const ext = `.${this.createFileType}`;
+      if (!fileName.toLowerCase().endsWith(ext)) {
+        fileName = fileName + ext;
+      }
+      const parentPath = activeParent ? this.resolverS3Path(activeParent) : '';
+      const s3Path = parentPath ? `${parentPath}/${fileName}` : fileName;
+
+      this.http.post(this.apiGlobalService.getEndpointUrl('documentos/create-file'), {
+        tenantId: tenantId,
+        fileName: s3Path,
+        usuario: this.getCurrentUser(),
+        rol: 'CLIENTE'
+      }).subscribe({
+        next: () => {
+          const newFile: DriveItem = {
+            id: `file_${Date.now()}`,
+            name: fileName,
+            type: 'file',
+            parentId: this.currentFolderId,
+            date: new Date(),
+            tenantId: tenantId,
+            s3Path: s3Path,
+            size: '0 Bytes',
+            content: this.createFileType === 'docx' 
+              ? 'BPMNFLOW - NUEVO DOCUMENTO WORD COLABORATIVO\n\nComienza a escribir aquí...' 
+              : this.createFileType === 'xlsx' 
+              ? '' 
+              : 'Nuevo archivo de texto colaborativo'
+          };
+          this.allItems.push(newFile);
+          this.actualizarRepositorio();
+        },
+        error: (err) => {
+          console.error('Error al crear archivo en S3:', err);
+          alert('Error al crear el archivo en el servidor. Asegúrate de que el Backend esté redesplegado en Railway con el nuevo endpoint `/create-file` (Detalle: ' + (err.error?.message || err.message) + ')');
+          // Fallback local
+          const newFile: DriveItem = {
+            id: `file_${Date.now()}`,
+            name: fileName,
+            type: 'file',
+            parentId: this.currentFolderId,
+            date: new Date(),
+            tenantId: tenantId,
+            s3Path: s3Path,
+            size: '0 Bytes'
+          };
+          this.allItems.push(newFile);
           this.actualizarRepositorio();
         }
       });
@@ -777,12 +834,15 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       this.ydoc = new Y.Doc();
     }
     
+    console.log('>>> initTiptap ydoc clientID:', this.ydoc.clientID);
+
     // Bind local updates to WebSocket broadcast
     this.ydoc.on('update', (update: Uint8Array, origin: any) => {
-      if (origin !== this && this.editingFile) {
+      if (origin !== 'websocket' && this.editingFile) {
         const base64Update = this.arrayBufferToBase64(update);
         const s3Path = this.resolverS3Path(this.editingFile);
         const docId = s3Path.replace(/\//g, '_');
+        console.log('>>> WebSocket Enviando UPDATE Yjs:', { docId, origin, base64UpdateLength: base64Update.length, clientID: this.ydoc?.clientID });
         this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), this.fileContent, base64Update, 'UPDATE');
       }
     });
@@ -800,7 +860,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
         extensions: [
           StarterKit.configure({
             history: false
-          }),
+          } as any),
           Collaboration.configure({
             document: this.ydoc!,
           }),
@@ -845,6 +905,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     const s3Path = this.resolverS3Path(file);
     const docId = s3Path.replace(/\//g, '_');
     this.ydoc = new Y.Doc();
+    console.log('>>> abrirEditor ydoc creado, clientID:', this.ydoc.clientID);
 
     let syncReceived = false;
     let fallbackTimer: any = null;
@@ -853,11 +914,13 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       if (file.name !== 'historial_bitacora.txt') {
         this.docSocketSubscription = this.documentSocketService.connect(docId).subscribe({
           next: (update) => {
+            console.log('<<< WebSocket Recibido mensaje:', update.type, update.userName, { hasUpdate: !!update.update, currentClientID: this.ydoc?.clientID });
             if (update.type === 'JOIN') {
               if (this.tiptapEditor && this.ydoc) {
                 try {
                   const stateUpdate = Y.encodeStateAsUpdate(this.ydoc);
                   const base64State = this.arrayBufferToBase64(stateUpdate);
+                  console.log('>>> WebSocket Enviando SYNC de respuesta al JOIN, clientID:', this.ydoc.clientID);
                   this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), this.fileContent, base64State, 'SYNC');
                 } catch (e) {
                   console.error('Error al codificar estado Yjs completo:', e);
@@ -872,7 +935,9 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
                   if (update.update && this.ydoc) {
                     try {
                       const updateBytes = this.base64ToArrayBuffer(update.update);
-                      Y.applyUpdate(this.ydoc, updateBytes, this);
+                      console.log('<<< Aplicando SYNC recibido en clientID:', this.ydoc.clientID);
+                      Y.applyUpdate(this.ydoc, updateBytes, 'websocket');
+                      console.log('<<< Estado Yjs despues de SYNC:', this.ydoc.getXmlFragment('default').toString());
                     } catch (e) {
                       console.error('Error al aplicar SYNC de Yjs:', e);
                     }
@@ -883,7 +948,9 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
               if (this.ydoc && update.update) {
                 try {
                   const updateBytes = this.base64ToArrayBuffer(update.update);
-                  Y.applyUpdate(this.ydoc, updateBytes, this);
+                  console.log('<<< Aplicando UPDATE recibido en clientID:', this.ydoc.clientID);
+                  Y.applyUpdate(this.ydoc, updateBytes, 'websocket');
+                  console.log('<<< Estado Yjs despues de UPDATE:', this.ydoc.getXmlFragment('default').toString());
                 } catch (e) {
                   console.error('Error al aplicar delta de Yjs:', e);
                 }
@@ -897,17 +964,13 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
           }
         });
 
-        // Broadcast JOIN signal
-        setTimeout(() => {
-          this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), '', undefined, 'JOIN');
-        }, 100);
-
         // Start fallback timer
         fallbackTimer = setTimeout(() => {
           if (!syncReceived) {
+            console.log('>>> Fallback timer disparado. Cargando editor con contenido local/S3.');
             this.initTiptap(s3Content);
           }
-        }, 500);
+        }, 2000);
       } else {
         this.initTiptap(s3Content);
       }

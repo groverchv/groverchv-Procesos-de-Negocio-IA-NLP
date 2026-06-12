@@ -239,6 +239,62 @@ public class DocumentoController {
     }
 
     /**
+     * Endpoint para crear un archivo nuevo (.docx, .xlsx, .txt) vacío en S3.
+     * POST /api/documentos/create-file
+     */
+    @PostMapping("/create-file")
+    public ResponseEntity<?> createFile(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        String tenantId = body.get("tenantId");
+        String fileName = body.get("fileName");
+        String usuario = body.getOrDefault("usuario", "Desconocido");
+        String rol = body.getOrDefault("rol", "CLIENTE");
+
+        try {
+            byte[] bytes;
+            String contentType;
+            if (fileName.endsWith(".docx")) {
+                contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                try (XWPFDocument doc = new XWPFDocument();
+                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    XWPFParagraph para = doc.createParagraph();
+                    XWPFRun run = para.createRun();
+                    run.setText("BPMNFLOW - NUEVO DOCUMENTO WORD COLABORATIVO\n\nComienza a escribir aquí...");
+                    doc.write(out);
+                    bytes = out.toByteArray();
+                }
+            } else if (fileName.endsWith(".xlsx")) {
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                try (XSSFWorkbook wb = new XSSFWorkbook();
+                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    wb.createSheet("Hoja 1");
+                    wb.write(out);
+                    bytes = out.toByteArray();
+                }
+            } else {
+                contentType = "text/plain";
+                bytes = "Nuevo archivo de texto colaborativo".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            }
+
+            s3DocumentService.uploadDocument(tenantId, fileName, new java.io.ByteArrayInputStream(bytes), bytes.length, contentType);
+
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("CREACION")
+                    .detalle("Creó un nuevo archivo " + fileName)
+                    .fecha(new Date())
+                    .build());
+
+            return ResponseEntity.ok(Map.of("message", "Archivo creado exitosamente"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * Endpoint para renombrar un archivo o carpeta en S3.
      * POST /api/documentos/rename
      */

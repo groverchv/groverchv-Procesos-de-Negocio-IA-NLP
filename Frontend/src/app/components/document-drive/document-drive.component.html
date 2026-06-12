@@ -49,6 +49,9 @@
       <button *ngIf="currentFolderId !== null" class="btn-action-outline" (click)="abrirModalCreacion('folder')">
         <span nz-icon nzType="folder-add" nzTheme="outline"></span> Nueva Carpeta
       </button>
+      <button *ngIf="currentFolderId !== null" class="btn-action-outline" (click)="abrirModalCreacion('file')">
+        <span nz-icon nzType="file-add" nzTheme="outline"></span> Crear Documento
+      </button>
       
       <ng-container *ngIf="currentFolderId !== null">
         <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)" accept=".txt,.pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.svg,.csv">
@@ -305,6 +308,7 @@
         </div>
       </div>
     </div>
+  </div>
 </div>
 
 <!-- ==================================================================== -->
@@ -375,7 +379,7 @@
   <div class="custom-modal-card">
     <div class="custom-modal-header">
       <span nz-icon [nzType]="createModalType === 'folder' ? 'folder-add' : 'file-add'" nzTheme="outline" class="modal-header-icon"></span>
-      <h3>{{ createModalType === 'folder' ? 'Nueva Carpeta' : 'Nuevo Archivo' }}</h3>
+      <h3>{{ createModalType === 'folder' ? 'Nueva Carpeta' : 'Nuevo Documento' }}</h3>
     </div>
     
     <div class="custom-modal-body">
@@ -383,11 +387,30 @@
       <input 
         type="text" 
         [(ngModel)]="newItemName" 
-        [placeholder]="createModalType === 'folder' ? 'Ej. Documentos Administrativos' : 'Ej. Formulario_Inscripcion'" 
+        [placeholder]="createModalType === 'folder' ? 'Ej. Documentos Administrativos' : 'Ej. nuevo_documento'" 
         class="modal-text-input" 
         (keyup.enter)="confirmarCreacion()"
         autofocus
       />
+
+      <!-- Selector de Tipo de Archivo -->
+      <div *ngIf="createModalType === 'file'" class="file-type-selector-wrap" style="margin-top: 16px;">
+        <label class="modal-field-label">Tipo de archivo:</label>
+        <div style="display: flex; gap: 16px; margin-top: 8px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #4b5563;">
+            <input type="radio" name="newFileType" value="docx" [(ngModel)]="createFileType" />
+            Word (.docx)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #4b5563;">
+            <input type="radio" name="newFileType" value="xlsx" [(ngModel)]="createFileType" />
+            Excel (.xlsx)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #4b5563;">
+            <input type="radio" name="newFileType" value="txt" [(ngModel)]="createFileType" />
+            Texto (.txt)
+          </label>
+        </div>
+      </div>
     </div>
 
     <div class="custom-modal-footer">

@@ -60,4 +60,8 @@ export class DocumentService {
   restaurarVersion(historyId: string, usuario: string, rol: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/restaurar`, { historyId, usuario, rol });
   }
+
+  createFile(tenantId: string, fileName: string, usuario: string, rol: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/create-file`, { tenantId, fileName, usuario, rol });
+  }
 }
