@@ -995,8 +995,77 @@ public class DocumentoController {
                 }
                 return ResponseEntity.ok(Map.of("sheets", sheets));
             }
+    /**
+     * Endpoint para exportar un reporte dinámico de tabla a formato Word (.docx).
+     * POST /api/documentos/exportar-reporte-docx
+     */
+    @PostMapping("/exportar-reporte-docx")
+    public ResponseEntity<byte[]> exportarReporteDocx(@RequestBody Map<String, Object> body) {
+        String title = (String) body.getOrDefault("title", "Reporte de Sistema");
+        List<String> headers = (List<String>) body.get("headers");
+        List<List<String>> rows = (List<List<String>>) body.get("rows");
+
+        try (XWPFDocument doc = new XWPFDocument();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            
+            // Título principal
+            XWPFParagraph titlePara = doc.createParagraph();
+            titlePara.setAlignment(ParagraphAlignment.CENTER);
+            XWPFRun titleRun = titlePara.createRun();
+            titleRun.setText(title.toUpperCase());
+            titleRun.setBold(true);
+            titleRun.setFontSize(16);
+            titleRun.setFontFamily("Arial");
+            
+            // Espacio
+            XWPFParagraph spacePara = doc.createParagraph();
+            spacePara.createRun().setText("\n");
+
+            // Tabla
+            int numRows = rows.size() + 1;
+            int numCols = headers.size();
+            XWPFTable table = doc.createTable(numRows, numCols);
+
+            // Cabeceras
+            XWPFTableRow headerRow = table.getRow(0);
+            for (int i = 0; i < numCols; i++) {
+                XWPFTableCell cell = headerRow.getCell(i);
+                cell.setColor("4F46E5"); // Color azul/índigo premium
+                XWPFParagraph p = cell.getParagraphs().get(0);
+                p.setAlignment(ParagraphAlignment.CENTER);
+                XWPFRun r = p.createRun();
+                r.setText(headers.get(i).toUpperCase());
+                r.setBold(true);
+                r.setColor("FFFFFF");
+                r.setFontFamily("Arial");
+            }
+
+            // Filas de datos
+            for (int rIndex = 0; rIndex < rows.size(); rIndex++) {
+                XWPFTableRow row = table.getRow(rIndex + 1);
+                List<String> rowData = (List<String>) (Object) rows.get(rIndex);
+                for (int cIndex = 0; cIndex < numCols; cIndex++) {
+                    XWPFTableCell cell = row.getCell(cIndex);
+                    String val = cIndex < rowData.size() ? String.valueOf(rowData.get(cIndex)) : "";
+                    XWPFParagraph p = cell.getParagraphs().get(0);
+                    p.setAlignment(ParagraphAlignment.LEFT);
+                    XWPFRun r = p.createRun();
+                    r.setText(val);
+                    r.setFontFamily("Arial");
+                }
+            }
+
+            doc.write(out);
+            byte[] bytes = out.toByteArray();
+
+            org.springframework.http.HttpHeaders responseHeaders = new org.springframework.http.HttpHeaders();
+            responseHeaders.setContentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM);
+            responseHeaders.setContentDispositionFormData("attachment", "reporte.docx");
+
+            return new ResponseEntity<>(bytes, responseHeaders, org.springframework.http.HttpStatus.OK);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().build();
         }
     }
 }

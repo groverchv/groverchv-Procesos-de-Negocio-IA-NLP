@@ -475,22 +475,19 @@
 
 /* Soporte de Impresión Avanzado para Generación de PDF Local */
 @media print {
-  body * {
-    visibility: hidden;
+  .admin-sidebar,
+  .admin-main-content {
+    display: none !important;
   }
-  .report-view, .report-view * {
-    visibility: visible;
-  }
-  .report-view {
+  #hidden-printable-report {
+    display: block !important;
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-  }
-  .download-toolbar {
-    display: none;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 }

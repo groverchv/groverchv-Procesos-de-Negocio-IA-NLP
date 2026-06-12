@@ -43,6 +43,19 @@ export class DashboardBiComponent implements OnInit, OnDestroy {
   cargandoReporte: boolean = false;
   errorReporte: string | null = null;
 
+  // Reporte de usuarios dinámico
+  userPromptQuery: string = '';
+  reporteUsuariosGenerado: {
+    titulo: string;
+    headers: string[];
+    columnKeys: string[];
+    rows: any[];
+    resumen: string;
+  } | null = null;
+  isUserReportVisible: boolean = false;
+  showFormatOptions: boolean = false;
+  newDate: Date = new Date();
+
   // Alertas IA en tiempo real
   alertasIa: any[] = [];
   private stompClient: Client | null = null;
@@ -317,5 +330,179 @@ export class DashboardBiComponent implements OnInit, OnDestroy {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  generarReporteUsuarios() {
+    if (!this.userPromptQuery.trim()) return;
+
+    this.newDate = new Date();
+    const query = this.userPromptQuery.toLowerCase();
+    
+    // 1. Detectar qué atributos mostrar
+    const allAttributes = [
+      { key: 'username', label: 'Usuario', aliases: ['usuario', 'username'] },
+      { key: 'nombre', label: 'Nombre Completo', aliases: ['nombre', 'name', 'nombre completo'] },
+      { key: 'email', label: 'Email', aliases: ['email', 'correo', 'mail'] },
+      { key: 'rol', label: 'Rol / Privilegio', aliases: ['rol', 'privilegio', 'role'] },
+      { key: 'tenantId', label: 'Repositorio Compartido (Tenant ID)', aliases: ['tenant', 'tenantid', 's3', 'repositorio', 'shared'] }
+    ];
+
+    let selectedAttributes = allAttributes.filter(attr => 
+      attr.aliases.some(alias => query.includes(alias))
+    );
+
+    // Si no se especifica ninguna columna, mostrar todas por defecto
+    if (selectedAttributes.length === 0) {
+      selectedAttributes = allAttributes;
+    }
+
+    // 2. Detectar ordenamiento
+    let sortKey: string | null = null;
+    if (query.includes('nombre') || query.includes('alfabeticamente') || query.includes('alfabético')) {
+      sortKey = 'nombre';
+    } else if (query.includes('email') || query.includes('correo')) {
+      sortKey = 'email';
+    } else if (query.includes('usuario') || query.includes('username')) {
+      sortKey = 'username';
+    } else if (query.includes('rol') || query.includes('privilegio')) {
+      sortKey = 'rol';
+    }
+
+    // Si dice ascendente, descendente o por defecto
+    let isAscending = true;
+    if (query.includes('descendente')) {
+      isAscending = false;
+    }
+
+    // Copiar la lista de usuarios para ordenar
+    let listCopy = [...this.usuarios];
+
+    if (sortKey) {
+      listCopy.sort((a, b) => {
+        const valA = (a[sortKey!] || '').toString().toLowerCase();
+        const valB = (b[sortKey!] || '').toString().toLowerCase();
+        if (valA < valB) return isAscending ? -1 : 1;
+        if (valA > valB) return isAscending ? 1 : -1;
+        return 0;
+      });
+    }
+
+    // Construir el resumen textual
+    const count = listCopy.length;
+    const cols = selectedAttributes.map(a => a.label.toLowerCase()).join(', ');
+    const sortingInfo = sortKey ? `ordenados por ${sortKey} de forma ${isAscending ? 'ascendente' : 'descendente'}` : 'en su orden de registro original';
+    const resumen = `Este reporte dinámico muestra un total de ${count} usuario(s) ${sortingInfo}. El análisis incluye los siguientes atributos clave: ${cols}.`;
+
+    // Construir el reporte
+    this.reporteUsuariosGenerado = {
+      titulo: `Reporte Dinámico de Usuarios (${sortKey ? 'Ordenado por ' + sortKey + (isAscending ? ' Asc' : ' Desc') : 'Orden Normal'})`,
+      headers: selectedAttributes.map(a => a.label),
+      columnKeys: selectedAttributes.map(a => a.key),
+      rows: listCopy,
+      resumen: resumen
+    };
+    
+    this.showFormatOptions = true;
+  }
+
+  descargarReporte(format: 'pdf' | 'word' | 'txt' | 'excel') {
+    if (!this.reporteUsuariosGenerado) return;
+
+    if (format === 'pdf') {
+      this.descargarReporteUsuariosPDF();
+    } else if (format === 'word') {
+      this.descargarReporteUsuariosWord();
+    } else if (format === 'txt') {
+      this.descargarTXT();
+    } else if (format === 'excel') {
+      this.descargarExcel();
+    }
+
+    // Ocultar las opciones después de la descarga
+    this.showFormatOptions = false;
+    this.userPromptQuery = '';
+
+    if (format !== 'pdf') {
+      this.reporteUsuariosGenerado = null;
+    } else {
+      setTimeout(() => {
+        this.reporteUsuariosGenerado = null;
+      }, 1000);
+    }
+  }
+
+  descargarReporteUsuariosWord() {
+    if (!this.reporteUsuariosGenerado) return;
+
+    const title = this.reporteUsuariosGenerado.titulo;
+    const headers = this.reporteUsuariosGenerado.headers;
+    const keys = this.reporteUsuariosGenerado.columnKeys;
+    const rows = this.reporteUsuariosGenerado.rows.map(row => 
+      keys.map(key => String(row[key] || ''))
+    );
+
+    this.http.post(this.apiGlobal.getEndpointUrl('/documentos/exportar-reporte-docx'), {
+      title,
+      headers,
+      rows
+    }, { responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `${title.replace(/\s+/g, '_')}.docx`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      },
+      error: (err) => {
+        console.error('Error al exportar reporte a Word:', err);
+      }
+    });
+  }
+
+  descargarReporteUsuariosPDF() {
+    window.print();
+  }
+
+  descargarTXT() {
+    if (!this.reporteUsuariosGenerado) return;
+    let content = `====================================================\n`;
+    content += `         BPMNFlow - REPORTE DE USUARIOS\n`;
+    content += `====================================================\n\n`;
+    content += `Título: ${this.reporteUsuariosGenerado.titulo}\n`;
+    content += `Fecha de Emisión: ${new Date().toLocaleDateString()}\n\n`;
+    
+    // Headers
+    content += this.reporteUsuariosGenerado.headers.join(' | ') + '\n';
+    content += '-'.repeat(80) + '\n';
+    
+    // Rows
+    this.reporteUsuariosGenerado.rows.forEach(row => {
+      const line = this.reporteUsuariosGenerado!.columnKeys.map(key => String(row[key] || '')).join(' | ');
+      content += line + '\n';
+    });
+
+    this.descargarArchivo(content, `${this.reporteUsuariosGenerado.titulo.replace(/\s+/g, '_')}.txt`, 'text/plain');
+  }
+
+  descargarExcel() {
+    if (!this.reporteUsuariosGenerado) return;
+    let csvContent = "\ufeff"; // BOM
+    csvContent += this.reporteUsuariosGenerado.headers.join(',') + '\n';
+    
+    this.reporteUsuariosGenerado.rows.forEach(row => {
+      const line = this.reporteUsuariosGenerado!.columnKeys.map(key => `"${String(row[key] || '')}"`).join(',');
+      csvContent += line + '\n';
+    });
+
+    this.descargarArchivo(csvContent, `${this.reporteUsuariosGenerado.titulo.replace(/\s+/g, '_')}.csv`, 'text/csv;charset=utf-8;');
+  }
+
+  cancelarFormatOptions() {
+    this.showFormatOptions = false;
+    this.reporteUsuariosGenerado = null;
+    this.userPromptQuery = '';
   }
 }

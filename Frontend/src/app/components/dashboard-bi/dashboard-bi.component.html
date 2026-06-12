@@ -157,6 +157,49 @@
           </button>
         </div>
 
+        <!-- Generador de Reportes Dinámicos de Usuarios -->
+        <div class="user-report-generator" style="margin-bottom: 24px; padding: 20px; background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 16px; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.05);">
+          <h4 style="margin: 0 0 8px 0; color: #7c3aed; font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+            <span nz-icon nzType="thunderbolt" nzTheme="fill" style="color: #a855f7;"></span>
+            Generador de Reportes Dinámicos de Usuarios con IA
+          </h4>
+          <p style="margin: 0 0 16px 0; font-size: 0.85rem; color: #6b7280; font-weight: 550;">
+            Genera un reporte filtrado y ordenado ingresando un prompt. Ej: <em>"generame un reporte donde se vean los atributos nombre, email ordenados de forma ascendente por nombre"</em> o <em>"mostrar usuario, email ordenado por rol"</em>.
+          </p>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <input 
+              type="text" 
+              [(ngModel)]="userPromptQuery" 
+              placeholder="Escribe tu prompt para generar el reporte de usuarios..." 
+              style="flex: 1; min-height: 42px; padding: 10px 14px; border-radius: 10px; border: 1.5px solid #cbd5e1; font-size: 0.95rem; outline: none;"
+              (keyup.enter)="generarReporteUsuarios()"
+            />
+            <button class="ai-submit-btn" style="white-space: nowrap; padding: 10px 24px; background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(124, 58, 237, 0.2);" (click)="generarReporteUsuarios()">
+              <span nz-icon nzType="experiment" nzTheme="outline"></span> Generar Reporte
+            </button>
+          </div>
+
+          <!-- Opciones de formato de descarga del reporte de usuarios -->
+          <div *ngIf="showFormatOptions" class="format-options-card" style="margin-top: 16px; padding: 16px; background: #ffffff; border: 1.5px solid #d8b4fe; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.05); animation: fadeIn 0.2s ease-out;">
+            <span style="font-weight: 600; color: #475569; font-size: 0.9rem;">El reporte está listo. Selecciona un formato para descargarlo inmediatamente:</span>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-download" (click)="descargarReporte('pdf')" style="background: #fee2e2; color: #b91c1c; border-color: #fca5a5; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <span nz-icon nzType="file-pdf" nzTheme="outline"></span> PDF
+              </button>
+              <button class="btn-download" (click)="descargarReporte('txt')" style="background: #f1f5f9; color: #334155; border-color: #cbd5e1; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <span nz-icon nzType="file-text" nzTheme="outline"></span> Texto (.txt)
+              </button>
+              <button class="btn-download" (click)="descargarReporte('excel')" style="background: #dcfce7; color: #15803d; border-color: #86efac; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <span nz-icon nzType="file-excel" nzTheme="outline"></span> Excel (.csv)
+              </button>
+              <button class="btn-download" (click)="cancelarFormatOptions()" style="background: transparent; color: #94a3b8; border-color: #e2e8f0; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 8px;">
+                Cancelar
+              </button>
+            </div>
+          </div>
+
+        </div>
+
         <div *ngIf="cargandoUsuarios" class="loading-box">
           <div class="spinner"></div>
           <p>Sincronizando con base de datos de usuarios local...</p>
@@ -336,4 +379,38 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- Elemento oculto para impresión en PDF -->
+<div id="hidden-printable-report" *ngIf="reporteUsuariosGenerado" style="display: none;">
+  <div style="margin-bottom: 24px; text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px;">
+    <h2 style="margin: 0; color: #4f46e5; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em;">BPMNFlow</h2>
+    <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.95rem; font-weight: 600;">Reporte Dinámico de Usuarios Autorizados</p>
+    <p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 0.8rem; font-family: monospace;">Generado: {{ newDate | date:'medium' }}</p>
+  </div>
+
+  <!-- Resumen en Impresión PDF -->
+  <div style="background: #faf5ff; border-left: 4px solid #a855f7; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 0.9rem; color: #4b5563; line-height: 1.5;">
+    <strong style="color: #7c3aed; display: block; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 4px;">Resumen Textual:</strong>
+    {{ reporteUsuariosGenerado.resumen }}
+  </div>
+
+  <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+    <thead>
+      <tr style="background: #faf5ff;">
+        <th *ngFor="let header of reporteUsuariosGenerado.headers" style="color: #6b21a8; font-weight: 700; padding: 14px; border-bottom: 2.5px solid #e9d5ff; text-align: left; font-size: 0.85rem; text-transform: uppercase;">
+          {{ header }}
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of reporteUsuariosGenerado.rows" style="border-bottom: 1px solid #f1f5f9;">
+        <td *ngFor="let key of reporteUsuariosGenerado.columnKeys" style="padding: 14px; color: #334155; font-size: 0.9rem;">
+          <span *ngIf="key === 'rol'" style="font-weight: 600; text-transform: uppercase;">{{ row[key] }}</span>
+          <span *ngIf="key === 'tenantId'" style="font-family: monospace; color: #64748b;">s3://bpm-documentos/{{ row[key] }}</span>
+          <span *ngIf="key !== 'rol' && key !== 'tenantId'" [style.font-weight]="key === 'username' ? '700' : 'normal'">{{ row[key] }}</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 </div>
