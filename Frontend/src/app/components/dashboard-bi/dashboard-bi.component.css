@@ -241,12 +241,142 @@
   margin: 0;
 }
 
-/* Charts Placeholders (Visual UI/UX Local) */
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE — Dashboard BI
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Charts grid: min 450px → too wide on mobile ── */
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 24px;
 }
+
+/* ── TABLET (768px – 1023px) ── */
+@media (max-width: 1023px) {
+  .admin-container {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 20px;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+    gap: 0;
+    overflow-x: auto;
+  }
+
+  .sidebar-logo {
+    display: none; /* Save space, title is in AppBar */
+  }
+
+  .sidebar-menu {
+    flex-direction: row;
+    gap: 4px;
+    width: 100%;
+  }
+
+  .menu-item {
+    flex: 1;
+    justify-content: center;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+
+  .admin-main-content {
+    padding: 24px;
+  }
+}
+
+/* ── MOBILE (≤ 575px) ── */
+@media (max-width: 575px) {
+  .admin-main-content {
+    padding: 16px;
+  }
+
+  .menu-item span:not([nz-icon]) {
+    display: none; /* Icons only on very small screens */
+  }
+
+  .menu-item {
+    padding: 10px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .kpi-card {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .kpi-icon-box {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+
+  .kpi-info .kpi-value {
+    font-size: 1.4rem;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .chart-card {
+    padding: 20px;
+  }
+
+  .admin-view-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .report-headline {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .download-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ai-submit-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .suggestion-chips {
+    gap: 6px;
+  }
+
+  .chip {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+  }
+}
+
+/* ── Very small (≤ 360px) ── */
+@media (max-width: 360px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 
 .chart-card {
   background: #ffffff;

@@ -32,18 +32,33 @@ import { Design, Modeling, NodeData, EdgeData } from '../../../services/types';
       min-height: calc(100vh - 72px);
     }
     .dl-breadcrumb { margin-bottom: 24px; }
+    @media (max-width: 575px) {
+      .dl-container { padding: 20px 16px; }
+      .dl-breadcrumb { margin-bottom: 16px; }
+    }
+    @media (min-width: 576px) and (max-width: 767px) {
+      .dl-container { padding: 28px 20px; }
+    }
 
     /* ── Header ── */
     .dl-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
       margin-bottom: 40px;
     }
     .dl-header-left {
       display: flex;
       align-items: center;
       gap: 16px;
+      min-width: 0;
+      flex: 1;
+    }
+    @media (max-width: 575px) {
+      .dl-header { margin-bottom: 24px; gap: 12px; }
+      .dl-new-btn { width: 100% !important; }
     }
     .dl-back-btn {
       width: 44px; height: 44px;
@@ -55,11 +70,12 @@ import { Design, Modeling, NodeData, EdgeData } from '../../../services/types';
       text-decoration: none;
       transition: all 0.2s ease;
       box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      flex-shrink: 0;
     }
     .dl-back-btn:hover { background: #f1f5f9; transform: translateX(-2px); }
-    .dl-title { margin: 0; font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
+    .dl-title { margin: 0; font-size: clamp(1.1rem, 3.5vw, 1.6rem); font-weight: 800; color: #0f172a; letter-spacing: -0.5px; word-break: break-word; }
     .dl-subtitle { margin: 4px 0 0; font-size: 14px; color: #64748b; }
-    .dl-new-btn { height: 48px; border-radius: 12px; font-weight: 700; padding: 0 24px; font-size: 14px; }
+    .dl-new-btn { height: 48px; border-radius: 12px; font-weight: 700; padding: 0 24px; font-size: 14px; white-space: nowrap; flex-shrink: 0; }
 
     /* ── Empty ── */
     .dl-empty {
@@ -72,11 +88,17 @@ import { Design, Modeling, NodeData, EdgeData } from '../../../services/types';
     .dl-empty-desc { color: #64748b; margin: 0 0 24px; }
     .dl-empty-btn { height: 44px; border-radius: 10px; font-weight: 600; }
 
-    /* ── Grid ── */
+    /* ── Grid — mobile first ── */
     .dl-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 24px;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 480px) {
+      .dl-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+    }
+    @media (min-width: 768px) {
+      .dl-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
     }
 
     /* ── Card ── */
@@ -97,7 +119,7 @@ import { Design, Modeling, NodeData, EdgeData } from '../../../services/types';
 
     /* ── Card Thumbnail ── */
     .dl-card-thumb {
-      height: 200px;
+      height: clamp(140px, 25vw, 200px);
       background: linear-gradient(135deg, #f0f4ff 0%, #e8edff 100%);
       position: relative;
       border-bottom: 1px solid #e2e8f0;
@@ -124,6 +146,8 @@ import { Design, Modeling, NodeData, EdgeData } from '../../../services/types';
       box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
     }
     .dl-card:hover .dl-delete-btn { opacity: 1; transform: scale(1); }
+    /* Always visible on touch screens */
+    @media (hover: none) { .dl-delete-btn { opacity: 1 !important; transform: scale(1) !important; } }
     .dl-status-badge {
       position: absolute; bottom: 10px; left: 10px;
       padding: 3px 10px; border-radius: 20px;
@@ -181,15 +205,17 @@ import { Design, Modeling, NodeData, EdgeData } from '../../../services/types';
     .bpmn-empty h4 { font-size: 18px; font-weight: 700; color: #1e293b; margin: 16px 0 8px; }
 
     /* ── Canvas ── */
-    .bpmn-canvas-wrap { display: flex; flex-direction: column; height: 580px; }
+    .bpmn-canvas-wrap { display: flex; flex-direction: column; height: clamp(300px, 60vh, 580px); }
 
     .bpmn-toolbar {
       display: flex; justify-content: space-between; align-items: center;
       padding: 10px 16px;
       background: #f8fafc;
       border-bottom: 1px solid #e2e8f0;
+      flex-wrap: wrap;
+      gap: 8px;
     }
-    .bpmn-legend { display: flex; gap: 16px; }
+    .bpmn-legend { display: flex; gap: 12px; flex-wrap: wrap; }
     .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; font-weight: 500; }
     .legend-dot {
       width: 12px; height: 12px; border-radius: 50%;
@@ -246,9 +272,17 @@ import { Design, Modeling, NodeData, EdgeData } from '../../../services/types';
     }
 
     /* ── Modal Footer ── */
-    .modal-footer-row { display: flex; justify-content: space-between; align-items: center; }
-    .modal-footer-info { font-size: 13px; color: #64748b; display: flex; gap: 8px; align-items: center; }
+    .modal-footer-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .modal-footer-info { font-size: 13px; color: #64748b; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .footer-sep { color: #cbd5e1; }
+
+    /* ── Modal responsive ── */
+    :host ::ng-deep .bpmn-preview-modal { max-width: calc(100vw - 16px) !important; }
+    @media (max-width: 575px) {
+      :host ::ng-deep .bpmn-preview-modal .ant-modal-header { padding: 14px 16px; }
+      :host ::ng-deep .bpmn-preview-modal .ant-modal-footer { padding: 10px 14px; }
+      .modal-footer-row { flex-direction: column; align-items: flex-start; }
+    }
   `]
 })
 export class DesignListComponent implements OnInit {

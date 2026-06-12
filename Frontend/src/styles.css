@@ -16,7 +16,30 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-color);
   color: var(--text-main);
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
 }
+
+/* Global box-sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* ── Sidebar Overlay (mobile) ──────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 150;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+.sidebar-overlay.visible {
+  display: block;
+}
+
 
 h1, h2, h3, h4, h5, h6 {
   color: #1a1a1a;
