@@ -21,6 +21,10 @@ import org.springframework.stereotype.Service;
 import com.example.Procesos.service.push.FirebasePushService;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFRun;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -518,7 +522,7 @@ public class WorkflowEngineService {
             String sanitizedProjectName = projectName.replaceAll("[^a-zA-Z0-9_.-]", "_");
             String sanitizedDesignName = instance.getDesignName().replaceAll("[^a-zA-Z0-9_.-]", "_");
             String instanceId = instance.getId();
-            String path = sanitizedProjectName + "/" + sanitizedDesignName + "/" + instanceId + "/process_info.txt";
+            String path = sanitizedProjectName + "/" + sanitizedDesignName + "/" + instanceId + "/process_info.docx";
 
             // Reconstruct the text report
             StringBuilder sb = new StringBuilder();
@@ -549,15 +553,25 @@ public class WorkflowEngineService {
                 }
             }
 
-            byte[] infoBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
-            ByteArrayInputStream inputStream = new ByteArrayInputStream(infoBytes);
+            byte[] docxBytes;
+            try (XWPFDocument doc = new XWPFDocument();
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                for (String line : sb.toString().split("\n")) {
+                    XWPFParagraph para = doc.createParagraph();
+                    XWPFRun run = para.createRun();
+                    run.setText(line.trim());
+                }
+                doc.write(out);
+                docxBytes = out.toByteArray();
+            }
 
             // Crear carpetas virtuales S3 para la jerarquía Proyecto > Diseño > Instancia
             s3DocumentService.createFolder(tenantId, sanitizedProjectName);
             s3DocumentService.createFolder(tenantId, sanitizedProjectName + "/" + sanitizedDesignName);
             s3DocumentService.createFolder(tenantId, sanitizedProjectName + "/" + sanitizedDesignName + "/" + instanceId);
 
-            s3DocumentService.uploadDocument(tenantId, path, inputStream, infoBytes.length, "text/plain");
+            s3DocumentService.uploadDocument(tenantId, path, new ByteArrayInputStream(docxBytes), docxBytes.length, 
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
             
             // Log to history
             logHistory(tenantId, path, "SISTEMA", "CREACION", "Actualización automática de telemetría del proceso en S3", sb.toString());

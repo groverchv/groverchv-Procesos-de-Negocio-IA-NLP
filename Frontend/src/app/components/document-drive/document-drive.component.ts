@@ -272,12 +272,12 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
               s3Path: instS3Path
             });
 
-            // process_info.txt containing details and form variables
-            const s3PathVal = `${instS3Path}/process_info.txt`;
+            // process_info.docx containing details and form variables
+            const s3PathVal = `${instS3Path}/process_info.docx`;
 
             this.allItems.push({
               id: `file_info_${inst.id}`,
-              name: 'process_info.txt',
+              name: 'process_info.docx',
               type: 'file',
               parentId: instFolderId,
               size: '< 1 KB',
@@ -583,7 +583,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       this.allItems.push(newFolder);
     } else {
       const baseName = this.newItemName.trim();
-      const finalName = baseName.endsWith('.txt') ? baseName : `${baseName}.txt`;
+      const finalName = baseName.endsWith('.docx') ? baseName : `${baseName}.docx`;
       
       const newFile: DriveItem = {
         id: `file_${Date.now()}`,
@@ -592,7 +592,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
         parentId: this.currentFolderId,
         size: '0.1 KB',
         date: new Date(),
-        content: `DOCUMENTO BPM - ${finalName.toUpperCase()}\n==============================================\nFecha de Creación: ${new Date().toLocaleDateString()}\n\nEscribe el contenido de tu formato o proceso aquí...`,
+        content: `<h3>DOCUMENTO BPM - ${finalName.toUpperCase()}</h3><p>==============================================</p><p>Fecha de Creación: ${new Date().toLocaleDateString()}</p><p>Escribe el contenido de tu formato o proceso aquí...</p>`,
         tenantId: tenantId
       };
       this.allItems.push(newFile);
@@ -739,7 +739,8 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       if (origin !== this && this.editingFile) {
         const base64Update = this.arrayBufferToBase64(update);
         const s3Path = this.resolverS3Path(this.editingFile);
-        this.documentSocketService.sendUpdate(s3Path, this.getCurrentUser(), this.fileContent, base64Update);
+        const docId = s3Path.replace(/\//g, '_');
+        this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), this.fileContent, base64Update);
       }
     });
 
@@ -792,8 +793,8 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
     this.savingStatus = 'saved';
     this.isDocxFile = isDocx;
 
-    // Verificar si es process_info.txt
-    this.isProcessInfoFile = file.name === 'process_info.txt';
+    // Verificar si es process_info.docx
+    this.isProcessInfoFile = file.name === 'process_info.docx';
     this.processInfoParsed = null;
 
     const s3Path = this.resolverS3Path(file);
@@ -839,7 +840,8 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
 
     // Conectar WebSocket para colaboración en tiempo real
     if (file.name !== 'historial_bitacora.txt') {
-      this.docSocketSubscription = this.documentSocketService.connect(s3Path).subscribe({
+      const docId = s3Path.replace(/\//g, '_');
+      this.docSocketSubscription = this.documentSocketService.connect(docId).subscribe({
         next: (update) => {
           if (update.update && this.ydoc) {
             try {
@@ -875,7 +877,8 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
 
     if (this.editingFile && this.editingFile.name !== 'historial_bitacora.txt') {
       const s3Path = this.resolverS3Path(this.editingFile);
-      this.documentSocketService.sendUpdate(s3Path, this.getCurrentUser(), newVal);
+      const docId = s3Path.replace(/\//g, '_');
+      this.documentSocketService.sendUpdate(docId, this.getCurrentUser(), newVal);
     }
 
     this.triggerAutoSave();
@@ -1020,6 +1023,20 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
 
   parseProcessInfo(content: string) {
     this.isProcessInfoFile = true;
+    
+    // Strip HTML tags if content is HTML
+    let cleanContent = content;
+    if (content.includes('<') && content.includes('>')) {
+      cleanContent = content
+        .replace(/<p>&nbsp;<\/p>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+    }
+
     const parsed: any = {
       cliente: '',
       flujo: '',
@@ -1032,7 +1049,7 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       actividades: []
     };
 
-    const lines = content.split('\n');
+    const lines = cleanContent.split('\n');
     let inVariables = false;
     let variablesJson = '';
     let inActividades = false;

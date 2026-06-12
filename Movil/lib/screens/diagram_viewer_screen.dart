@@ -737,7 +737,7 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
       );
     }
 
-    final bool isEditable = activity?.status == 'IN_PROCESS';
+    final bool isEditable = _selectedProcess!.status == 'ACTIVE' && (activity == null || (activity.status != 'FINISHED' && activity.status != 'SKIPPED' && activity.status != 'CANCELED'));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

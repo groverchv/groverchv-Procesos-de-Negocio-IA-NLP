@@ -121,7 +121,7 @@ public class DocumentoController {
                                 String instPath = designPath + "/" + inst.getId();
                                 s3DocumentService.createFolder(tenantId, instPath);
 
-                                // Crear process_info.txt
+                                // Crear process_info.docx
                                 String fechaInicio = inst.getStartedAt() != null ? inst.getStartedAt().toString() : "N/A";
                                 String variablesJson = "{}";
                                 try {
@@ -146,8 +146,18 @@ public class DocumentoController {
                                         + "VARIABLES DEL PROCESO:\n" + variablesJson + "\n\n"
                                         + "HOJA DE RUTA / ACTIVIDADES:\n" + activitiesStr.toString();
 
-                                byte[] infoTxtBytes = processInfoContent.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                                s3DocumentService.uploadDocument(tenantId, instPath + "/process_info.txt", new java.io.ByteArrayInputStream(infoTxtBytes), infoTxtBytes.length, "text/plain");
+                                byte[] docxBytes;
+                                try (XWPFDocument doc = new XWPFDocument();
+                                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                                    for (String line : processInfoContent.split("\n")) {
+                                        XWPFParagraph para = doc.createParagraph();
+                                        XWPFRun run = para.createRun();
+                                        run.setText(line.trim());
+                                    }
+                                    doc.write(out);
+                                    docxBytes = out.toByteArray();
+                                }
+                                s3DocumentService.uploadDocument(tenantId, instPath + "/process_info.docx", new java.io.ByteArrayInputStream(docxBytes), docxBytes.length, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
                             }
                         }
                     }
