@@ -19,17 +19,23 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF0F6FF),
       appBar: AppBar(
-        title: Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: const Color(0xFF4F46E5).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(Icons.account_tree_rounded, color: Color(0xFF4F46E5), size: 18),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.account_tree_rounded, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 10),
+            const Text('Proceso de Negocio', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+          ],
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF1565C0),
         elevation: 0,
         actions: [
           // ── Botón Sugerencias IA ──
@@ -48,14 +54,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF4F46E5), Color(0xFF06B6D4)],
+                    colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF4F46E5).withOpacity(0.3),
+                      color: const Color(0xFF1565C0).withOpacity(0.35),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
@@ -85,18 +91,18 @@ class _HomeScreenState extends State<HomeScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Chip(
-                avatar: const Icon(Icons.person_rounded, size: 14, color: Color(0xFF4F46E5)),
+                avatar: const Icon(Icons.person_rounded, size: 14, color: Colors.white),
                 label: Text(
                   ApiService.currentUser!.nombre.split(' ').first,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF3730A3)),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
                 ),
-                backgroundColor: const Color(0xFFEEF2F6),
+                backgroundColor: Colors.white.withOpacity(0.2),
                 side: BorderSide.none,
                 padding: EdgeInsets.zero,
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+              icon: const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
               tooltip: 'Cerrar sesión',
               onPressed: () {
                 ApiService.currentUser = null;
@@ -142,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
-    final color = isSelected ? const Color(0xFF4F46E5) : const Color(0xFF94A3B8);
+    final color = isSelected ? const Color(0xFF1565C0) : const Color(0xFF90A4AE);
 
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),

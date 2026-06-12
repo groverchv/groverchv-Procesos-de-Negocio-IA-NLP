@@ -54,9 +54,9 @@
       </button>
       
       <ng-container *ngIf="currentFolderId !== null">
-        <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)" accept=".txt,.pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.svg,.csv">
+        <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)">
         <label for="file-upload" class="upload-btn">
-          <span nz-icon nzType="upload" nzTheme="outline"></span> Subir Documento
+          <span nz-icon nzType="upload" nzTheme="outline"></span> Subir archivo
         </label>
       </ng-container>
     </div>

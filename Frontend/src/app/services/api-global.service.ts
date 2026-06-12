@@ -22,6 +22,9 @@ export class ApiGlobalService {
 
   get baseUrl(): string {
     if (typeof window !== 'undefined') {
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return 'http://localhost:8080';
+      }
       const storedUrl = localStorage.getItem('BACKEND_URL');
       if (storedUrl) {
         return storedUrl;

@@ -744,56 +744,66 @@ export class DocumentDriveComponent implements OnInit, OnDestroy {
       const s3Path = parentPath ? `${parentPath}/${file.name}` : file.name;
       const resolvedContentType = this.getContentType(file.name, file.type);
 
-      const presignedUrlEndpoint = `${this.apiGlobalService.getEndpointUrl('documentos/presigned-upload-url')}?tenantId=${tenantId}&fileName=${encodeURIComponent(s3Path)}&contentType=${encodeURIComponent(resolvedContentType)}`;
-      
-      this.http.get<{ url: string }>(presignedUrlEndpoint).subscribe({
-        next: (res) => {
-          const s3Url = res.url;
-          // PUT directo a S3 sin restricciones de tamaño
-          this.http.put(s3Url, file, {
-            headers: {
-              'Content-Type': resolvedContentType
-            }
-          }).subscribe({
-            next: () => {
-              // Confirmar la subida exitosa en el backend
-              const confirmPayload = {
-                tenantId: tenantId,
-                fileName: s3Path,
-                usuario: this.getCurrentUser(),
-                rol: 'CLIENTE',
-                contentType: resolvedContentType
-              };
-              
-              this.http.post(this.apiGlobalService.getEndpointUrl('documentos/confirm-upload'), confirmPayload).subscribe({
-                next: () => {
-                  const nuevoDocumento: DriveItem = {
-                    id: `file_${Date.now()}`,
-                    name: file.name,
-                    type: 'file',
-                    parentId: this.currentFolderId,
-                    size: this.formatBytes(file.size),
-                    date: new Date(),
-                    content: `DOCUMENTO CARGADO EN S3: ${file.name}\n==============================================\nContenido del archivo subido localmente por el usuario.`,
-                    tenantId: tenantId,
-                    s3Path: s3Path
-                  };
+      // Crear FormData para la subida directa al Backend y evitar CORS de S3
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('tenantId', tenantId);
+      formData.append('fileName', s3Path);
+      formData.append('usuario', this.getCurrentUser());
+      formData.append('rol', 'CLIENTE');
+      formData.append('contentType', resolvedContentType);
 
-                  this.allItems.push(nuevoDocumento);
-                  this.actualizarRepositorio();
-                },
-                error: (err) => {
-                  console.error('Error al confirmar subida:', err);
-                }
-              });
+      const uploadUrl = this.apiGlobalService.getEndpointUrl('documentos/upload-direct');
+
+      this.http.post<any>(uploadUrl, formData).subscribe({
+        next: (res) => {
+          // Confirmar la subida exitosa en el backend
+          const confirmPayload = {
+            tenantId: tenantId,
+            fileName: s3Path,
+            usuario: this.getCurrentUser(),
+            rol: 'CLIENTE',
+            contentType: resolvedContentType
+          };
+          
+          this.http.post(this.apiGlobalService.getEndpointUrl('documentos/confirm-upload'), confirmPayload).subscribe({
+            next: (confirmRes: any) => {
+              const nuevoDocumento: DriveItem = {
+                id: `file_${Date.now()}`,
+                name: file.name,
+                type: 'file',
+                parentId: this.currentFolderId,
+                size: this.formatBytes(file.size),
+                date: new Date(),
+                content: `DOCUMENTO CARGADO EN S3: ${file.name}\n==============================================\nContenido del archivo subido localmente por el usuario.`,
+                tenantId: tenantId,
+                s3Path: s3Path
+              };
+
+              this.allItems.push(nuevoDocumento);
+              this.actualizarRepositorio();
             },
             error: (err) => {
-              console.error('Error al subir directamente a S3:', err);
+              console.error('Error al confirmar subida:', err);
+              // Fallback local aun si falla la confirmacion
+              const nuevoDocumento: DriveItem = {
+                id: `file_${Date.now()}`,
+                name: file.name,
+                type: 'file',
+                parentId: this.currentFolderId,
+                size: this.formatBytes(file.size),
+                date: new Date(),
+                tenantId: tenantId,
+                s3Path: s3Path
+              };
+              this.allItems.push(nuevoDocumento);
+              this.actualizarRepositorio();
             }
           });
         },
         error: (err) => {
-          console.error('Error al obtener URL pre-firmada:', err);
+          console.error('Error al subir a través del backend:', err);
+          alert('Error al subir el archivo a través del servidor. Asegúrate de que el Backend esté compilado y disponible.');
         }
       });
     }

@@ -133,9 +133,9 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFEEF2F6), Color(0xFFF8FAFC)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF1976D2)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
         child: SafeArea(
@@ -150,43 +150,44 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   // Logo & Header
                   Center(
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.white.withOpacity(0.15),
                         shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF4F46E5).withOpacity(0.08),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 32,
+                            offset: const Offset(0, 12),
                           ),
                         ],
                       ),
                       child: const Icon(
                         Icons.account_tree_rounded,
-                        size: 54,
-                        color: Color(0xFF4F46E5),
+                        size: 56,
+                        color: Colors.white,
                       ),
                     ),
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    'BPMN Flow',
+                    'Proceso de Negocio',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 32,
+                      fontSize: 30,
                       fontWeight: FontWeight.w900,
-                      letterSpacing: -1.2,
-                      color: Color(0xFF0F172A),
+                      letterSpacing: -1.0,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  const Text(
                     'Monitoreo omnicanal y gestión de procesos',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.blueGrey.shade600,
+                      color: Colors.white70,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -225,26 +226,25 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE2E8F0),
+                      color: Colors.white.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
                     ),
                     child: TabBar(
                       controller: _tabController,
                       indicatorColor: Colors.transparent,
                       dividerColor: Colors.transparent,
-                      labelColor: Colors.white,
-                      unselectedLabelColor: const Color(0xFF64748B),
+                      labelColor: const Color(0xFF1565C0),
+                      unselectedLabelColor: Colors.white70,
                       indicatorSize: TabBarIndicatorSize.tab,
                       indicator: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF4F46E5), Color(0xFF3730A3)],
-                        ),
+                        color: Colors.white,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF4F46E5).withOpacity(0.2),
+                            color: Colors.black.withOpacity(0.1),
                             blurRadius: 8,
-                            offset: const Offset(0, 4),
+                            offset: const Offset(0, 2),
                           )
                         ],
                       ),
@@ -258,14 +258,28 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   const SizedBox(height: 28),
 
                   // Forms Area
-                  SizedBox(
-                    height: 440,
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildLoginForm(),
-                        _buildRegisterForm(),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 32,
+                          offset: const Offset(0, 8),
+                        ),
                       ],
+                    ),
+                    padding: const EdgeInsets.all(24),
+                    child: SizedBox(
+                      height: 440,
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildLoginForm(),
+                          _buildRegisterForm(),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -392,9 +406,9 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   InputDecoration _buildInputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
+      prefixIcon: Icon(icon, color: const Color(0xFF1976D2), size: 20),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: const Color(0xFFF0F6FF),
       hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
       contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       border: OutlineInputBorder(
@@ -403,11 +417,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey.shade200),
+        borderSide: const BorderSide(color: Color(0xFFBBDEFB)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFF1565C0), width: 2),
       ),
     );
   }
@@ -418,12 +432,14 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: [Color(0xFF4F46E5), Color(0xFF3730A3)],
+          colors: [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF1976D2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4F46E5).withOpacity(0.3),
-            blurRadius: 16,
+            color: const Color(0xFF1565C0).withOpacity(0.4),
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],

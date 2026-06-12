@@ -16,8 +16,8 @@
         <span>Gestión de Usuarios</span>
       </button>
       <button class="menu-item" [class.active]="activeTab === 'ia-reports'" (click)="cambiarTab('ia-reports')">
-        <span nz-icon nzType="file-text" nzTheme="outline"></span>
-        <span>Reportes IA</span>
+        <span nz-icon nzType="line-chart" nzTheme="outline"></span>
+        <span>Reportes de Gestión</span>
       </button>
     </div>
   </div>
@@ -27,7 +27,7 @@
     <div class="admin-view-header">
       <div class="title-area">
         <h1>Panel Administrativo</h1>
-        <p>Supervisa la telemetría del sistema, gestiona usuarios y genera reportes dinámicos asistidos por IA.</p>
+        <p>Supervisa la telemetría del sistema, gestiona usuarios y genera reportes dinámicos de gestión.</p>
       </div>
     </div>
 
@@ -75,20 +75,19 @@
         </div>
       </div>
 
-      <!-- Widget de Alertas Predictivas de IA -->
-      <div class="ia-alerts-widget" style="margin: 24px 0; padding: 20px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 20px; box-shadow: 0 4px 20px -2px rgba(124, 58, 237, 0.05);">
+      <!-- Widget de Alertas de Procesos -->
+      <div class="ia-alerts-widget" style="margin: 24px 0; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.02);">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-          <h3 style="margin: 0; display: flex; align-items: center; gap: 8px; color: #6b21a8; font-weight: 700; font-size: 1.1rem;">
-            <span nz-icon nzType="thunderbolt" nzTheme="fill" style="color: #a855f7;"></span>
-            Monitoreo y Alertas Predictivas de IA
+          <h3 style="margin: 0; display: flex; align-items: center; gap: 8px; color: #1e293b; font-weight: 700; font-size: 1.1rem;">
+            <span nz-icon nzType="bell" nzTheme="outline" style="color: #4f46e5;"></span>
+            Monitoreo y Alertas de Procesos
           </h3>
-          <span class="user-badge badge-admin" style="font-size: 0.75rem;">Deep Learning Activo</span>
         </div>
 
         <!-- Sin alertas -->
-        <div *ngIf="alertasIa.length === 0" style="color: #6b7280; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; padding: 8px 0;">
-          <span nz-icon nzType="info-circle" nzTheme="outline" style="color: #8b5cf6;"></span>
-          <span>El motor de análisis predictivo de TensorFlow está observando el sistema. Sin riesgos críticos detectados en los trámites activos.</span>
+        <div *ngIf="alertasIa.length === 0" style="color: #64748b; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; padding: 8px 0;">
+          <span nz-icon nzType="info-circle" nzTheme="outline" style="color: #4f46e5;"></span>
+          <span>El sistema de monitoreo está activo. No se han detectado anomalías o cuellos de botella en los procesos en ejecución.</span>
         </div>
 
         <!-- Listado de alertas -->
@@ -105,7 +104,7 @@
             <p style="margin: 6px 0; color: #475569; font-size: 0.85rem; font-weight: 550;">
               {{ alert.payload.message }}
             </p>
-            <div style="display: flex; align-items: center; gap: 6px; color: #7c3aed; font-size: 0.8rem; font-weight: 600;">
+            <div style="display: flex; align-items: center; gap: 6px; color: #4f46e5; font-size: 0.8rem; font-weight: 600;">
               <span nz-icon nzType="bulb" nzTheme="outline"></span>
               <span>Sugerencia: {{ alert.payload.suggestion }}</span>
             </div>
@@ -158,29 +157,29 @@
         </div>
 
         <!-- Generador de Reportes Dinámicos de Usuarios -->
-        <div class="user-report-generator" style="margin-bottom: 24px; padding: 20px; background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 16px; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.05);">
-          <h4 style="margin: 0 0 8px 0; color: #7c3aed; font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
-            <span nz-icon nzType="thunderbolt" nzTheme="fill" style="color: #a855f7;"></span>
-            Generador de Reportes Dinámicos de Usuarios con IA
+        <div class="user-report-generator" style="margin-bottom: 24px; padding: 20px; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);">
+          <h4 style="margin: 0 0 8px 0; color: #1e293b; font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+            <span nz-icon nzType="filter" nzTheme="outline" style="color: #4f46e5;"></span>
+            Generador de Reportes de Usuarios
           </h4>
-          <p style="margin: 0 0 16px 0; font-size: 0.85rem; color: #6b7280; font-weight: 550;">
-            Genera un reporte filtrado y ordenado ingresando un prompt. Ej: <em>"generame un reporte donde se vean los atributos nombre, email ordenados de forma ascendente por nombre"</em> o <em>"mostrar usuario, email ordenado por rol"</em>.
+          <p style="margin: 0 0 16px 0; font-size: 0.85rem; color: #64748b; font-weight: 550;">
+            Filtra y ordena el reporte ingresando una regla. Ej: <em>"mostrar atributos nombre, email ordenados por nombre"</em> o <em>"mostrar usuario, email ordenado por rol"</em>.
           </p>
           <div style="display: flex; gap: 12px; align-items: center;">
             <input 
               type="text" 
               [(ngModel)]="userPromptQuery" 
-              placeholder="Escribe tu prompt para generar el reporte de usuarios..." 
+              placeholder="Filtra usuarios o escribe ordenamiento. Ej: mostrar nombre ordenados por nombre..." 
               style="flex: 1; min-height: 42px; padding: 10px 14px; border-radius: 10px; border: 1.5px solid #cbd5e1; font-size: 0.95rem; outline: none;"
               (keyup.enter)="generarReporteUsuarios()"
             />
-            <button class="ai-submit-btn" style="white-space: nowrap; padding: 10px 24px; background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(124, 58, 237, 0.2);" (click)="generarReporteUsuarios()">
-              <span nz-icon nzType="experiment" nzTheme="outline"></span> Generar Reporte
+            <button class="ai-submit-btn" style="white-space: nowrap; padding: 10px 24px; background: #4f46e5; color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.15);" (click)="generarReporteUsuarios()">
+              <span nz-icon nzType="file-text" nzTheme="outline"></span> Generar Reporte
             </button>
           </div>
 
           <!-- Opciones de formato de descarga del reporte de usuarios -->
-          <div *ngIf="showFormatOptions" class="format-options-card" style="margin-top: 16px; padding: 16px; background: #ffffff; border: 1.5px solid #d8b4fe; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.05); animation: fadeIn 0.2s ease-out;">
+          <div *ngIf="showFormatOptions" class="format-options-card" style="margin-top: 16px; padding: 16px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.05); animation: fadeIn 0.2s ease-out;">
             <span style="font-weight: 600; color: #475569; font-size: 0.9rem;">El reporte está listo. Selecciona un formato para descargarlo inmediatamente:</span>
             <div style="display: flex; gap: 8px;">
               <button class="btn-download" (click)="descargarReporte('pdf')" style="background: #fee2e2; color: #b91c1c; border-color: #fca5a5; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
@@ -190,7 +189,7 @@
                 <span nz-icon nzType="file-text" nzTheme="outline"></span> Texto (.txt)
               </button>
               <button class="btn-download" (click)="descargarReporte('excel')" style="background: #dcfce7; color: #15803d; border-color: #86efac; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
-                <span nz-icon nzType="file-excel" nzTheme="outline"></span> Excel (.csv)
+                <span nz-icon nzType="file-excel" nzTheme="outline"></span> Excel (.xls)
               </button>
               <button class="btn-download" (click)="cancelarFormatOptions()" style="background: transparent; color: #94a3b8; border-color: #e2e8f0; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 8px;">
                 Cancelar
@@ -238,10 +237,10 @@
 
     <!-- 3. REPORTES INTELIGENTES DINÁMICOS CON IA -->
     <div *ngIf="activeTab === 'ia-reports'" class="tab-content">
-      <!-- Barra de Consulta Inteligente de IA -->
+      <!-- Barra de Consulta de Reportes -->
       <div class="ai-bar-section" style="margin-bottom: 24px;">
         <h3>
-          <span nz-icon nzType="experiment" nzTheme="outline" class="ai-sparkle"></span> 
+          <span nz-icon nzType="file-search" nzTheme="outline" style="color: #4f46e5; margin-right: 8px;"></span> 
           ¿Qué análisis de telemetría o procesos deseas solicitar hoy?
         </h3>
         <div class="search-box">
@@ -265,7 +264,7 @@
       <!-- Estado de Carga -->
       <div *ngIf="cargandoReporte" class="loading-box" style="background: white; border-radius: 24px; padding: 60px; box-shadow: var(--shadow-premium);">
         <div class="spinner"></div>
-        <p style="font-weight: 600; font-size: 1.1rem; color: #4f46e5;">La IA está compilando los datos de telemetría y redactando el reporte...</p>
+        <p style="font-weight: 600; font-size: 1.1rem; color: #4f46e5;">Generando reporte de telemetría y consolidando datos de procesos...</p>
       </div>
 
       <!-- Mensaje de Error -->
@@ -279,7 +278,7 @@
           <div>
             <h2>{{ reporteGenerado.titulo }}</h2>
             <p style="color: #64748b; margin: 4px 0 0 0; font-weight: 550;">
-              Generado Dinámicamente por IA Llama-3 en Local • {{ promptQuery }}
+              Reporte de Telemetría Dinámico • {{ promptQuery }}
             </p>
           </div>
           
@@ -308,10 +307,10 @@
 
         <!-- Insights Clave -->
         <div *ngIf="reporteGenerado.insights && reporteGenerado.insights.length > 0">
-          <h4 style="margin: 0 0 16px 0; font-weight: 700;">Insights y Recomendaciones de la IA</h4>
+          <h4 style="margin: 0 0 16px 0; font-weight: 700;">Observaciones y Recomendaciones</h4>
           <div class="insights-list">
-            <div *ngFor="let insight of reporteGenerado.insights" class="insight-item">
-              <span nz-icon nzType="bulb" nzTheme="outline" style="color: #7c3aed; font-size: 1.2rem;"></span>
+            <div *ngFor="let insight of reporteGenerado.insights" class="insight-item" style="border-left-color: #4f46e5; background: rgba(79, 70, 229, 0.03);">
+              <span nz-icon nzType="bulb" nzTheme="outline" style="color: #4f46e5; font-size: 1.2rem;"></span>
               <span>{{ insight }}</span>
             </div>
           </div>
@@ -384,7 +383,7 @@
 <!-- Elemento oculto para impresión en PDF -->
 <div id="hidden-printable-report" *ngIf="reporteUsuariosGenerado" style="display: none;">
   <div style="margin-bottom: 24px; text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px;">
-    <h2 style="margin: 0; color: #4f46e5; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em;">BPMNFlow</h2>
+    <h2 style="margin: 0; color: #4f46e5; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em;">Proceso de Negocio</h2>
     <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.95rem; font-weight: 600;">Reporte Dinámico de Usuarios Autorizados</p>
     <p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 0.8rem; font-family: monospace;">Generado: {{ newDate | date:'medium' }}</p>
   </div>

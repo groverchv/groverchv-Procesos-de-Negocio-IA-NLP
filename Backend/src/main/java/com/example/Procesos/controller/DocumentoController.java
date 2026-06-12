@@ -223,6 +223,58 @@ public class DocumentoController {
     }
 
     /**
+     * Endpoint para subir un archivo directamente a través del Backend hacia S3, evitando CORS.
+     * POST /api/documentos/upload-direct
+     */
+    @PostMapping(value = "/upload-direct", consumes = "multipart/form-data")
+    public ResponseEntity<?> uploadDirect(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("tenantId") String tenantId,
+            @RequestParam("fileName") String fileName,
+            @RequestParam("usuario") String usuario,
+            @RequestParam("rol") String rol,
+            @RequestParam(value = "contentType", required = false) String contentType,
+            HttpServletRequest request) {
+        try {
+            String resolvedContentType = (contentType != null && !contentType.trim().isEmpty())
+                    ? contentType : file.getContentType();
+            if (resolvedContentType == null) {
+                resolvedContentType = "application/octet-stream";
+            }
+
+            s3DocumentService.uploadDocument(
+                    tenantId,
+                    fileName,
+                    file.getInputStream(),
+                    file.getSize(),
+                    resolvedContentType
+            );
+
+            // Log de historial
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .rol(rol)
+                    .ip(getClientIp(request))
+                    .accion("CREACION")
+                    .detalle("Subió archivo " + fileName + " a través de servidor a S3")
+                    .fecha(new Date())
+                    .build());
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Archivo subido exitosamente",
+                    "fileName", fileName,
+                    "size", file.getSize(),
+                    "contentType", resolvedContentType
+            ));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * Endpoint para crear una carpeta virtual en S3.
      * POST /api/documentos/folder
      */

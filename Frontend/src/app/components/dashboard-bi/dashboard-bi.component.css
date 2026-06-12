@@ -473,21 +473,4 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Soporte de Impresión Avanzado para Generación de PDF Local */
-@media print {
-  .admin-sidebar,
-  .admin-main-content {
-    display: none !important;
-  }
-  #hidden-printable-report {
-    display: block !important;
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100% !important;
-    background: white !important;
-    color: black !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-}
+
