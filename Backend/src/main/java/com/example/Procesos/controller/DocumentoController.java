@@ -995,6 +995,10 @@ public class DocumentoController {
                 }
                 return ResponseEntity.ok(Map.of("sheets", sheets));
             }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
     /**
      * Endpoint para exportar un reporte dinámico de tabla a formato Word (.docx).
      * POST /api/documentos/exportar-reporte-docx
