@@ -122,7 +122,7 @@ public class DocumentoController {
                                 s3DocumentService.createFolder(tenantId, instPath);
 
                                 // Crear process_info.txt
-                                String fechaInicio = inst.getStartedAt() != null ? inst.getStartedAt() : "N/A";
+                                String fechaInicio = inst.getStartedAt() != null ? inst.getStartedAt().toString() : "N/A";
                                 String variablesJson = "{}";
                                 try {
                                     variablesJson = new com.fasterxml.jackson.databind.ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(inst.getVariables());
