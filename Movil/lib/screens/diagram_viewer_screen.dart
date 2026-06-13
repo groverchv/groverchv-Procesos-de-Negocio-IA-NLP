@@ -1,14 +1,20 @@
 import 'dart:async';
+import 'dart:io' as io;
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../services/websocket_service.dart';
 import '../models/types.dart' as types;
+import 'sugerencias_ia_screen.dart';
 
 class DiagramViewerScreen extends StatefulWidget {
   final String designId;
+  final String? processInstanceId;
 
-  const DiagramViewerScreen({super.key, required this.designId});
+  const DiagramViewerScreen({super.key, required this.designId, this.processInstanceId});
 
   @override
   State<DiagramViewerScreen> createState() => _DiagramViewerScreenState();
@@ -21,6 +27,9 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
   String? _selectedNodeId;
   bool _isLoading = true;
   String? _error;
+  Map<String, dynamic> _localFormData = {};
+  String? _projectName;
+  String? _designName;
 
   // Subscriptions
   StreamSubscription? _diagramSub;
@@ -41,20 +50,40 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
       final modeling = await api.getModeling(widget.designId);
       final processes = await api.getProcessInstances(widget.designId);
       
+      String? projectName;
+      String? designName;
+      try {
+        final design = await api.getDesignById(widget.designId);
+        designName = design.nombre;
+        final project = await api.getProjectById(design.projectId);
+        projectName = project.nombre;
+      } catch (e) {
+        debugPrint('Error cargando nombres de diseno/proyecto para S3: $e');
+      }
+      
       if (!mounted) return;
 
       setState(() {
         _currentModeling = modeling;
+        _projectName = projectName;
+        _designName = designName;
         if (processes.isNotEmpty) {
+          if (widget.processInstanceId != null) {
+            try {
+              _selectedProcess = processes.firstWhere((p) => p.id == widget.processInstanceId);
+            } catch (_) {
+              _selectedProcess = processes.first;
+            }
+          } else {
             // Ordenar por fecha de inicio descendente (la más nueva primero)
             processes.sort((a, b) {
               final dateA = DateTime.tryParse(a.startedAt ?? '') ?? DateTime(2000);
               final dateB = DateTime.tryParse(b.startedAt ?? '') ?? DateTime(2000);
               return dateB.compareTo(dateA);
             });
-            
             _selectedProcess = processes.first;
-            print('DEBUG: Encontradas ${processes.length} instancias. Seleccionada la más nueva: ${_selectedProcess?.id}');
+          }
+          print('DEBUG: Encontradas ${processes.length} instancias. Seleccionada: ${_selectedProcess?.id}');
         }
         _isLoading = false;
       });
@@ -211,6 +240,83 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
+          child: GestureDetector(
+            onTap: () {
+              final activeNodeText = _selectedNodeId != null
+                  ? 'Tengo seleccionado el nodo con ID "$_selectedNodeId".'
+                  : 'No tengo ningún nodo seleccionado.';
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => SugerenciasIAScreen(
+                  initialPrompt: 'Tengo abierto el progreso de mi trámite de "${_selectedProcess?.designName ?? 'Proceso'}". Su estado actual es: ${_selectedProcess?.status ?? ''}. ¿Me puedes guiar sobre qué camino tomar, cuál es el más rápido o qué requisitos necesito?',
+                  extraContext: 'El usuario está visualizando el progreso en tiempo real de una instancia de proceso.\n'
+                      'Diseño: ${_selectedProcess?.designName}\n'
+                      'Instancia ID: ${_selectedProcess?.id}\n'
+                      'Estado: ${_selectedProcess?.status}\n'
+                      '$activeNodeText\n'
+                      'Pasos del proceso en pantalla:\n'
+                      '${_currentModeling?.nodes.map((n) => '  - ' + n.label + ' (Responsable: ' + (n.responsible ?? 'sin asignar') + ')').join('\n') ?? ''}',
+                  customSuggestions: const [
+                    {
+                      'texto': '¿Qué camino me recomiendas tomar?',
+                      'icono': Icons.assistant_direction_rounded,
+                      'color': Color(0xFF8B5CF6),
+                    },
+                    {
+                      'texto': '¿Cuál es la opción más rápida?',
+                      'icono': Icons.speed_rounded,
+                      'color': Color(0xFF10B981),
+                    },
+                    {
+                      'texto': '¿Qué documentos son requeridos aquí?',
+                      'icono': Icons.description_rounded,
+                      'color': Color(0xFF3B82F6),
+                    },
+                  ],
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6366F1).withOpacity(0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 14),
+                  SizedBox(width: 5),
+                  Text(
+                    'Sugerencias IA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
         StreamBuilder<bool>(
           stream: Provider.of<WebSocketService>(context, listen: false).connectionState,
           initialData: Provider.of<WebSocketService>(context, listen: false).isConnected,
@@ -412,7 +518,10 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
     
     return GestureDetector(
       onTap: () {
-        setState(() => _selectedNodeId = node.id);
+        setState(() {
+          _selectedNodeId = node.id;
+          _localFormData = Map<String, dynamic>.from(activity?.formData ?? {});
+        });
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -595,7 +704,7 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
-                        onPressed: () {},
+                        onPressed: () => _enviarRequisitos(node, activity!),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: color,
                           foregroundColor: Colors.white,
@@ -605,7 +714,7 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
                           ),
                         ),
                         child: const Text(
-                          'COMPLETAR ACTIVIDAD',
+                          'ENVIAR REQUISITOS',
                           style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2),
                         ),
                       ),
@@ -628,45 +737,332 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen> {
       );
     }
 
+    final bool isEditable = _selectedProcess!.status == 'ACTIVE' && (activity == null || (activity.status != 'FINISHED' && activity.status != 'SKIPPED' && activity.status != 'CANCELED'));
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: forms.map((f) {
-        final val = activity?.formData[f.label];
+        final val = _localFormData[f.label] ?? activity?.formData[f.label];
         final isFilled = val != null && val.toString().isNotEmpty;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isFilled ? Icons.check_circle : Icons.circle_outlined,
-                color: isFilled ? Colors.green : Colors.grey.shade400,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  f.label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isFilled ? Colors.blueGrey.shade900 : Colors.blueGrey.shade400,
+
+        if (!isEditable) {
+          // Vista de sólo lectura
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isFilled ? Icons.check_circle : Icons.circle_outlined,
+                  color: isFilled ? Colors.green : Colors.grey.shade400,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    f.label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isFilled ? Colors.blueGrey.shade900 : Colors.blueGrey.shade400,
+                    ),
                   ),
                 ),
-              ),
-              if (isFilled)
-                Text(
-                  val.toString(),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                if (isFilled)
+                  Expanded(
+                    child: Text(
+                      val.toString(),
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
+
+        // Vista de edición interactiva
+        if (f.type.toLowerCase() == 'archivo' || f.type.toLowerCase() == 'file') {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      isFilled ? Icons.check_circle : Icons.cloud_queue_rounded,
+                      color: isFilled ? Colors.green : Colors.grey.shade400,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      f.label + (f.required ? ' *' : ''),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
-            ],
+                const SizedBox(height: 12),
+                if (isFilled) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.file_present_rounded, color: Colors.green, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            val.toString().split('/').last,
+                            style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showS3UploadDialog(f.label),
+                    icon: const Icon(Icons.cloud_upload_rounded),
+                    label: Text(isFilled ? 'Cambiar Archivo' : 'Subir Archivo a S3'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Vista de edición de texto/número
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: TextFormField(
+            initialValue: val?.toString() ?? '',
+            keyboardType: (f.type.toLowerCase() == 'número' || f.type.toLowerCase() == 'number') ? TextInputType.number : TextInputType.text,
+            decoration: InputDecoration(
+              labelText: f.label + (f.required ? ' *' : ''),
+              border: InputBorder.none,
+              prefixIcon: const Icon(Icons.edit_note_rounded, size: 20),
+            ),
+            onChanged: (text) {
+              _localFormData[f.label] = text;
+            },
           ),
         );
       }).toList(),
     );
+  }
+
+  Future<void> _showS3UploadDialog(String formLabel) async {
+    final api = Provider.of<ApiService>(context, listen: false);
+    final user = ApiService.currentUser;
+    final tenantId = user?.tenantId ?? 'tenant_default';
+
+    // 1. Pick file
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final file = result.files.first;
+    Uint8List? fileBytes = file.bytes;
+    if (fileBytes == null && file.path != null) {
+      if (!kIsWeb) {
+        try {
+          fileBytes = io.File(file.path!).readAsBytesSync();
+        } catch (e) {
+          debugPrint('Error leyendo archivo en movil: $e');
+        }
+      }
+    }
+
+    if (fileBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudieron leer los bytes del archivo')),
+      );
+      return;
+    }
+
+    // Determinar contentType de forma dinamica
+    String contentType = 'application/octet-stream';
+    final extension = file.extension?.toLowerCase() ?? file.name.split('.').last.toLowerCase();
+    if (extension == 'txt') {
+      contentType = 'text/plain';
+    } else if (extension == 'pdf') {
+      contentType = 'application/pdf';
+    } else if (extension == 'png') {
+      contentType = 'image/png';
+    } else if (extension == 'jpg' || extension == 'jpeg') {
+      contentType = 'image/jpeg';
+    } else if (extension == 'json') {
+      contentType = 'application/json';
+    }    final sanitizedProject = (_projectName ?? 'proyecto_desconocido').replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+    final sanitizedDesign = (_designName ?? _selectedProcess?.designName ?? 'diseno_desconocido').replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+    final instanceId = widget.processInstanceId ?? _selectedProcess?.id ?? 'instancia_desconocida';
+    final s3Path = '$sanitizedProject/$sanitizedDesign/$instanceId/${file.name}';
+
+    // Get policy of the selected node
+    final node = _currentModeling!.nodes.firstWhere((n) => n.id == _selectedNodeId);
+    final policy = node.policy;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 2. Upload and Validate
+      final response = await api.uploadAndValidateDocument(
+        tenantId: tenantId,
+        fileName: s3Path,
+        fileBytes: fileBytes,
+        contentType: contentType,
+        policy: policy,
+      );
+      final validation = response['validation'] as Map<String, dynamic>?;
+      final bool valido = validation?['valido'] ?? true;
+      final String mensaje = validation?['mensaje'] ?? 'Validación exitosa';
+      final String sugerencia = validation?['sugerencia'] ?? '';
+
+      setState(() {
+        _isLoading = false;
+        if (valido) {
+          _localFormData[formLabel] = file.name;
+        }
+      });
+
+      // Show dialog or snackbar with validation result
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                valido ? Icons.check_circle : Icons.warning_rounded,
+                color: valido ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 10),
+              Text(valido ? 'Archivo Válido' : 'Archivo No Válido'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(mensaje),
+              if (!valido && sugerencia.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Sugerencia de la IA:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(sugerencia),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al subir y validar: $e')),
+      );
+    }
+  }
+
+  Future<void> _enviarRequisitos(types.NodeData node, types.ActivityInstance activity) async {
+    final api = Provider.of<ApiService>(context, listen: false);
+    final user = ApiService.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay un usuario logueado')),
+      );
+      return;
+    }
+
+    // Validar campos requeridos
+    final forms = node.forms ?? [];
+    for (var f in forms) {
+      if (f.required) {
+        final val = _localFormData[f.label] ?? activity.formData[f.label];
+        if (val == null || val.toString().trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('El campo "${f.label}" es requerido.')),
+          );
+          return;
+        }
+      }
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final updatedProcess = await api.advanceActivity(
+        instanceId: _selectedProcess!.id!,
+        nodeId: node.id,
+        status: 'IN_REVIEW',
+        userId: user.id!,
+        formData: _localFormData,
+      );
+      
+      setState(() {
+        _selectedProcess = updatedProcess;
+        _selectedNodeId = null;
+        _localFormData = {};
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Requisitos enviados para revisión con éxito')),
+      );
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al enviar requisitos: $e')),
+      );
+    }
   }
 
   // --- Helper Methods ---

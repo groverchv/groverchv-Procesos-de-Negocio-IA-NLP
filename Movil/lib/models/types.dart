@@ -1,10 +1,11 @@
-import 'package:json_serializable/json_serializable.dart';
+import 'package:json_annotation/json_annotation.dart';
 
 part 'types.g.dart';
 
 // ═══ PROJECT & DESIGN MODELS ═══
 
 
+@JsonSerializable()
 class Project {
   final String? id;
   final String nombre;
@@ -27,6 +28,7 @@ class Project {
 }
 
 
+@JsonSerializable()
 class Design {
   final String? id;
   final String nombre;
@@ -59,6 +61,7 @@ class Design {
 // ═══ DIAGRAM MODELS ═══
 
 
+@JsonSerializable()
 class NodeData {
   final String id;
   final String type;
@@ -93,6 +96,7 @@ class NodeData {
 }
 
 
+@JsonSerializable()
 class EdgeData {
   final String id;
   final String source;
@@ -123,6 +127,7 @@ class EdgeData {
 }
 
 
+@JsonSerializable()
 class WayPoint {
   final double x;
   final double y;
@@ -134,6 +139,7 @@ class WayPoint {
 }
 
 
+@JsonSerializable()
 class Form {
   final String? id;
   final String modelingId;
@@ -160,6 +166,7 @@ class Form {
 }
 
 
+@JsonSerializable()
 class Modeling {
   final String? id;
   final List<NodeData> nodes;
@@ -203,6 +210,7 @@ enum ProcessStatus {
 }
 
 
+@JsonSerializable()
 class ActivityInstance {
   final String nodeId;
   final String nodeLabel;
@@ -230,6 +238,7 @@ class ActivityInstance {
 }
 
 
+@JsonSerializable()
 class ProcessInstance {
   final String? id;
   final String designId;
@@ -261,3 +270,46 @@ class ProcessInstance {
       _$ProcessInstanceFromJson(json);
   Map<String, dynamic> toJson() => _$ProcessInstanceToJson(this);
 }
+
+class Usuario {
+  final String? id;
+  final String nombre;
+  final String email;
+  final String? password;
+  final String rol;
+  final String tenantId;
+
+  Usuario({
+    this.id,
+    required this.nombre,
+    required this.email,
+    this.password,
+    required this.rol,
+    required this.tenantId,
+  });
+
+  factory Usuario.fromJson(Map<String, dynamic> json) {
+    // MongoDB can return either 'id' or '_id' depending on Spring configuration
+    final idValue = json['id'] ?? json['_id'];
+    return Usuario(
+      id: idValue?.toString(),
+      nombre: json['nombre'] ?? '',
+      email: json['email'] ?? '',
+      password: json['password'],
+      rol: json['rol'] ?? 'CLIENTE',
+      tenantId: json['tenantId'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'nombre': nombre,
+      'email': email,
+      'password': password,
+      'rol': rol,
+      'tenantId': tenantId,
+    };
+  }
+}
+

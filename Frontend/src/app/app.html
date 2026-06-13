@@ -1,6 +1,33 @@
 <div class="app-layout">
-  <app-header *ngIf="showTitle()" />
-  <div class="main-content">
-    <router-outlet />
+  <app-header *ngIf="showTitle()" (toggleSidebar)="toggleSidebar()" [sidebarCollapsed]="sidebarCollapsed()"></app-header>
+  
+  <div class="app-body">
+    <!-- Overlay backdrop for mobile sidebar -->
+    <div class="sidebar-overlay"
+      [class.visible]="showSidebar() && !sidebarCollapsed() && isMobile"
+      (click)="closeSidebarOnMobile()">
+    </div>
+
+    <!-- Collapsible Sidebar -->
+    <aside class="sidebar-navigation" *ngIf="showSidebar()" [class.collapsed]="sidebarCollapsed()">
+      <div class="sidebar-menu-links">
+        <a class="sidebar-link" routerLinkActive="active" [routerLink]="isStaff ? '/staff/projects' : '/designer/projects'" (click)="closeSidebarOnMobile()">
+          <span nz-icon nzType="project" nzTheme="outline"></span>
+          <span class="link-text">Proyectos</span>
+        </a>
+        <a class="sidebar-link" routerLinkActive="active" [routerLink]="isStaff ? '/staff/documentos' : '/designer/documentos'" (click)="closeSidebarOnMobile()">
+          <span nz-icon nzType="folder-open" nzTheme="outline"></span>
+          <span class="link-text">Repositorio Drive</span>
+        </a>
+        <a class="sidebar-link" routerLinkActive="active" [routerLink]="isStaff ? '/staff/kpis' : '/designer/kpis'" (click)="closeSidebarOnMobile()">
+          <span nz-icon nzType="dashboard" nzTheme="outline"></span>
+          <span class="link-text">Panel Administrativo</span>
+        </a>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <router-outlet />
+    </div>
   </div>
 </div>

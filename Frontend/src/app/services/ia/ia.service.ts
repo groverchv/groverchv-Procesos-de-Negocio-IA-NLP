@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { NodeData, EdgeData } from '../types';
+import { API_GLOBAL } from '../api.global';
 
 export interface DiagramCommand {
   action:
@@ -87,18 +88,8 @@ interface StrictCrudOperation {
   providedIn: 'root'
 })
 export class IaService {
-  private readonly GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-  private get API_KEY(): string {
-    try {
-      const config = JSON.parse(localStorage.getItem('bpmnflow_config') || '{}');
-      // Usando la clave proporcionada por el usuario para activación inmediata
-      return config.groqKey || '';
-    } catch { return ''; }
-  }
-  private get hasValidApiKey(): boolean {
-    const key = this.API_KEY.trim();
-    return key.length > 8 && !/^YOUR_/i.test(key);
-  }
+  private readonly GROQ_API_URL = API_GLOBAL.ia.comandoDiagrama;
+  private get hasValidApiKey(): boolean { return true; }
   private static readonly VERBS = {
     CREATE: /\b(agrega|añade|crea|inserta|pon|ponme|coloca|genera|haz|mete|dame|plantea|proyecta|instala|dibuja|traza|abre|dispone|sitúa|situa|arm[ao]|construy|fabric[ao]|diseñ[ao]|desarroll[ao]|fund[ao]|mont[ao]|establec|inicia|form[ao]|forj[ao]|origin[ao]|invent[ao]|agreguemos|añadamos|creemos|insertemos|pongamos|metamos|dibujemos|diseñemos|montemos)\b/i,
     DELETE: /\b(elimina|borra|quita|remueve|eliminar|suprime|desaparece|destruye|aniquila|liquida|purga|desecha|vuela|quiebra|cargate|revienta|mata|funde|tumba|limpia|arrasa|pela|bota|deshaz|borralo|eliminemos|borremos|quitemos|removamos|matemos|limpiemos)\b/i,
@@ -150,27 +141,33 @@ ACCIONES:
 - auto_layout, clear_all, zoom_fit
 FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`;
 
+    const configStr = localStorage.getItem('bpmnflow_config');
+    let useLocal = true;
+    if (configStr) {
+      try {
+        const config = JSON.parse(configStr);
+        if (config.useLocalIA === false) {
+          useLocal = false;
+        }
+      } catch {}
+    }
+
     const headers = new HttpHeaders({
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.API_KEY}`
+      'X-Provider': useLocal ? 'local' : 'groq'
     });
 
     const body = {
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0,
-      max_tokens: 4096,
-      response_format: { type: 'json_object' }
+      user_message: userMessage,
+      nodes_context: nodesContext,
+      edges_context: edgesContext,
+      lanes_context: lanesContext
     };
 
     return this.http.post<any>(this.GROQ_API_URL, body, { headers }).pipe(
       map(response => {
-        const content = response.choices[0]?.message?.content;
-        if (!content) throw new Error('No response from AI');
-        const parsed = JSON.parse(content);
+        // La respuesta del backend de Python es directamente el JSON
+        const parsed = JSON.parse(response);
         return this.normalizeIaResponse(parsed, userMessage, currentNodes, selectedNodeId);
       }),
       catchError(err => {
@@ -393,10 +390,10 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     const action = ((cmd.action && actionAlias[cmd.action as string]) || cmd.action) as DiagramCommand['action'];
     const fixed: DiagramCommand = { ...cmd, action };
 
-    // Resolver referencias de nodos para que coincidan EXACTAMENTE con el diagrama (ej. "cumple" -> "cumple?")
-    if (fixed.sourceId) fixed.sourceId = this.resolveNodeLabelFromReference(fixed.sourceId, currentNodes) || fixed.sourceId;
-    if (fixed.targetId) fixed.targetId = this.resolveNodeLabelFromReference(fixed.targetId, currentNodes) || fixed.targetId;
-    if (fixed.nodeId) fixed.nodeId = this.resolveNodeLabelFromReference(fixed.nodeId, currentNodes) || fixed.nodeId;
+    // Resolver referencias de nodos para que coincidan con los IDs del diagrama
+    if (fixed.sourceId) fixed.sourceId = this.resolveNodeIdFromReference(fixed.sourceId, currentNodes) || fixed.sourceId;
+    if (fixed.targetId) fixed.targetId = this.resolveNodeIdFromReference(fixed.targetId, currentNodes) || fixed.targetId;
+    if (fixed.nodeId) fixed.nodeId = this.resolveNodeIdFromReference(fixed.nodeId, currentNodes) || fixed.nodeId;
     if (fixed.label && fixed.action !== 'add_node') {
       fixed.label = this.resolveNodeLabelFromReference(fixed.label, currentNodes) || fixed.label;
     }
@@ -1546,6 +1543,11 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
     return matches.length > 0 ? (matches[0].label || null) : null;
   }
 
+  private resolveNodeIdFromReference(ref: string, nodes: NodeData[]): string | null {
+    const matches = this.findNodeMatches(ref, nodes);
+    return matches.length > 0 ? (matches[0].id || null) : null;
+  }
+
   private findLaneMatches(reference: string | null, nodes: NodeData[]): NodeData[] {
     const lanes = nodes
       .filter(n => n.type === 'swimlane')
@@ -1571,23 +1573,28 @@ FORMATO: { "user_feedback": "Resumen", "commands": [{ "action": "...", ... }] }`
   }
 
   private findNodeMatches(ref: string, nodes: NodeData[]): NodeData[] {
-    let cleanRef = (ref || '').replace(/["'.,;:!?()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+    const targetOriginal = this.normalizeForSearch(ref);
+    const candidates = nodes.filter(n => !!n.label && n.label.trim().length > 0);
     
-    // Eliminar prefijos comunes de lenguaje natural que ensucian la búsqueda de etiquetas
-    cleanRef = cleanRef.replace(/^(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|la\s+pregunta|la\s+condicion|el\s+subproceso|calle|carril|zona|area|seccion|un|una|el|la|los|las|al|de\s+entre|entre|de)\s+/i, '').trim();
+    // 1. Intentar buscar con el término de búsqueda original intacto
+    const exactOriginal = candidates.filter(n => this.normalizeForSearch(n.label || '') === targetOriginal);
+    if (exactOriginal.length > 0) return exactOriginal;
 
-    // Eliminar sufijos de pertenencia a calles (ej: "X de la calle Y")
+    const containsOriginal = candidates.filter(n => this.normalizeForSearch(n.label || '').includes(targetOriginal) || targetOriginal.includes(this.normalizeForSearch(n.label || '')));
+    if (containsOriginal.length > 0) return containsOriginal;
+
+    // 2. Si no hay coincidencia directa, limpiar prefijos de lenguaje natural
+    let cleanRef = (ref || '').replace(/["'.,;:!?()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+    cleanRef = cleanRef.replace(/^(?:la\s+actividad|el\s+nodo|la\s+tarea|el\s+paso|la\s+decision|el\s+inicio|el\s+fin|la\s+nota|el\s+datastore|la\s+caja|el\s+cuadrito|el\s+bloque|la\s+pregunta|la\s+condicion|el\s+subproceso|calle|carril|zona|area|seccion|un|una|el|la|los|las|al|de\s+entre|entre|de)\s+/i, '').trim();
     cleanRef = cleanRef.replace(/\b(?:de|del|en)\b\s+(?:la\s+|el\s+)?(?:calle|carril|swimlane|zona|area|área|seccion|fila|banda|pista|pool|departamento|sector).*/gi, '').trim();
 
     if (!cleanRef) return [];
+    const targetClean = this.normalizeForSearch(cleanRef);
 
-    const candidates = nodes.filter(n => !!n.label && n.label.trim().length > 0);
-    const target = this.normalizeForSearch(cleanRef);
+    const exactClean = candidates.filter(n => this.normalizeForSearch(n.label || '') === targetClean);
+    if (exactClean.length > 0) return exactClean;
 
-    const exact = candidates.filter(n => this.normalizeForSearch(n.label || '') === target);
-    if (exact.length > 0) return exact;
-
-    return candidates.filter(n => this.normalizeForSearch(n.label || '').includes(target) || target.includes(this.normalizeForSearch(n.label || '')));
+    return candidates.filter(n => this.normalizeForSearch(n.label || '').includes(targetClean) || targetClean.includes(this.normalizeForSearch(n.label || '')));
   }
 
   private buildAmbiguityQuestion(step: string, nodes: NodeData[]): string | null {

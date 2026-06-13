@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'projects_list_screen.dart';
 import 'active_processes_screen.dart';
+import 'sugerencias_ia_screen.dart';
+import 'asistente_voz_cliente_screen.dart';
+import '../services/api_service.dart';
+import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -15,25 +19,98 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF0F6FF),
       appBar: AppBar(
-        title: const Text(
-          'BPMN Flow',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 22,
-            letterSpacing: -0.5,
-            color: Color(0xFF0F172A),
-          ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.account_tree_rounded, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 10),
+            const Text('Proceso de Negocio', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+          ],
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF1565C0),
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF64748B)),
-            onPressed: () {},
+          // ── Botón Sugerencias IA ──
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
+            child: GestureDetector(
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => const SugerenciasIAScreen(),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1565C0).withOpacity(0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 14),
+                    SizedBox(width: 5),
+                    Text(
+                      'Asesor IA',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
+          // ── Usuario y logout ──
+          if (ApiService.currentUser != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Chip(
+                avatar: const Icon(Icons.person_rounded, size: 14, color: Colors.white),
+                label: Text(
+                  ApiService.currentUser!.nombre.split(' ').first,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                ),
+                backgroundColor: Colors.white.withOpacity(0.2),
+                side: BorderSide.none,
+                padding: EdgeInsets.zero,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
+              tooltip: 'Cerrar sesión',
+              onPressed: () {
+                ApiService.currentUser = null;
+                Navigator.pushReplacementNamed(context, '/auth');
+              },
+            ),
+          ],
+          const SizedBox(width: 4),
         ],
       ),
       body: AnimatedSwitcher(
@@ -45,21 +122,22 @@ class _HomeScreenState extends State<HomeScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
+              color: const Color(0xFF0F172A).withOpacity(0.06),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
             ),
           ],
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(0, Icons.dashboard_rounded, 'Explorar'),
+                _buildNavItem(0, Icons.folder_copy_rounded, 'Proyectos'),
                 _buildNavItem(1, Icons.play_circle_filled_rounded, 'Activos'),
-                _buildNavItem(2, Icons.info_rounded, 'Info'),
+                _buildNavItem(2, Icons.mic_rounded, 'Asistente'),
+                _buildNavItem(3, Icons.info_outline_rounded, 'Info'),
               ],
             ),
           ),
@@ -70,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
-    final color = isSelected ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8);
+    final color = isSelected ? const Color(0xFF1565C0) : const Color(0xFF90A4AE);
 
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
@@ -79,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
+          color: isSelected ? color.withOpacity(0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -109,6 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return const ActiveProcessesScreen();
       case 2:
+        return AsistenteVozClienteScreen();
+      case 3:
         return _buildInfoScreen();
       default:
         return const ProjectsListScreen();
@@ -163,6 +243,105 @@ class _HomeScreenState extends State<HomeScreen> {
             'WebSocket: ws://10.0.2.2:8080/ws-bpmn',
             Icons.lan_rounded,
             Colors.green,
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.psychology_rounded, color: Colors.indigo, size: 24),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Motor de IA (NLP)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Elige la plataforma para procesar las consultas del asistente:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blueGrey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Provider.of<ApiService>(context, listen: false).useLocalIA
+                          ? ElevatedButton.icon(
+                              onPressed: () {},
+                              icon: const Icon(Icons.laptop_rounded, size: 16),
+                              label: const Text('IA Local', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4F46E5),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            )
+                          : OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  Provider.of<ApiService>(context, listen: false).useLocalIA = true;
+                                });
+                              },
+                              icon: const Icon(Icons.laptop_rounded, size: 16),
+                              label: const Text('IA Local'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: !Provider.of<ApiService>(context, listen: false).useLocalIA
+                          ? ElevatedButton.icon(
+                              onPressed: () {},
+                              icon: const Icon(Icons.cloud_rounded, size: 16),
+                              label: const Text('IA GROQ', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4F46E5),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            )
+                          : OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  Provider.of<ApiService>(context, listen: false).useLocalIA = false;
+                                });
+                              },
+                              icon: const Icon(Icons.cloud_rounded, size: 16),
+                              label: const Text('IA GROQ'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
           Center(

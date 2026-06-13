@@ -5,14 +5,27 @@ import com.example.Procesos.model.Modeling;
 import com.example.Procesos.model.Notification;
 import com.example.Procesos.model.ProcessInstance;
 import com.example.Procesos.model.ProcessInstance.ActivityInstance;
+import com.example.Procesos.model.Usuario;
+import com.example.Procesos.model.Project;
 import com.example.Procesos.repository.DesignRepository;
 import com.example.Procesos.repository.ModelingRepository;
 import com.example.Procesos.repository.NotificationRepository;
 import com.example.Procesos.repository.ProcessInstanceRepository;
+import com.example.Procesos.repository.UsuarioRepository;
+import com.example.Procesos.repository.ProjectRepository;
+import com.example.Procesos.repository.DocumentoHistorialRepository;
+import com.example.Procesos.model.DocumentoHistorial;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import com.example.Procesos.service.push.FirebasePushService;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFRun;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,7 +38,12 @@ public class WorkflowEngineService {
     private final DesignRepository designRepository;
     private final ModelingRepository modelingRepository;
     private final NotificationRepository notificationRepository;
+    private final UsuarioRepository usuarioRepository;
+    private final ProjectRepository projectRepository;
+    private final S3DocumentService s3DocumentService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final FirebasePushService firebasePushService;
+    private final DocumentoHistorialRepository documentoHistorialRepository;
 
     // ═══ INSTANTIATE PROCESS ═══
     public ProcessInstance startProcess(String designId, String userId) {
@@ -39,6 +57,15 @@ public class WorkflowEngineService {
         design.setLocked(true);
         design.setLockedBy(userId);
         designRepository.save(design);
+
+        // Buscar el inquilino (tenant) del usuario para aislamiento en S3
+        Optional<Usuario> userOpt = usuarioRepository.findById(userId);
+        if (!userOpt.isPresent()) {
+            userOpt = usuarioRepository.findByEmail(userId);
+        }
+        if (userOpt.isPresent()) {
+            // tenantId resolved but only needed within updateProcessReportInS3
+        }
 
         // Build activity instances from modeling nodes
         List<ActivityInstance> activities = new ArrayList<>();
@@ -74,8 +101,8 @@ public class WorkflowEngineService {
                 .build();
 
         instance = instanceRepository.save(instance);
+        updateProcessReportInS3(instance);
 
-        // Auto-advance from start node
         ActivityInstance startActivity = activities.stream()
                 .filter(a -> "start".equals(a.getNodeType()))
                 .findFirst().orElse(null);
@@ -83,6 +110,7 @@ public class WorkflowEngineService {
         if (startActivity != null) {
             autoAdvanceFromNode(instance, startActivity.getNodeId(), modeling);
             instance = instanceRepository.save(instance);
+            updateProcessReportInS3(instance);
         }
 
         // Send notification
@@ -128,7 +156,14 @@ public class WorkflowEngineService {
             autoAdvanceFromNode(instance, nodeId, modeling);
         }
 
-        // Check if all activities are FINISHED or SKIPPED → complete process
+        instance = instanceRepository.save(instance);
+        updateProcessReportInS3(instance);
+
+        // Notificar al usuario que avanzó de actividad
+        createNotification(instance.getStartedBy(), "Actividad Actualizada",
+                "La actividad '" + activity.getNodeLabel() + "' ha cambiado a estado: " + newStatus,
+                "INFO", instance.getId(), "PROCESS_INSTANCE");
+
         boolean allDone = instance.getActivities().stream()
                 .allMatch(a -> "FINISHED".equals(a.getStatus())
                         || "SKIPPED".equals(a.getStatus())
@@ -137,9 +172,12 @@ public class WorkflowEngineService {
             instance.setStatus("COMPLETED");
             instance.setCompletedAt(LocalDateTime.now());
             unlockDesign(instance.getDesignId());
+            
+            // Notificar al usuario que el proceso terminó
+            createNotification(instance.getStartedBy(), "Proceso Completado",
+                    "Tu proceso del diseño '" + instance.getDesignName() + "' se ha completado con éxito.",
+                    "SUCCESS", instance.getId(), "PROCESS_INSTANCE");
         }
-
-        instance = instanceRepository.save(instance);
 
         // Broadcast real-time update
         messagingTemplate.convertAndSend("/topic/instance/" + instanceId, instance);
@@ -270,6 +308,7 @@ public class WorkflowEngineService {
         }
 
         instance = instanceRepository.save(instance);
+        updateProcessReportInS3(instance);
         messagingTemplate.convertAndSend("/topic/instance/" + instanceId, instance);
         return instance;
     }
@@ -289,6 +328,7 @@ public class WorkflowEngineService {
 
         unlockDesign(instance.getDesignId());
         instance = instanceRepository.save(instance);
+        updateProcessReportInS3(instance);
         messagingTemplate.convertAndSend("/topic/instance/" + instanceId, instance);
         return instance;
     }
@@ -308,6 +348,10 @@ public class WorkflowEngineService {
 
     public Optional<ProcessInstance> getInstance(String instanceId) {
         return instanceRepository.findById(instanceId);
+    }
+
+    public List<ProcessInstance> getInstancesByStartedBy(String userId) {
+        return instanceRepository.findByStartedBy(userId);
     }
 
     public List<ProcessInstance> getAllInstances() {
@@ -350,7 +394,7 @@ public class WorkflowEngineService {
         });
     }
 
-    private void createNotification(String userId, String title, String message,
+    public void createNotification(String userId, String title, String message,
                                      String type, String refId, String refType) {
         Notification notification = Notification.builder()
                 .userId(userId)
@@ -364,6 +408,22 @@ public class WorkflowEngineService {
                 .build();
         notificationRepository.save(notification);
         messagingTemplate.convertAndSend("/topic/notifications/" + userId, notification);
+
+        // Envío de Notificación Push a dispositivo móvil si tiene token registrado
+        try {
+            Optional<Usuario> userOpt = usuarioRepository.findById(userId);
+            if (!userOpt.isPresent()) {
+                userOpt = usuarioRepository.findByEmail(userId);
+            }
+            if (userOpt.isPresent()) {
+                Usuario user = userOpt.get();
+                if (user.getFcmToken() != null && !user.getFcmToken().isBlank()) {
+                    firebasePushService.enviarNotificacionACliente(user.getFcmToken(), title, message);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Advertencia al enviar notificación push: " + e.getMessage());
+        }
     }
 
     // ═══ VALIDATION (RF-9) ═══
@@ -437,5 +497,102 @@ public class WorkflowEngineService {
                 "nodeCount", processNodes.size(),
                 "edgeCount", edges.size()
         );
+    }
+
+    public void updateProcessReportInS3(ProcessInstance instance) {
+        try {
+            String tenantId = "tenant_default";
+            String clientName = instance.getStartedBy();
+            Optional<Usuario> userOpt = usuarioRepository.findById(instance.getStartedBy());
+            if (!userOpt.isPresent()) {
+                userOpt = usuarioRepository.findByEmail(instance.getStartedBy());
+            }
+            if (userOpt.isPresent()) {
+                tenantId = userOpt.get().getTenantId();
+                clientName = userOpt.get().getNombre();
+            }
+
+            String projectName = "proyecto_desconocido";
+            if (instance.getProjectId() != null) {
+                projectName = projectRepository.findById(instance.getProjectId())
+                        .map(Project::getNombre)
+                        .orElse("proyecto_desconocido");
+            }
+
+            String sanitizedProjectName = projectName.replaceAll("[^a-zA-Z0-9_.-]", "_");
+            String sanitizedDesignName = instance.getDesignName().replaceAll("[^a-zA-Z0-9_.-]", "_");
+            String instanceId = instance.getId();
+            String path = sanitizedProjectName + "/" + sanitizedDesignName + "/" + instanceId + "/process_info.docx";
+
+            // Reconstruct the text report
+            StringBuilder sb = new StringBuilder();
+            sb.append("BPMNFLOW - REPORTE DE PROCESO EN DRIVE\n");
+            sb.append("===============================================\n");
+            sb.append("Cliente: ").append(clientName).append("\n");
+            sb.append("Diseño/Flujo: ").append(instance.getDesignName()).append("\n");
+            sb.append("ID de Instancia: ").append(instanceId).append("\n");
+            sb.append("Proyecto: ").append(projectName).append("\n");
+            sb.append("Iniciado por: ").append(instance.getStartedBy()).append("\n");
+            sb.append("Fecha de Inicio: ").append(instance.getStartedAt() != null ? instance.getStartedAt().toLocalDate() : "N/A").append("\n");
+            sb.append("Estado: ").append(instance.getStatus()).append("\n\n");
+
+            sb.append("VARIABLES DEL PROCESO:\n");
+            try {
+                String varsJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writerWithDefaultPrettyPrinter()
+                        .writeValueAsString(instance.getVariables() != null ? instance.getVariables() : Map.of());
+                sb.append(varsJson).append("\n\n");
+            } catch (Exception ex) {
+                sb.append("{}\n\n");
+            }
+
+            sb.append("HOJA DE RUTA / ACTIVIDADES:\n");
+            if (instance.getActivities() != null) {
+                for (ProcessInstance.ActivityInstance a : instance.getActivities()) {
+                    sb.append("  • ").append(a.getNodeLabel()).append(" (").append(a.getNodeType()).append(") -> [").append(a.getStatus()).append("]\n");
+                }
+            }
+
+            byte[] docxBytes;
+            try (XWPFDocument doc = new XWPFDocument();
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                for (String line : sb.toString().split("\n")) {
+                    XWPFParagraph para = doc.createParagraph();
+                    XWPFRun run = para.createRun();
+                    run.setText(line.trim());
+                }
+                doc.write(out);
+                docxBytes = out.toByteArray();
+            }
+
+            // Crear carpetas virtuales S3 para la jerarquía Proyecto > Diseño > Instancia
+            s3DocumentService.createFolder(tenantId, sanitizedProjectName);
+            s3DocumentService.createFolder(tenantId, sanitizedProjectName + "/" + sanitizedDesignName);
+            s3DocumentService.createFolder(tenantId, sanitizedProjectName + "/" + sanitizedDesignName + "/" + instanceId);
+
+            s3DocumentService.uploadDocument(tenantId, path, new ByteArrayInputStream(docxBytes), docxBytes.length, 
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+            
+            // Log to history
+            logHistory(tenantId, path, "SISTEMA", "CREACION", "Actualización automática de telemetría del proceso en S3", sb.toString());
+        } catch (Exception e) {
+            System.err.println("Error actualizando reporte en S3: " + e.getMessage());
+        }
+    }
+
+    private void logHistory(String tenantId, String fileName, String usuario, String accion, String detalle, String contenido) {
+        try {
+            documentoHistorialRepository.save(DocumentoHistorial.builder()
+                    .tenantId(tenantId)
+                    .nombreArchivo(fileName)
+                    .usuario(usuario)
+                    .accion(accion)
+                    .detalle(detalle)
+                    .contenido(contenido)
+                    .fecha(new Date())
+                    .build());
+        } catch (Exception e) {
+            System.err.println("Error guardando historial: " + e.getMessage());
+        }
     }
 }

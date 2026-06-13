@@ -121,3 +121,26 @@ export interface ValidationResult {
     nodeCount: number;
     edgeCount: number;
 }
+
+export interface Usuario {
+    id?: string;
+    nombre: string;
+    email: string;
+    password?: string;
+    rol: string; // 'CLIENTE' | 'DISENADOR' | 'FUNCIONARIO'
+    tenantId?: string;
+}
+
+export interface AsignacionProceso {
+    id?: string;
+    clienteId: string;
+    designId: string;
+    designNombre?: string;
+    projectId?: string;
+    projectNombre?: string;
+    habilitado: boolean;
+    solicitado?: boolean;
+    fechaSolicitud?: string;
+    asignadoPor?: string;
+    fechaAsignacion?: string;
+}

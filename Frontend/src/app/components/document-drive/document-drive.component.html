@@ -1,0 +1,506 @@
+<div class="drive-container" *ngIf="!isEditing">
+  <!-- Navegador y Breadcrumbs de Google Drive -->
+  <div class="navigation-toolbar">
+    <!-- Botones Atrás / Adelante (Navegación Libre) -->
+    <div class="nav-history-buttons">
+      <button 
+        class="btn-history-nav" 
+        [disabled]="!canGoBack()" 
+        (click)="goBack()"
+        title="Atrás"
+      >
+        <span nz-icon nzType="left" nzTheme="outline"></span>
+      </button>
+      <button 
+        class="btn-history-nav" 
+        [disabled]="!canGoForward()" 
+        (click)="goForward()"
+        title="Adelante"
+      >
+        <span nz-icon nzType="right" nzTheme="outline"></span>
+      </button>
+    </div>
+
+    <!-- Breadcrumbs -->
+    <div class="breadcrumbs-bar">
+      <span *ngFor="let crumb of pathStack; let i = index" class="breadcrumb-item-wrap">
+        <span class="breadcrumb-link" (click)="navegarA(i)">{{ crumb.name }}</span>
+        <span *ngIf="i < pathStack.length - 1" class="breadcrumb-separator">
+          <span nz-icon nzType="right" nzTheme="outline"></span>
+        </span>
+      </span>
+    </div>
+  </div>
+
+  <div class="drive-header">
+    <div class="title-area">
+      <h2>Repositorio Colaborativo de Documentos</h2>
+      <p>
+        Estructura real del almacenamiento: <strong>Tenant → Proyecto → Diseño → Instancia de Proceso</strong>. Refleja el repositorio S3 en tiempo real.
+      </p>
+    </div>
+    
+    <!-- Toolbar de Operaciones de Carpeta -->
+    <div class="actions">
+      <button class="btn-action-outline" (click)="cargarRepositorioDinamico()" [disabled]="cargandoUsuarios" title="Sincronizar con el backend">
+        <span nz-icon [nzType]="cargandoUsuarios ? 'loading' : 'sync'" nzTheme="outline"></span>
+        {{ cargandoUsuarios ? 'Cargando...' : 'Sincronizar' }}
+      </button>
+      <button *ngIf="currentFolderId !== null" class="btn-action-outline" (click)="abrirModalCreacion('folder')">
+        <span nz-icon nzType="folder-add" nzTheme="outline"></span> Nueva Carpeta
+      </button>
+      <button *ngIf="currentFolderId !== null" class="btn-action-outline" (click)="abrirModalCreacion('file')">
+        <span nz-icon nzType="file-add" nzTheme="outline"></span> Crear Documento
+      </button>
+      
+      <ng-container *ngIf="currentFolderId !== null">
+        <input type="file" id="file-upload" class="hidden-input" (change)="onFileSelected($event)">
+        <label for="file-upload" class="upload-btn">
+          <span nz-icon nzType="upload" nzTheme="outline"></span> Subir archivo
+        </label>
+      </ng-container>
+    </div>
+  </div>
+
+  <div class="drive-body">
+    <!-- Estado Vacío -->
+    <div *ngIf="visibleItems.length === 0" class="empty-state">
+      <span nz-icon nzType="folder-open" nzTheme="outline" style="font-size: 52px; color: #cbd5e1;"></span>
+      <p style="margin-top: 16px; color: #64748b; font-weight: 550;">Esta carpeta se encuentra vacía.</p>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- 1. GRID DE CARPETAS ESTILO GOOGLE DRIVE -->
+    <!-- ==================================================================== -->
+    <div class="drive-section" *ngIf="visibleItems.length > 0 && folders.length > 0">
+      <h4 class="section-title">Carpetas</h4>
+      <div class="folders-grid">
+        <div 
+          *ngFor="let item of folders" 
+          (click)="abrirElemento(item)" 
+          class="folder-card-drive"
+        >
+          <div class="folder-card-left">
+            <span nz-icon [nzType]="item.name.startsWith('Proceso') ? 'folder-open' : 'folder'" nzTheme="fill" class="folder-card-icon"></span>
+            <div class="folder-card-info">
+              <span class="folder-card-name">{{ item.name }}</span>
+            </div>
+          </div>
+          <span nz-icon nzType="more" nzTheme="outline" class="folder-card-dots" (click)="$event.stopPropagation(); solicitarRenombrar(item)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- 2. TABLA DE ARCHIVOS ESTILO GOOGLE DRIVE -->
+    <!-- ==================================================================== -->
+    <div class="drive-section" style="margin-top: 32px;" *ngIf="visibleItems.length > 0 && files.length > 0">
+      <h4 class="section-title">Archivos</h4>
+      <table class="files-table">
+        <thead>
+          <tr>
+            <th>Nombre del Archivo</th>
+            <th>Tamaño</th>
+            <th>Última Modificación</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of files" (dblclick)="abrirElemento(item)" class="drive-row">
+            <td>
+              <div class="file-name-cell">
+                <!-- Icono dinámico según extensión del archivo -->
+                <ng-container [ngSwitch]="getFileExtension(item.name)">
+                  <span *ngSwitchCase="'docx'" class="file-type-icon icon-word" title="Word">W</span>
+                  <span *ngSwitchCase="'doc'" class="file-type-icon icon-word" title="Word">W</span>
+                  <span *ngSwitchCase="'xlsx'" class="file-type-icon icon-excel" title="Excel">X</span>
+                  <span *ngSwitchCase="'xls'" class="file-type-icon icon-excel" title="Excel">X</span>
+                  <span *ngSwitchCase="'pdf'" class="file-type-icon icon-pdf" title="PDF">P</span>
+                  <span *ngSwitchCase="'png'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchCase="'jpg'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchCase="'jpeg'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchCase="'gif'" class="file-type-icon icon-image" title="Imagen">🖼</span>
+                  <span *ngSwitchDefault nz-icon nzType="file-text" nzTheme="outline" class="file-icon-lead"></span>
+                </ng-container>
+                <span class="file-name-text" (click)="abrirElemento(item)">{{ item.name }}</span>
+              </div>
+            </td>
+            <td>{{ item.size }}</td>
+            <td>{{ item.date | date:'short' }}</td>
+            <td>
+              <nz-space nzSize="small">
+                <button *ngIf="item.name.endsWith('.txt') || item.name.endsWith('.docx') || item.name.endsWith('.doc')" class="action-btn-download" (click)="abrirEditor(item)">
+                  <span nz-icon nzType="edit" nzTheme="outline"></span> Editar
+                </button>
+                <button class="action-btn-download" (click)="visualizarElemento(item)">
+                  <span nz-icon nzType="eye" nzTheme="outline"></span> Visualizar
+                </button>
+                <button class="action-btn-download" (click)="solicitarRenombrar(item)">
+                  <span nz-icon nzType="form" nzTheme="outline"></span> Renombrar
+                </button>
+                <button class="action-btn-download delete-btn-premium" (click)="solicitarEliminar(item)">
+                  <span nz-icon nzType="delete" nzTheme="outline"></span> Eliminar
+                </button>
+              </nz-space>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- EDITOR COLABORATIVO TIPO GOOGLE DOCS (INLINE Y EDITABLE CON IA) -->
+<!-- ==================================================================== -->
+<div class="editor-overlay" *ngIf="isEditing && editingFile">
+  <div class="editor-container">
+    <div class="editor-header">
+      <div class="editor-title-area">
+        <span nz-icon nzType="file-text" nzTheme="outline" class="editor-icon"></span>
+        <div>
+          <h3 style="display: inline-flex; align-items: center; gap: 8px;">
+            {{ editingFile.name }}
+            <span class="status-auto-save" [ngClass]="savingStatus">
+              <span *ngIf="savingStatus === 'saving'" class="badge-saving"><span nz-icon nzType="loading" nzTheme="outline"></span> Guardando en S3...</span>
+              <span *ngIf="savingStatus === 'saved'" class="badge-saved"><span nz-icon nzType="cloud-sync" nzTheme="outline"></span> Guardado en S3</span>
+              <span *ngIf="savingStatus === 'offline'" class="badge-offline"><span nz-icon nzType="disconnect" nzTheme="outline"></span> Sin guardar</span>
+            </span>
+          </h3>
+          <p>Editor de Documentación BPM Colaborativa</p>
+        </div>
+      </div>
+
+      <!-- Presencia de Usuarios en Línea en Tiempo Real (Co-edición) -->
+      <div class="editor-colabs-badge" *ngIf="colaboradoresActivos.length > 0">
+        <div class="avatars-group">
+          <div 
+            *ngFor="let colab of colaboradoresActivos" 
+            class="user-colab-avatar"
+            [style.background]="colab.color"
+            [title]="colab.nombre + ' (' + colab.rol + ')'"
+          >
+            {{ colab.iniciales }}
+            <span class="status-dot"></span>
+          </div>
+        </div>
+        <span class="colabs-pill-text">{{ colaboradoresActivos.length }} colaborando ahora</span>
+      </div>
+      
+      <!-- Controles del Editor -->
+      <div class="editor-controls">
+        <button *ngIf="editingFile.name !== 'historial_bitacora.txt'" class="btn-ia-action" (click)="autocompletarConIA()" [disabled]="cargandoIA">
+          <span nz-icon [nzType]="cargandoIA ? 'loading' : 'edit'" nzTheme="outline"></span> 
+          {{ cargandoIA ? 'Redactando...' : 'Mejorar Redacción' }}
+        </button>
+        <button *ngIf="editingFile.name !== 'historial_bitacora.txt'" class="btn-save" (click)="guardarDocumento()">
+          <span nz-icon nzType="save" nzTheme="outline"></span> Guardar
+        </button>
+        <button class="btn-close" (click)="cerrarEditor()">
+          <span nz-icon nzType="close" nzTheme="outline"></span> Cerrar
+        </button>
+      </div>
+    </div>
+
+    <!-- Área de Papel de Redacción + Panel de Historial (Google Docs Style) -->
+    <div class="editor-body-wrapper" style="display: flex; height: calc(100vh - 80px); width: 100%; overflow: hidden;">
+      <div class="editor-body" style="flex: 1; overflow-y: auto; padding: 40px 20px; display: flex; justify-content: center; background: #f1f5f9;">
+        <div class="document-paper" style="width: 100%; max-width: 800px; min-height: 900px; background: #ffffff; border-radius: 4px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02); border: 1px solid #cbd5e1; padding: 40px 50px; display: flex; flex-direction: column; gap: 24px;">
+          
+          <!-- Vista Dashboard del Proceso para process_info.txt (UX Enriquecida) -->
+          <div class="process-info-dashboard" *ngIf="isProcessInfoFile && processInfoParsed">
+            <div class="process-dashboard-title">
+              <span nz-icon nzType="dashboard" nzTheme="outline" style="color: #4f46e5;"></span>
+              <h4>Dashboard del Proceso Activo</h4>
+            </div>
+            
+            <div class="process-meta-grid">
+              <div class="meta-card">
+                <span class="meta-label">Cliente</span>
+                <span class="meta-val">{{ processInfoParsed.cliente }}</span>
+              </div>
+              <div class="meta-card">
+                <span class="meta-label">Proyecto</span>
+                <span class="meta-val">{{ processInfoParsed.proyecto }}</span>
+              </div>
+              <div class="meta-card">
+                <span class="meta-label">Flujo / Diseño</span>
+                <span class="meta-val">{{ processInfoParsed.flujo }}</span>
+              </div>
+              <div class="meta-card">
+                <span class="meta-label">Estado</span>
+                <span class="badge-status-val" [ngClass]="processInfoParsed.estado?.toLowerCase()">
+                  {{ processInfoParsed.estado }}
+                </span>
+              </div>
+            </div>
+            
+            <div class="process-timeline-section">
+              <h5>Hoja de Ruta e Hitos del Proceso</h5>
+              <div class="timeline-flow">
+                <div class="timeline-node" *ngFor="let act of processInfoParsed.actividades" [ngClass]="act.status.toLowerCase()">
+                  <div class="node-icon">
+                    <span nz-icon [nzType]="act.status === 'FINISHED' ? 'check' : act.status === 'IN_REVIEW' ? 'sync' : 'hourglass'" nzTheme="outline"></span>
+                  </div>
+                  <div class="node-info">
+                    <div class="node-label">{{ act.label }}</div>
+                    <div class="node-type">{{ act.type }}</div>
+                  </div>
+                  <span class="node-status-badge" [ngClass]="act.status.toLowerCase()">{{ act.status }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="dashboard-divider"></div>
+          </div>
+
+          <!-- Editor de Documentos (Tiptap WYSIWYG Colaborativo) -->
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; height: 100%;">
+            <!-- Barra de formato Word / Google Docs -->
+            <div class="wysiwyg-toolbar" *ngIf="editingFile.name !== 'historial_bitacora.txt'">
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('bold')" title="Negrita"><strong>B</strong></button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('italic')" title="Cursiva"><em>I</em></button>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('underline')" title="Tachado"><s>S</s></button>
+              <span class="wysiwyg-sep"></span>
+              <button type="button" class="wysiwyg-btn" (click)="execFormatCommand('insertUnorderedList')" title="Lista">≡</button>
+            </div>
+            
+            <div 
+              id="docx-wysiwyg-editor"
+              class="wysiwyg-body"
+              style="flex: 1; min-height: 500px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; font-size: 1.05rem; line-height: 1.8; font-family: 'Georgia', 'Times New Roman', serif; color: #1e293b; outline: none; overflow-y: auto; background: #ffffff;"
+            ></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Panel de Historial de Cambios (Google Doc Style) -->
+      <div class="history-side-panel" style="width: 320px; border-left: 1px solid #cbd5e1; background: #f8fafc; padding: 20px; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <h4 style="margin: 0; font-weight: 700; color: #1e293b; font-size: 15px; letter-spacing: -0.01em;">Historial de Versiones</h4>
+          <button class="btn-action-outline" (click)="cargarHistorial()" style="padding: 6px 12px; font-size: 11px; border-radius: 6px; height: auto;">
+            <span nz-icon nzType="sync" nzTheme="outline"></span>
+          </button>
+        </div>
+        <div style="flex: 1; overflow-y: auto; padding-right: 4px;">
+          <div *ngIf="historialDocumento.length === 0" style="text-align: center; color: #94a3b8; padding-top: 40px; font-size: 13px;">
+            No hay registros en el historial.
+          </div>
+          <div 
+            *ngFor="let h of historialDocumento" 
+            (click)="seleccionarHistorial(h)"
+            class="history-item-card"
+            title="Haz clic para previsualizar o restaurar esta versión"
+          >
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+              <span [ngClass]="'badge-accion ' + h.accion.toLowerCase()" 
+                    [style.background]="h.accion === 'CREACION' ? '#e0f2fe' : h.accion === 'EDICION' ? '#fef3c7' : '#dcfce7'"
+                    [style.color]="h.accion === 'CREACION' ? '#0369a1' : h.accion === 'EDICION' ? '#b45309' : '#15803d'"
+                    style="font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+                {{ h.accion }}
+              </span>
+              <span style="font-size: 10px; color: #94a3b8;">{{ h.fecha | date:'short' }}</span>
+            </div>
+            <p style="margin: 0 0 4px; font-size: 13px; font-weight: 700; color: #334155;">{{ h.usuario }}</p>
+            <p style="margin: 0; font-size: 12px; color: #64748b; line-height: 1.4;">{{ h.detalle }}</p>
+            <div class="history-card-hover-hint">Ver o restaurar versión</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- MODAL DE PREVISUALIZACIÓN E HISTORIAL DE VERSIONES (GOOGLE DRIVE STYLE) -->
+<!-- ==================================================================== -->
+<div class="custom-modal-overlay" *ngIf="isPreviewingHistory && previewingHistoryItem">
+  <div class="custom-modal-card history-preview-modal">
+    <div class="custom-modal-header">
+      <span nz-icon nzType="history" nzTheme="outline" class="modal-header-icon"></span>
+      <div>
+        <h3>Versión del {{ previewingHistoryItem.fecha | date:'short' }}</h3>
+        <p>Guardado por: <strong>{{ previewingHistoryItem.usuario }}</strong></p>
+      </div>
+    </div>
+    
+    <div class="custom-modal-body">
+      <div class="history-content-viewer">
+        {{ historyPreviewContent }}
+      </div>
+    </div>
+
+    <div class="custom-modal-footer">
+      <button class="btn-modal-cancel" (click)="cerrarPreviewHistorial()">Cerrar Vista</button>
+      <button 
+        class="btn-modal-confirm" 
+        *ngIf="editingFile && editingFile.name !== 'historial_bitacora.txt'" 
+        (click)="restaurarHistorial(previewingHistoryItem)"
+      >
+        <span nz-icon nzType="undo" nzTheme="outline"></span> Restaurar esta versión
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- MODAL DE RENOMBRAR (ESTILO GOOGLE DRIVE) -->
+<!-- ==================================================================== -->
+<div class="custom-modal-overlay" *ngIf="isRenameModalVisible && renamingItem">
+  <div class="custom-modal-card">
+    <div class="custom-modal-header">
+      <span nz-icon nzType="edit" nzTheme="outline" class="modal-header-icon"></span>
+      <h3>Renombrar {{ renamingItem.type === 'folder' ? 'Carpeta' : 'Archivo' }}</h3>
+    </div>
+    
+    <div class="custom-modal-body">
+      <label class="modal-field-label">Nuevo nombre:</label>
+      <input 
+        type="text" 
+        [(ngModel)]="renameNewName" 
+        [placeholder]="renamingItem.name" 
+        class="modal-text-input" 
+        (keyup.enter)="confirmarRenombrar()"
+        autofocus
+      />
+    </div>
+
+    <div class="custom-modal-footer">
+      <button class="btn-modal-cancel" (click)="cerrarRenameModal()">Cancelar</button>
+      <button class="btn-modal-confirm" (click)="confirmarRenombrar()" [disabled]="!renameNewName.trim() || renameNewName.trim() === renamingItem.name">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- MODAL DE CREACIÓN PREMIUM (REEMPLAZA ALERTS/PROMPTS DEL SISTEMA) -->
+<!-- ==================================================================== -->
+<div class="custom-modal-overlay" *ngIf="isCreateModalVisible">
+  <div class="custom-modal-card">
+    <div class="custom-modal-header">
+      <span nz-icon [nzType]="createModalType === 'folder' ? 'folder-add' : 'file-add'" nzTheme="outline" class="modal-header-icon"></span>
+      <h3>{{ createModalType === 'folder' ? 'Nueva Carpeta' : 'Nuevo Documento' }}</h3>
+    </div>
+    
+    <div class="custom-modal-body">
+      <label class="modal-field-label">Nombre del nuevo elemento:</label>
+      <input 
+        type="text" 
+        [(ngModel)]="newItemName" 
+        [placeholder]="createModalType === 'folder' ? 'Ej. Documentos Administrativos' : 'Ej. nuevo_documento'" 
+        class="modal-text-input" 
+        (keyup.enter)="confirmarCreacion()"
+        autofocus
+      />
+
+      <!-- Selector de Tipo de Archivo -->
+      <div *ngIf="createModalType === 'file'" class="file-type-selector-wrap" style="margin-top: 16px;">
+        <label class="modal-field-label">Tipo de archivo:</label>
+        <div style="display: flex; gap: 16px; margin-top: 8px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #4b5563;">
+            <input type="radio" name="newFileType" value="docx" [(ngModel)]="createFileType" />
+            Word (.docx)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #4b5563;">
+            <input type="radio" name="newFileType" value="xlsx" [(ngModel)]="createFileType" />
+            Excel (.xlsx)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #4b5563;">
+            <input type="radio" name="newFileType" value="txt" [(ngModel)]="createFileType" />
+            Texto (.txt)
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="custom-modal-footer">
+      <button class="btn-modal-cancel" (click)="cerrarModalCreacion()">Cancelar</button>
+      <button class="btn-modal-confirm" (click)="confirmarCreacion()" [disabled]="!newItemName.trim()">Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- MODAL DE PREVISUALIZACIÓN DE ARCHIVOS (IMÁGENES / PDF / EXCEL / WORD) -->
+<!-- ==================================================================== -->
+<div class="custom-modal-overlay" *ngIf="isPreviewVisible && previewItem">
+  <div class="custom-modal-card preview-modal-card">
+    <div class="custom-modal-header">
+      <span nz-icon [nzType]="previewItem.name.endsWith('.pdf') ? 'file-pdf' : (previewItem.name.endsWith('.xlsx') || previewItem.name.endsWith('.xls')) ? 'table' : 'picture'" nzTheme="outline" class="modal-header-icon"></span>
+      <h3>Previsualización: {{ previewItem.name }}</h3>
+    </div>
+    
+    <div class="custom-modal-body preview-modal-body">
+      <!-- Image Preview -->
+      <div *ngIf="isImageFile(previewItem.name)" class="image-preview-container">
+        <img [src]="previewUrl" alt="Previsualización de imagen" class="image-preview-element" />
+      </div>
+      
+      <!-- PDF Preview -->
+      <div *ngIf="previewItem.name.endsWith('.pdf')" class="pdf-preview-container">
+        <iframe [src]="previewPdfUrl" class="pdf-preview-element"></iframe>
+      </div>
+
+      <!-- Excel Preview (.xlsx / .xls) -->
+      <div *ngIf="previewItem.name.endsWith('.xlsx') || previewItem.name.endsWith('.xls')" class="excel-preview-container">
+        <div *ngIf="cargandoPreview" class="preview-loading">
+          <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando hoja de cálculo...
+        </div>
+        <ng-container *ngIf="!cargandoPreview && xlsxSheets">
+          <div class="excel-sheet-tabs">
+            <button 
+              *ngFor="let sheet of xlsxSheets; let i = index" 
+              class="excel-tab" 
+              [class.active]="activeSheetIndex === i"
+              (click)="activeSheetIndex = i">
+              {{ sheet.name }}
+            </button>
+          </div>
+          <div class="excel-table-wrapper">
+            <table class="excel-preview-table" *ngIf="xlsxSheets[activeSheetIndex]">
+              <tr *ngFor="let row of xlsxSheets[activeSheetIndex].rows; let ri = index">
+                <th class="excel-row-num">{{ ri + 1 }}</th>
+                <td *ngFor="let cell of row" [class.excel-header-cell]="ri === 0">{{ cell }}</td>
+              </tr>
+            </table>
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Word / DOCX Preview as HTML -->
+      <div *ngIf="previewItem.name.endsWith('.docx') || previewItem.name.endsWith('.doc')" class="docx-preview-container">
+        <div *ngIf="cargandoPreview" class="preview-loading">
+          <span nz-icon nzType="loading" nzTheme="outline"></span> Cargando documento Word...
+        </div>
+        <div *ngIf="!cargandoPreview && previewDocxHtml" class="docx-rendered" [innerHTML]="previewDocxHtml"></div>
+      </div>
+    </div>
+
+    <div class="custom-modal-footer">
+      <button class="btn-modal-cancel" (click)="downloadFile(previewItem)">Descargar Original</button>
+      <button class="btn-modal-confirm" (click)="cerrarPreview()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================================== -->
+<!-- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN -->
+<!-- ==================================================================== -->
+<div class="custom-modal-overlay" *ngIf="isDeleteModalVisible && deletingItem">
+  <div class="custom-modal-card">
+    <div class="custom-modal-header danger-header">
+      <span nz-icon nzType="warning" nzTheme="outline" class="modal-header-icon danger-icon"></span>
+      <h3>¿Eliminar Archivo?</h3>
+    </div>
+    
+    <div class="custom-modal-body">
+      <p>¿Estás seguro de que deseas eliminar permanentemente el archivo <strong>{{ deletingItem.name }}</strong> del almacenamiento S3?</p>
+      <p class="modal-warning-subtitle">Esta acción no se puede deshacer y quedará registrada en el historial.</p>
+    </div>
+
+    <div class="custom-modal-footer">
+      <button class="btn-modal-cancel" (click)="cerrarDeleteModal()">Cancelar</button>
+      <button class="btn-modal-confirm btn-danger-confirm" (click)="confirmarEliminar()">Eliminar</button>
+    </div>
+  </div>
+</div>

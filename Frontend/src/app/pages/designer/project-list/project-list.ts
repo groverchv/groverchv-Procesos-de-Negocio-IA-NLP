@@ -24,12 +24,14 @@ import { Project } from '../../../services/types';
   ],
   templateUrl: './project-list.html',
   styles: [`
-    .container { padding: 40px; background: #fff; min-height: calc(100vh - 72px); }
-    .project-card { border-radius: 16px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; transition: all 0.3s; cursor: pointer; position: relative; }
-    .project-card:hover { transform: translateY(-5px); box-shadow: 0 12px 20px rgba(0,0,0,0.1); }
-    .card-cover { background: #f8fafc; height: 180px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #f1f5f9; }
-    .folder-icon { font-size: 64px; color: #cbd5e1; }
-    .delete-btn { position: absolute; top: 10px; right: 10px; z-index: 10; opacity: 0; transition: opacity 0.3s; }
+    .container { padding: 40px; background: #f8fafc; min-height: calc(100vh - 72px); }
+    .project-card { border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0; transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; position: relative; background: #ffffff; }
+    .project-card:hover { transform: translateY(-6px); box-shadow: 0 20px 30px -10px rgba(79, 70, 229, 0.15); border-color: #cbd5e1; }
+    .card-cover { background: linear-gradient(135deg, #f5f3ff 0%, #e0e7ff 100%); height: 180px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #f1f5f9; position: relative; overflow: hidden; }
+    .card-cover::before { content: ''; position: absolute; width: 150px; height: 150px; background: rgba(255, 255, 255, 0.3); border-radius: 50%; top: -50px; right: -50px; filter: blur(20px); }
+    .folder-icon { font-size: 68px; color: #4f46e5; filter: drop-shadow(0 4px 10px rgba(79, 70, 229, 0.25)); transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+    .project-card:hover .folder-icon { transform: scale(1.1) rotate(-3deg); color: #7c3aed; filter: drop-shadow(0 8px 16px rgba(124, 58, 237, 0.35)); }
+    .delete-btn { position: absolute; top: 12px; right: 12px; z-index: 10; opacity: 0; transition: all 0.25s ease; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
     .project-card:hover .delete-btn { opacity: 1; }
   `]
 })
@@ -75,11 +77,7 @@ export class ProjectListComponent implements OnInit {
     });
   }
 
-  switchToProduction() {
-    localStorage.setItem('BACKEND_URL', 'https://diagramador-de-actividades.up.railway.app');
-    this.message.loading('Cambiando a producción...', { nzDuration: 1000 });
-    setTimeout(() => window.location.reload(), 1000);
-  }
+
 
   showModal(): void {
     this.isVisible = true;

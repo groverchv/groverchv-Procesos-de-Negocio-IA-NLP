@@ -1,0 +1,157 @@
+/* ── Responsive Layout — App Shell ──────────────────────────────── */
+/* Breakpoints:
+   xs  < 576px   (mobile portrait)
+   sm  576-768px (mobile landscape / small tablet)
+   md  768-1024px (tablet)
+   lg  > 1024px  (desktop)
+*/
+
+/* ── Layout General ─────────────────────────────────────────────── */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────── */
+.sidebar-navigation {
+  width: 260px;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+  transition:
+    width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s ease;
+  flex-shrink: 0;
+  z-index: 200;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.04);
+  overflow-x: hidden;
+}
+
+/* Desktop collapse (icon-only) */
+.sidebar-navigation.collapsed {
+  width: 0px;
+  padding: 24px 0px;
+  border-right-color: transparent;
+}
+
+.sidebar-menu-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 228px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border-radius: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.25s ease;
+}
+
+.sidebar-link:hover {
+  color: #1e293b;
+  background: #f1f5f9;
+}
+
+.sidebar-link.active {
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.08);
+}
+
+/* ── Sidebar overlay backdrop (mobile) ──────────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 150;
+  backdrop-filter: blur(2px);
+}
+
+/* ── Main content ───────────────────────────────────────────────── */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: #f8fafc;
+  min-width: 0; /* Prevent flex blowout */
+}
+
+/* ── Print ──────────────────────────────────────────────────────── */
+@media print {
+  .sidebar-navigation {
+    display: none !important;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MOBILE  (≤ 767px)
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Sidebar becomes a fixed overlay drawer */
+  .sidebar-navigation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 280px;
+    transform: translateX(-100%);
+    padding: 80px 16px 24px; /* room for header */
+    z-index: 300;
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.18);
+  }
+
+  /* When sidebar is NOT collapsed, slide in */
+  .sidebar-navigation:not(.collapsed) {
+    transform: translateX(0);
+  }
+
+  /* Show backdrop when sidebar open */
+  .sidebar-navigation:not(.collapsed) ~ .main-content::before,
+  .sidebar-overlay.visible {
+    display: block;
+  }
+
+  .sidebar-menu-links {
+    width: 248px;
+  }
+
+  /* Main content always takes full width on mobile */
+  .main-content {
+    width: 100%;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TABLET  (768px – 1023px)
+   ════════════════════════════════════════════════════════════════ */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sidebar-navigation {
+    width: 220px;
+    padding: 20px 12px;
+  }
+
+  .sidebar-menu-links {
+    width: 196px;
+  }
+}

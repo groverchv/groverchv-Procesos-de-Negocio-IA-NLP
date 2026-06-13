@@ -10,15 +10,14 @@ import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
 import { NzTagModule } from 'ng-zorro-antd/tag';
-import { AI_KEYS } from '../../services/ia/keys.config';
+import { API_GLOBAL } from '../../services/api.global';
 
 export interface ApiKeysConfig {
-  groqKey: string;
-  elevenLabsKey: string;
   elevenLabsVoice: string;
   enableTTS: boolean;
   enableVoiceInput: boolean;
   language: string;
+  useLocalIA: boolean;
 }
 
 @Component({
@@ -38,45 +37,7 @@ export interface ApiKeysConfig {
       </ng-template>
       <div *nzModalContent>
         <div class="settings-section">
-
-          <h4 style="margin:0 0 16px; font-weight:700; color:#1e293b;"><span nz-icon nzType="key" nzTheme="outline" style="margin-right: 8px; color: #d4b106;"></span>Claves API</h4>
             <div class="settings-section">
-              <div class="key-group">
-                <label>
-                  <span class="key-label">Groq API Key</span>
-                  <nz-tag nzColor="cyan">Llama 3.3</nz-tag>
-                </label>
-                <nz-input-group [nzSuffix]="groqSuffix">
-                  <input nz-input [(ngModel)]="config.groqKey"
-                         [type]="showGroq ? 'text' : 'password'"
-                         placeholder="gsk_..." />
-                </nz-input-group>
-                <ng-template #groqSuffix>
-                  <span class="toggle-eye" (click)="showGroq = !showGroq">
-                    <span nz-icon [nzType]="showGroq ? 'eye-invisible' : 'eye'" nzTheme="outline"></span>
-                  </span>
-                </ng-template>
-                <span class="key-hint">Motor rápido para comandos de diagrama y auditoría</span>
-              </div>
-
-              <div class="key-group">
-                <label>
-                  <span class="key-label">ElevenLabs API Key</span>
-                  <nz-tag nzColor="volcano">TTS Premium</nz-tag>
-                </label>
-                <nz-input-group [nzSuffix]="elevenSuffix">
-                  <input nz-input [(ngModel)]="config.elevenLabsKey"
-                         [type]="showEleven ? 'text' : 'password'"
-                         placeholder="sk_..." />
-                </nz-input-group>
-                <ng-template #elevenSuffix>
-                  <span class="toggle-eye" (click)="showEleven = !showEleven">
-                    <span nz-icon [nzType]="showEleven ? 'eye-invisible' : 'eye'" nzTheme="outline"></span>
-                  </span>
-                </ng-template>
-                <span class="key-hint">Síntesis de voz natural y humanizada para tu Guía Personal</span>
-              </div>
-
               <div class="key-group">
                 <label><span class="key-label">Voz de tu Guía Personal (ElevenLabs)</span></label>
                 <div class="voice-selector-row">
@@ -115,6 +76,27 @@ export interface ApiKeysConfig {
                   <span class="pref-desc">Reconocimiento de voz para comandos</span>
                 </div>
                 <nz-switch [(ngModel)]="config.enableVoiceInput"></nz-switch>
+              </div>
+
+              <nz-divider></nz-divider>
+
+              <div class="pref-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                <div class="pref-info">
+                  <span class="pref-label"><span nz-icon nzType="api" nzTheme="outline" style="margin-right: 6px;"></span>Motor de IA (NLP)</span>
+                  <span class="pref-desc">Selecciona el motor de procesamiento para el asistente</span>
+                </div>
+                <div class="ia-engine-selector" style="display: flex; gap: 12px; width: 100%; margin-top: 8px;">
+                  <button nz-button type="button" style="flex: 1; height: 38px; border-radius: 8px; font-weight: 600;"
+                          [nzType]="config.useLocalIA ? 'primary' : 'default'"
+                          (click)="config.useLocalIA = true">
+                    <span nz-icon nzType="laptop" nzTheme="outline"></span> Usar IA Local (LM Studio)
+                  </button>
+                  <button nz-button type="button" style="flex: 1; height: 38px; border-radius: 8px; font-weight: 600;"
+                          [nzType]="!config.useLocalIA ? 'primary' : 'default'"
+                          (click)="config.useLocalIA = false">
+                    <span nz-icon nzType="cloud" nzTheme="outline"></span> Usar IA GROQ (Nube)
+                  </button>
+                </div>
               </div>
 
               <nz-divider></nz-divider>
@@ -185,8 +167,6 @@ export class SettingsModalComponent {
   @Output() visibleChange = new EventEmitter<boolean>();
   @Output() configSaved = new EventEmitter<ApiKeysConfig>();
 
-  showGroq = false;
-  showEleven = false;
   previewingVoice = false;
   private previewAudio: HTMLAudioElement | null = null;
 
@@ -212,12 +192,11 @@ export class SettingsModalComponent {
   ];
 
   config: ApiKeysConfig = {
-    groqKey: AI_KEYS.groq || '',
-    elevenLabsKey: AI_KEYS.elevenlabs || '',
     elevenLabsVoice: 'cjVigY5qzO86Huf0OWal',
     enableTTS: true,
     enableVoiceInput: true,
-    language: 'es-ES'
+    language: 'es-ES',
+    useLocalIA: true
   };
 
   constructor(private message: NzMessageService) {
@@ -230,10 +209,6 @@ export class SettingsModalComponent {
       try {
         const parsed = JSON.parse(saved);
         this.config = { ...this.config, ...parsed };
-        
-        // Ensure defaults if localStorage has empty strings
-        if (!this.config.groqKey) this.config.groqKey = AI_KEYS.groq;
-        if (!this.config.elevenLabsKey) this.config.elevenLabsKey = AI_KEYS.elevenlabs;
       } catch {}
     }
   }
@@ -254,29 +229,18 @@ export class SettingsModalComponent {
   async playPreview() {
     this.stopPreview();
     const voiceId = this.config.elevenLabsVoice;
-    // Use key from config (UI) or fallback to system AI_KEYS
-    let apiKey = this.config.elevenLabsKey;
-    if (!apiKey || apiKey.trim().length < 10) {
-      apiKey = AI_KEYS.elevenlabs;
-    }
-    
-    if (!apiKey || apiKey.length < 10) {
-      this.message.warning('Ingresa tu ElevenLabs API Key primero');
-      return;
-    }
     const voiceName = this.voiceOptions.find(v => v.id === voiceId)?.name || 'esta voz';
     this.previewingVoice = true;
     try {
       const selectedVoice = this.voiceOptions.find(v => v.id === voiceId);
       const cleanName = (selectedVoice?.name || 'Guía Personal').replace(/[^a-zA-Z]/g, '').trim();
       
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      const res = await fetch(API_GLOBAL.ia.generarVoz, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: `Hola, soy ${cleanName}, tu asistente virtual de diagramas. ¿En qué te puedo ayudar?`,
-          model_id: 'eleven_flash_v2_5',
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+          voice_id: voiceId
         })
       });
       if (!res.ok) throw new Error(`Error ${res.status}`);

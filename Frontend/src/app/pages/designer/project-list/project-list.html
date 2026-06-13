@@ -1,35 +1,35 @@
 
 <div class="container">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
-    <h1 nz-typography style="margin: 0; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center;">
+  <!-- Page header -->
+  <div class="page-header">
+    <h1 nz-typography class="page-title">
       <a routerLink="/" style="margin-right: 16px; display: flex; align-items: center; justify-content: center; text-decoration: none; color: inherit;">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
           <line x1="19" y1="12" x2="5" y2="12"></line>
           <polyline points="12 19 5 12 12 5"></polyline>
         </svg>
       </a>
       {{ isReadOnly ? 'Seleccionar Proyecto' : 'Tus Proyectos' }}
     </h1>
-    <nz-space [nzSize]="'middle'">
-      <nz-input-group [nzPrefix]="searchPrefix" style="width: 300px;">
+    <div class="page-actions">
+      <nz-input-group [nzPrefix]="searchPrefix" class="search-input-wrap">
         <input type="text" nz-input placeholder="Buscar procesos..." style="border-radius: 10px;" />
       </nz-input-group>
       <ng-template #searchPrefix><span nz-icon nzType="search"></span></ng-template>
-      <button *ngIf="!isReadOnly" nz-button nzType="primary" (click)="showModal()" style="height: 48px; border-radius: 12px; font-weight: bold; padding: 0 25px;">
+      <button *ngIf="!isReadOnly" nz-button nzType="primary" (click)="showModal()"
+        class="new-project-btn"
+        style="height: 48px; border-radius: 12px; font-weight: bold; padding: 0 25px;">
         <span nz-icon nzType="plus"></span> Nuevo Proyecto
       </button>
-    </nz-space>
+    </div>
   </div>
 
-  <div nz-row [nzGutter]="[24, 32]">
-    <!-- Mensaje de error / conexión -->
+  <div nz-row [nzGutter]="[24, 24]">
+    <!-- Empty state -->
     <div nz-col [nzSpan]="24" *ngIf="projects.length === 0 && !loading" style="text-align: center; margin-top: 50px;">
       <span nz-icon nzType="global" style="font-size: 48px; color: #cbd5e1;"></span>
       <h3 nz-typography style="margin-top: 16px;">No se pudieron cargar proyectos</h3>
-      <p style="color: #64748b;">Asegúrate de que el backend esté funcionando.</p>
-      <button nz-button nzType="default" (click)="switchToProduction()" style="margin-top: 16px; border-radius: 8px;">
-        <span nz-icon nzType="arrow-right"></span> Conectar a Backend de Producción (Railway)
-      </button>
+      <p style="color: #64748b;">Asegúrate de que el servidor de producción esté activo y accesible.</p>
     </div>
 
     <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="8" [nzLg]="6" *ngFor="let p of projects">

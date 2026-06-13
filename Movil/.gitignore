@@ -63,7 +63,6 @@ app.*.map.json
 **/macos/Flutter/GeneratedPluginRegistrant.swift
 
 # Web
-lib/generated_plugin_registrant.dart
 
 # Windows
 windows/flutter/generated_plugin_registrant.cc

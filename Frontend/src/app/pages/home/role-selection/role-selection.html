@@ -5,22 +5,26 @@
   
   <div nz-row [nzGutter]="[40, 40]" nzJustify="center">
     <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="9">
-      <nz-card class="role-card" (click)="selectRole('designer')" [nzBodyStyle]="{ padding: '30px' }">
-        <div class="icon-container designer-bg">
-          <span nz-icon nzType="edit" nzTheme="outline" class="role-icon"></span>
+      <nz-card class="role-card" (click)="selectRole('designer')" [nzBodyStyle]="{ padding: '0px' }">
+        <div class="image-container">
+          <img src="/assets/designer_role_bg.png" alt="Diseñador de Procesos" class="role-image" />
         </div>
-        <h3 class="role-title">Diseñador</h3>
-        <p nz-typography nzType="secondary">Crea, edita y gestiona diagramas BPMN y flujos de negocio complejos.</p>
+        <div style="padding: 24px;">
+          <h3 class="role-title">Diseñador</h3>
+          <p nz-typography nzType="secondary" style="margin-top: 8px;">Crea, edita y gestiona diagramas BPMN y flujos de negocio complejos.</p>
+        </div>
       </nz-card>
     </div>
 
     <div nz-col [nzXs]="24" [nzSm]="12" [nzMd]="9">
-      <nz-card class="role-card" (click)="selectRole('staff')" [nzBodyStyle]="{ padding: '30px' }">
-        <div class="icon-container staff-bg">
-          <span nz-icon nzType="user" nzTheme="outline" class="role-icon"></span>
+      <nz-card class="role-card" (click)="selectRole('staff')" [nzBodyStyle]="{ padding: '0px' }">
+        <div class="image-container">
+          <img src="/assets/staff_role_bg.png" alt="Funcionario" class="role-image" />
         </div>
-        <h3 class="role-title">Funcionario</h3>
-        <p nz-typography nzType="secondary">Visualiza procesos asignados, reporta estados y consulta políticas.</p>
+        <div style="padding: 24px;">
+          <h3 class="role-title">Funcionario</h3>
+          <p nz-typography nzType="secondary" style="margin-top: 8px;">Visualiza procesos asignados, reporta estados y consulta políticas.</p>
+        </div>
       </nz-card>
     </div>
   </div>

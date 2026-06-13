@@ -1,12 +1,14 @@
+/* ── Header ─────────────────────────────────────────────────────── */
 .app-header {
   background: white;
-  padding: 0 40px;
+  padding: 0 24px;
   height: 64px;
   line-height: 64px;
   border-bottom: 1px solid #f1f5f9;
   position: sticky;
   top: 0;
   z-index: 1000;
+  box-shadow: 0 1px 8px rgba(0,0,0,0.04);
 }
 
 .header-content {
@@ -16,25 +18,16 @@
   max-width: 1400px;
   margin: 0 auto;
   height: 100%;
+  gap: 12px;
 }
 
+/* ── Logo ──────────────────────────────────────────────────────── */
 .logo-section {
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
-}
-
-.logo-box {
-  width: 36px;
-  height: 36px;
-  background: var(--primary-color);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 18px;
+  flex-shrink: 0;
 }
 
 .logo-text {
@@ -42,10 +35,16 @@
   font-weight: 700;
   letter-spacing: -0.5px;
   color: var(--text-main);
+  white-space: nowrap;
 }
 
 .logo-accent {
   color: var(--primary-color);
+}
+
+/* ── User section ───────────────────────────────────────────────── */
+.user-section {
+  flex-shrink: 0;
 }
 
 .user-profile {
@@ -68,11 +67,53 @@
   color: var(--text-main);
 }
 
-.nav-section button {
-  font-weight: 500;
+/* ── Sidebar toggle button ──────────────────────────────────────── */
+.sidebar-toggle-btn {
+  font-size: 18px;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  flex-shrink: 0;
 }
 
-.nav-section button:hover {
+.sidebar-toggle-btn:hover {
+  background: #f1f5f9;
   color: var(--primary-color);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MOBILE  (≤ 575px)
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 575px) {
+  .app-header {
+    padding: 0 12px;
+  }
+
+  .logo-text {
+    font-size: 15px;
+  }
+
+  /* Hide username text on very small screens */
+  .user-name {
+    display: none;
+  }
+
+  .user-profile {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SMALL MOBILE  (≤ 360px)
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 360px) {
+  .logo-text {
+    font-size: 13px;
+  }
 }

@@ -53,7 +53,7 @@ flutter run
 
 ---
 
-## 📁 Estructura Creada
+## Estructura Creada
 
 ```
 Movil/

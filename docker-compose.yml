@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Base de Datos
+  mongodb:
+    image: mongo:6.0
+    container_name: bpm_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - bpm_network
+
+  # IA Backend (Python / FastAPI)
+  ia-backend:
+    build:
+      context: ./IA_Backend
+      dockerfile: Dockerfile
+    container_name: bpm_ia_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=development
+    networks:
+      - bpm_network
+
+  # Core Backend (Java / Spring Boot)
+  core-backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: bpm_core_backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/bpm_db
+      - IA_BACKEND_URL=http://ia-backend:8000
+    depends_on:
+      - mongodb
+      - ia-backend
+    networks:
+      - bpm_network
+
+  # App Web (Angular)
+  frontend-web:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: bpm_frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - core-backend
+    networks:
+      - bpm_network
+
+volumes:
+  mongodb_data:
+
+networks:
+  bpm_network:
+    driver: bridge

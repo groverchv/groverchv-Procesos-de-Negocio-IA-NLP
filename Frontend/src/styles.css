@@ -16,7 +16,30 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-color);
   color: var(--text-main);
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
 }
+
+/* Global box-sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* ── Sidebar Overlay (mobile) ──────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 150;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+.sidebar-overlay.visible {
+  display: block;
+}
+
 
 h1, h2, h3, h4, h5, h6 {
   color: #1a1a1a;
@@ -38,4 +61,56 @@ h1, h2, h3, h4, h5, h6 {
 .ant-btn-primary {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
+}
+
+/* Soporte de Impresión Avanzado para Generación de PDF Local */
+@media print {
+  /* Ocultar elementos estructurales comunes */
+  app-header,
+  .admin-sidebar,
+  .sidebar-logo,
+  .sidebar-menu,
+  .admin-view-header,
+  .download-toolbar,
+  .ai-bar-section,
+  .user-report-generator,
+  .kpi-grid,
+  .ia-alerts-widget,
+  .charts-grid {
+    display: none !important;
+  }
+
+  /* Si estamos imprimiendo el reporte de usuarios, ocultamos el contenido del dashboard principal */
+  body.printing-user-report .admin-main-content {
+    display: none !important;
+  }
+
+  /* Si estamos imprimiendo el reporte de usuarios, mostramos el contenedor oculto */
+  body.printing-user-report #hidden-printable-report {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    padding: 20px !important;
+    margin: 0 !important;
+  }
+
+  /* Si no es el reporte de usuarios, expandimos el contenido general para la impresión del reporte de IA */
+  body:not(.printing-user-report) .admin-main-content {
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+
+  body:not(.printing-user-report) .report-view {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
 }

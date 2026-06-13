@@ -1,0 +1,18 @@
+<div class="inbox-container">
+  <h2>Bandeja de Entrada Inteligente (Inbox)</h2>
+  <span class="subtitle">Tareas ordenadas automáticamente por IA según riesgo y SLA</span>
+
+  <div class="task-list">
+    <div class="task-item" *ngFor="let tarea of tareas" [ngClass]="{'riesgo-alto': tarea.riesgo === 'Alto'}">
+      <div class="task-header">
+        <strong>{{tarea.id}} - {{tarea.nombre}}</strong>
+        <span class="badge">Prioridad: {{tarea.prioridadIA}}</span>
+      </div>
+      <div class="task-body">
+        <p>Riesgo: {{tarea.riesgo}}</p>
+        <p>Tiempo en espera: {{tarea.tiempoEspera}}</p>
+      </div>
+      <button class="btn-resolver">Atender Tarea</button>
+    </div>
+  </div>
+</div>

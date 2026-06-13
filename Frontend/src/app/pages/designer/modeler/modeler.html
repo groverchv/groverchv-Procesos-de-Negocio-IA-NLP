@@ -75,14 +75,17 @@
         <nz-divider nzType="vertical"></nz-divider>
 
         <!-- AI PANEL -->
-        <button nz-button [class.ai-active]="showAiPanel" class="ai-btn" (click)="toggleAiPanel()" nz-tooltip nzTooltipTitle="Asistente IA (Groq)">
-          <span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 4px;"></span> IA
+        <button nz-button [class.ai-active]="showAiPanel" class="ai-btn" (click)="toggleAiPanel()" nz-tooltip nzTooltipTitle="Asistente de Comandos (Groq)">
+          <span nz-icon nzType="message" nzTheme="outline" style="margin-right: 4px;"></span> Consola
         </button>
-        <button nz-button [class.ai-active]="showAssistantPanel" class="ai-btn" (click)="toggleAssistant()" nz-tooltip nzTooltipTitle="Guía Personal (ElevenLabs)">
-          <span nz-icon nzType="audio" nzTheme="outline" style="margin-right: 4px;"></span> Guía Personal
+        <button nz-button [class.ai-active]="showAssistantPanel" class="ai-btn" (click)="toggleAssistant()" nz-tooltip nzTooltipTitle="Guía de Modelado (ElevenLabs)">
+          <span nz-icon nzType="customer-service" nzTheme="outline" style="margin-right: 4px;"></span> Guía Activa
         </button>
         <button nz-button nzType="text" (click)="speakLastAi()" nz-tooltip nzTooltipTitle="Leer respuesta IA (ElevenLabs)">
           <span nz-icon nzType="sound" nzTheme="fill" style="color: #64748b;"></span>
+        </button>
+        <button nz-button nzType="text" (click)="showSettings = true" nz-tooltip nzTooltipTitle="Configuración de la Plataforma">
+          <span nz-icon nzType="setting" nzTheme="outline" style="color: #64748b;"></span>
         </button>
       </nz-space>
 
@@ -388,7 +391,7 @@
       <!-- INTEGRATED AI PANEL (Only for Designer) -->
       <div class="ai-sidebar-integrated" *ngIf="!isReadOnly && showAiPanel">
         <div class="ai-sidebar-header">
-          <span><span nz-icon nzType="bulb" nzTheme="outline" style="margin-right: 6px;"></span>Comandos IA</span>
+          <span><span nz-icon nzType="message" nzTheme="outline" style="margin-right: 6px;"></span>Consola de Comandos</span>
           <button (click)="showAiPanel = false" class="ai-close-mini">✕</button>
         </div>
         <div class="ai-sidebar-body">
@@ -397,7 +400,7 @@
             <input [(ngModel)]="aiInput" placeholder="Comando..." (keydown.enter)="sendAiCommand()" [disabled]="aiLoading" />
             <div class="ai-action-btns">
               <button class="ai-mini-btn voice" [class.active]="isListening" (click)="toggleVoice()">
-                <span nz-icon [nzType]="isListening ? 'pause-circle' : 'audio'"></span>
+                <span nz-icon [nzType]="isListening ? 'pause-circle' : 'customer-service'"></span>
               </button>
               <button class="ai-mini-btn send" (click)="sendAiCommand()" [disabled]="aiLoading || !aiInput">
                 <span nz-icon nzType="arrow-right"></span>
@@ -412,7 +415,7 @@
         <div class="assistant-header-mini">
           <div class="assistant-status-mini">
             <div class="pulse-dot" [class.active]="assistantListening || assistantSpeaking"></div>
-            <span>Guía Personal</span>
+            <span>Guía Activa</span>
           </div>
           <button class="close-btn-mini" (click)="showAssistantPanel = false">✕</button>
         </div>
@@ -425,7 +428,7 @@
         <div class="assistant-footer-mini">
           <textarea nz-input [(ngModel)]="assistantInput" placeholder="Habla o escribe..." [nzAutosize]="{ minRows: 1, maxRows: 2 }" (keydown.enter)="$event.preventDefault(); sendAssistantQuery()"></textarea>
           <button class="mic-btn-mini" [class.active]="assistantListening" (click)="toggleAssistantVoice()">
-            <span nz-icon [nzType]="assistantListening ? 'pause-circle' : 'audio'"></span>
+            <span nz-icon [nzType]="assistantListening ? 'pause-circle' : 'customer-service'"></span>
           </button>
         </div>
       </div>
